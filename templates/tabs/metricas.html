@@ -1,0 +1,1183 @@
+<div id="tab-metricas" class="tab-content">
+    
+    <style>
+        /* Cards KPI style */
+        .metric-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .metric-kpi-card {
+            background: white;
+            padding: 24px;
+            border-radius: 20px;
+            border: 1px solid #e2e8f0;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .metric-kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+        
+        .metric-kpi-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+        
+        .metric-kpi-info h3 {
+            font-size: 1.8rem;
+            font-weight: 800;
+            margin: 0;
+            color: #0f172a;
+        }
+        
+        .metric-kpi-info p {
+            margin: 4px 0 0 0;
+            font-size: 0.8rem;
+            color: #64748b;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Top Clients Cards */
+        .top-client-item {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 14px 18px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid var(--primary);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            transition: transform 0.2s ease;
+        }
+        .top-client-item:hover {
+            transform: translateX(4px);
+        }
+
+        /* Timeline Styles */
+        .timeline-container {
+            position: relative;
+            padding: 20px 0;
+        }
+        .timeline-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 20px;
+            width: 2px;
+            background: #e2e8f0;
+        }
+        
+        .timeline-item {
+            position: relative;
+            padding-left: 50px;
+            margin-bottom: 30px;
+            animation: fadeIn 0.4s ease;
+        }
+        
+        .timeline-badge {
+            position: absolute;
+            left: 7px;
+            top: 4px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .timeline-content {
+            background: white;
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+            padding: 20px;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 0.2s ease;
+        }
+        .timeline-content:hover {
+            box-shadow: var(--shadow-md);
+        }
+        
+        .timeline-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            border-bottom: 1px solid #f1f5f9;
+            padding-bottom: 12px;
+            margin-bottom: 12px;
+        }
+        
+        .timeline-date {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #475569;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .timeline-status {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        
+        .timeline-status.finalizada { background: #d1fae5; color: #065f46; }
+        .timeline-status.reagendada { background: #dbeafe; color: #1e40af; }
+        .timeline-status.cancelada { background: #fee2e2; color: #991b1b; }
+        .timeline-status.pendiente { background: #f1f5f9; color: #334155; }
+        
+        .timeline-body {
+            margin-bottom: 12px;
+        }
+        
+        .timeline-problem {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0 0 8px 0;
+        }
+        
+        .timeline-solution {
+            font-size: 0.9rem;
+            color: #475569;
+            margin: 0;
+            background: #f8fafc;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border-left: 4px solid #64748b;
+        }
+        
+        .timeline-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 0.85rem;
+            color: #64748b;
+            background: #f8fafc;
+            padding: 10px 16px;
+            border-radius: 12px;
+            margin-top: 15px;
+        }
+        
+        .timeline-techs {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .tech-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #e2e8f0;
+            color: #334155;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.75rem;
+        }
+    </style>
+
+    <div style="background: white; padding: 30px; border-radius: 20px; margin-bottom: 25px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm);">
+        <h1 style="margin: 0; font-size: 1.8rem; color: #0f172a; font-weight: 800; letter-spacing: -0.02em;">Panel de Control y Auditoría</h1>
+        <p style="margin-top: 5px; color: #64748b; font-size: 0.95rem; font-weight: 500;">Análisis de rendimiento global y seguimiento detallado por contrato.</p>
+    </div>
+
+    <!-- Spinner de Carga -->
+    <div id="metrics-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; background: white; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm); margin-bottom: 25px;">
+        <div class="spinner"></div>
+        <p style="margin-top: 15px; color: #64748b; font-weight: 600;">Cargando métricas de los últimos 3 meses...</p>
+    </div>
+
+    <!-- Contenido del Dashboard -->
+    <div id="metrics-content" style="display: none; margin-bottom: 25px;">
+        
+        <!-- Sub-pestañas de Métricas -->
+        <div style="display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; flex-wrap: wrap;">
+            <button id="btn-subtab-visitas" type="button" onclick="switchSubTab('visitas')" style="background: none; border: none; padding: 10px 20px; font-weight: 800; font-size: 0.95rem; color: var(--primary); border-bottom: 3px solid var(--primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
+                <i class="fa-solid fa-truck-ramp-box"></i> Visitas Técnicas (VT)
+            </button>
+            <button id="btn-subtab-atenciones" type="button" onclick="switchSubTab('atenciones')" style="background: none; border: none; padding: 10px 20px; font-weight: 700; font-size: 0.95rem; color: #64748b; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
+                <i class="fa-solid fa-headset"></i> Atenciones Diarias
+            </button>
+        </div>
+
+        <!-- SUB-TAB CONTENT VISITAS -->
+        <div id="subtab-content-visitas" class="subtab-content" style="display: block;">
+            <!-- Fila de KPIs -->
+            <div class="metric-kpi-grid">
+                <div class="metric-kpi-card">
+                    <div class="metric-kpi-icon" style="background: rgba(220,38,38,0.1); color: #dc2626;">
+                        <i class="fa-solid fa-wrench"></i>
+                    </div>
+                    <div class="metric-kpi-info">
+                        <h3 id="kpi-total-visitas">-</h3>
+                        <p>Total Visitas (3m)</p>
+                    </div>
+                </div>
+                
+                <div class="metric-kpi-card">
+                    <div class="metric-kpi-icon" style="background: rgba(16,185,129,0.1); color: #10b981;">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+                    <div class="metric-kpi-info">
+                        <h3 id="kpi-tasa-efectividad">-</h3>
+                        <p>Efectividad</p>
+                    </div>
+                </div>
+                
+                <div class="metric-kpi-card">
+                    <div class="metric-kpi-icon" style="background: rgba(245,158,11,0.1); color: #f59e0b;">
+                        <i class="fa-solid fa-clock"></i>
+                    </div>
+                    <div class="metric-kpi-info">
+                        <h3 id="kpi-tiempo-promedio">-</h3>
+                        <p>Duración Promedio</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fila de Gráficas y Top Clientes -->
+            <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px;">
+                <!-- Lado Izquierdo: Donut de Estados y Top Clientes -->
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <!-- Estados -->
+                    <div class="card" style="padding: 20px; flex: 1; display: flex; flex-direction: column;">
+                        <h4 style="margin: 0 0 15px 0; font-size: 0.85rem; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
+                            <i class="fa-solid fa-chart-pie" style="color: #64748b; margin-right: 8px;"></i> Estados de Visitas
+                        </h4>
+                        <div style="position: relative; height: 180px; flex: 1;">
+                            <canvas id="chartEstados"></canvas>
+                        </div>
+                    </div>
+                    <!-- Top Clientes -->
+                    <div class="card" style="padding: 20px; flex: 1.2;">
+                        <h4 style="margin: 0 0 15px 0; font-size: 0.85rem; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; justify-content: space-between;">
+                            <span><i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b; margin-right: 8px;"></i> Clientes Críticos (Top 3)</span>
+                            <span style="font-size: 0.7rem; background: #fee2e2; color: #ef4444; padding: 2px 8px; border-radius: 10px; font-weight: bold;">Últimos 3 meses</span>
+                        </h4>
+                        <div id="top-clientes-container" style="display: flex; flex-direction: column; gap: 8px;">
+                            <!-- Clientes inyectados por JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lado Derecho: Evolución Semanal y Problemas Comunes -->
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <!-- Evolución -->
+                    <div class="card" style="padding: 20px; flex: 1; display: flex; flex-direction: column;">
+                        <h4 style="margin: 0 0 15px 0; font-size: 0.85rem; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
+                            <i class="fa-solid fa-chart-line" style="color: #dc2626; margin-right: 8px;"></i> Evolución de Visitas (Semanas)
+                        </h4>
+                        <div style="position: relative; height: 160px; flex: 1;">
+                            <canvas id="chartEvolucionGlobal"></canvas>
+                        </div>
+                    </div>
+                    <!-- Problemas comunes -->
+                    <div class="card" style="padding: 20px; flex: 1; display: flex; flex-direction: column;">
+                        <h4 style="margin: 0 0 15px 0; font-size: 0.85rem; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
+                            <i class="fa-solid fa-list-check" style="color: #0f172a; margin-right: 8px;"></i> Problemas más Comunes
+                        </h4>
+                        <div style="position: relative; height: 160px; flex: 1;">
+                            <canvas id="chartProblemasComunes"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SUB-TAB CONTENT ATENCIONES -->
+        <div id="subtab-content-atenciones" class="subtab-content" style="display: none;">
+            <!-- Fila de KPIs -->
+            <div class="metric-kpi-grid">
+                <div class="metric-kpi-card">
+                    <div class="metric-kpi-icon" style="background: rgba(99, 102, 241, 0.1); color: #6366f1;">
+                        <i class="fa-solid fa-headset"></i>
+                    </div>
+                    <div class="metric-kpi-info">
+                        <h3 id="kpi-aten-total">-</h3>
+                        <p>Total Atenciones (3m)</p>
+                    </div>
+                </div>
+                
+                <div class="metric-kpi-card">
+                    <div class="metric-kpi-icon" style="background: rgba(245,158,11,0.1); color: #f59e0b;">
+                        <i class="fa-solid fa-circle-question"></i>
+                    </div>
+                    <div class="metric-kpi-info">
+                        <h3 id="kpi-aten-motivo" style="font-size: 1.35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px;">-</h3>
+                        <p>Motivo Principal</p>
+                    </div>
+                </div>
+                
+                <div class="metric-kpi-card">
+                    <div class="metric-kpi-icon" style="background: rgba(16,185,129,0.1); color: #10b981;">
+                        <i class="fa-solid fa-comments"></i>
+                    </div>
+                    <div class="metric-kpi-info">
+                        <h3 id="kpi-aten-canal" style="font-size: 1.35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px;">-</h3>
+                        <p>Canal Principal</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fila de Gráficas y Top de Atenciones -->
+            <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px;">
+                <!-- Lado Izquierdo: Canales de Contacto y Acciones -->
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <!-- Medios de contacto (Donut) -->
+                    <div class="card" style="padding: 20px; flex: 1; display: flex; flex-direction: column;">
+                        <h4 style="margin: 0 0 15px 0; font-size: 0.85rem; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
+                            <i class="fa-solid fa-comments" style="color: #6366f1; margin-right: 8px;"></i> Canales de Contacto
+                        </h4>
+                        <div style="position: relative; height: 180px; flex: 1;">
+                            <canvas id="chartAtenCanales"></canvas>
+                        </div>
+                    </div>
+                    <!-- Acciones (Horizontal Bar) -->
+                    <div class="card" style="padding: 20px; flex: 1.2; display: flex; flex-direction: column;">
+                        <h4 style="margin: 0 0 15px 0; font-size: 0.85rem; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
+                            <i class="fa-solid fa-square-poll-horizontal" style="color: #4f46e5; margin-right: 8px;"></i> Acciones Más Comunes
+                        </h4>
+                        <div style="position: relative; height: 180px; flex: 1;">
+                            <canvas id="chartAtenAcciones"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lado Derecho: Evolución y Solicitudes -->
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <!-- Evolución Semanal de Soporte -->
+                    <div class="card" style="padding: 20px; flex: 1; display: flex; flex-direction: column;">
+                        <h4 style="margin: 0 0 15px 0; font-size: 0.85rem; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
+                            <i class="fa-solid fa-chart-line" style="color: #10b981; margin-right: 8px;"></i> Evolución del Soporte (Semanas)
+                        </h4>
+                        <div style="position: relative; height: 160px; flex: 1;">
+                            <canvas id="chartAtenEvolucion"></canvas>
+                        </div>
+                    </div>
+                    <!-- Solicitudes Comunes (Horizontal Bar) -->
+                    <div class="card" style="padding: 20px; flex: 1; display: flex; flex-direction: column;">
+                        <h4 style="margin: 0 0 15px 0; font-size: 0.85rem; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
+                            <i class="fa-solid fa-circle-question" style="color: #f59e0b; margin-right: 8px;"></i> Tipos de Solicitud Frecuentes
+                        </h4>
+                        <div style="position: relative; height: 160px; flex: 1;">
+                            <canvas id="chartAtenSolicitudes"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Buscador de Auditoría -->
+    <div class="card" style="margin-bottom: 25px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 25px;">
+        <h4 style="margin: 0 0 15px 0; color: #1e293b; font-size: 1rem; font-weight: 700;"><i class="fa-solid fa-search" style="margin-right: 8px; color: var(--primary);"></i> Auditoría por Contrato</h4>
+        <form id="form-auditoria" onsubmit="event.preventDefault(); buscarHistorialAvanzado();" style="display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 15px; align-items: flex-end;">
+            <div>
+                <label style="font-size: 0.75rem; font-weight: bold; color: #64748b;">Desde:</label>
+                <input type="date" id="busqueda_desde" class="form-control" style="padding: 10px;">
+            </div>
+            <div>
+                <label style="font-size: 0.75rem; font-weight: bold; color: #64748b;">Hasta:</label>
+                <input type="date" id="busqueda_hasta" class="form-control" style="padding: 10px;">
+            </div>
+            <div>
+                <label style="font-size: 0.75rem; font-weight: bold; color: #64748b;">Número de Contrato:</label>
+                <input type="text" id="busqueda_contrato" class="form-control" placeholder="Ej. 7587" style="padding: 10px;">
+            </div>
+            <button type="submit" class="btn" style="padding: 10px 25px; height: 45px;"><i class="fa-solid fa-search"></i> Buscar</button>
+        </form>
+    </div>
+
+    <!-- Historial de Auditoría de Contrato (Timeline) -->
+    <div id="resultados-auditoria" class="card" style="margin-top: 20px; display: none; padding: 30px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; margin-bottom: 25px; flex-wrap: wrap; gap: 15px;">
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.4rem; color: #0f172a; display: flex; align-items: center; gap: 10px; font-weight: 800;">
+                        <i class="fa-solid fa-file-contract" style="color: var(--primary);"></i> Historial del Contrato
+                    </h3>
+                    <p id="auditoria-contrato-sub" style="margin: 5px 0 0 0; color: #64748b; font-size: 0.9rem; font-weight: 500;">
+                        Historial del contrato <strong id="contrato-id-tag"></strong> para el cliente <strong id="contrato-cliente-tag"></strong>
+                    </p>
+                </div>
+                <button type="button" onclick="descargarReportePDF()" class="btn" style="background-color: #ef4444; border-color: #ef4444; color: white; display: flex; align-items: center; gap: 8px; padding: 8px 16px; font-size: 0.85rem; height: 36px; line-height: 1.2; font-weight: 700; border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                    <i class="fa-solid fa-file-pdf"></i> Exportar PDF
+                </button>
+            </div>
+            <!-- KPI Rápido de contrato -->
+            <div style="display: flex; gap: 12px;">
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 15px; border-radius: 14px; text-align: center;">
+                    <div style="font-size: 0.65rem; color: #64748b; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">Visitas VT</div>
+                    <div id="contrato-kpi-visitas" style="font-size: 1.25rem; font-weight: 800; color: #0f172a;">0</div>
+                </div>
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 15px; border-radius: 14px; text-align: center;">
+                    <div style="font-size: 0.65rem; color: #64748b; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">Atenciones</div>
+                    <div id="contrato-kpi-atenciones" style="font-size: 1.25rem; font-weight: 800; color: #6366f1;">0</div>
+                </div>
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 15px; border-radius: 14px; text-align: center;">
+                    <div style="font-size: 0.65rem; color: #64748b; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">Promedio</div>
+                    <div id="contrato-kpi-estrellas" style="font-size: 1.25rem; font-weight: 800; color: #eab308;">-</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Línea de tiempo -->
+        <div class="timeline-container" id="timeline-auditoria">
+            <!-- Nodos inyectados dinámicamente -->
+        </div>
+    </div>
+</div>
+
+<script>
+    let globalCharts = {};
+    let cacheAuditoria = null;
+    let cacheMetricasGlobales = null;
+    let cacheMetricasAtenciones = null;
+
+    function reRenderizarGraficosMetricas() {
+        if (cacheMetricasGlobales && cacheMetricasAtenciones) {
+            renderizarGraficosGlobales(cacheMetricasGlobales);
+            renderizarGraficosAtenciones(cacheMetricasAtenciones);
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        // Inicializar fechas por defecto (últimos 3 meses)
+        const hoy = new Date();
+        const haceTresMeses = new Date();
+        haceTresMeses.setMonth(hoy.getMonth() - 3);
+
+        const formatIsoDate = (d) => d.toISOString().split('T')[0];
+
+        const inputDesde = document.getElementById('busqueda_desde');
+        const inputHasta = document.getElementById('busqueda_hasta');
+        if (inputDesde && !inputDesde.value) inputDesde.value = formatIsoDate(haceTresMeses);
+        if (inputHasta && !inputHasta.value) inputHasta.value = formatIsoDate(hoy);
+
+        // Si la pestaña de métricas está activa de inicio, cargar métricas
+        const tabMetricas = document.getElementById('tab-metricas');
+        if (tabMetricas && tabMetricas.classList.contains('active')) {
+            cargarMetricasGlobales();
+        }
+        
+        // Registrar el event listener para clics en la pestaña
+        const navMetricas = document.querySelector('.nav-item[data-tab="tab-metricas"]');
+        if (navMetricas) {
+            navMetricas.addEventListener('click', function() {
+                cargarMetricasGlobales();
+            });
+        }
+    });
+
+    async function cargarMetricasGlobales() {
+        // Mostrar loader, ocultar contenido
+        document.getElementById('metrics-loader').style.display = 'flex';
+        document.getElementById('metrics-content').style.display = 'none';
+
+        try {
+            const [resVisitas, resAtenciones] = await Promise.all([
+                fetch('/api/admin/metricas_globales'),
+                fetch('/api/admin/metricas_atenciones')
+            ]);
+            const data = await resVisitas.json();
+            const dataAten = await resAtenciones.json();
+
+            if (data.status === 'ok' && dataAten.status === 'ok') {
+                cacheMetricasGlobales = data;
+                cacheMetricasAtenciones = dataAten;
+
+                // --- VISITAS (VT) METRICS ---
+                // Rellenar KPIs
+                document.getElementById('kpi-total-visitas').innerText = data.kpis.total_visitas;
+                document.getElementById('kpi-tasa-efectividad').innerText = data.kpis.tasa_efectividad + '%';
+                document.getElementById('kpi-tiempo-promedio').innerText = data.kpis.tiempo_promedio + ' min';
+
+                // Rellenar Top Clientes Críticos
+                const topClientesContainer = document.getElementById('top-clientes-container');
+                if (data.top_clientes.length === 0) {
+                    topClientesContainer.innerHTML = '<p style="text-align:center;color:#64748b;padding: 15px 0;font-style:italic;">No hay clientes registrados en este periodo.</p>';
+                } else {
+                    topClientesContainer.innerHTML = data.top_clientes.map((c, idx) => `
+                        <div class="top-client-item" style="border-left-color: ${idx === 0 ? '#ef4444' : idx === 1 ? '#f59e0b' : '#3b82f6'};">
+                            <div>
+                                <h5 style="margin:0;font-size:0.9rem;color:#0f172a;font-weight:700;">${c.cliente}</h5>
+                                <span style="font-size:0.75rem;color:#64748b;font-weight:600;">Contrato: #${c.contrato}</span>
+                            </div>
+                            <span style="background: ${idx === 0 ? '#fee2e2' : idx === 1 ? '#fef3c7' : '#dbeafe'}; color: ${idx === 0 ? '#b91c1c' : idx === 1 ? '#b45309' : '#1e40af'}; padding: 4px 10px; border-radius: 8px; font-weight:800; font-size:0.75rem; white-space: nowrap;">
+                                ${c.total_visitas} visitas
+                            </span>
+                        </div>
+                    `).join('');
+                }
+
+                // Renderizar Gráficas
+                renderizarGraficosGlobales(data);
+
+                // --- ATENCIONES METRICS ---
+                // Rellenar KPIs
+                document.getElementById('kpi-aten-total').innerText = dataAten.kpis.total_atenciones;
+                document.getElementById('kpi-aten-motivo').innerText = dataAten.kpis.motivo_principal || '-';
+                
+                // Canal Principal
+                let canalPrincipal = '-';
+                let maxCant = 0;
+                if (dataAten.medios) {
+                    for (const [canal, cant] of Object.entries(dataAten.medios)) {
+                        if (cant > maxCant) {
+                            maxCant = cant;
+                            canalPrincipal = canal;
+                        }
+                    }
+                }
+                document.getElementById('kpi-aten-canal').innerText = canalPrincipal;
+                document.getElementById('kpi-aten-canal').title = canalPrincipal;
+
+                // Renderizar Gráficas Atenciones
+                renderizarGraficosAtenciones(dataAten);
+
+                // Ocultar loader, mostrar contenido
+                document.getElementById('metrics-loader').style.display = 'none';
+                document.getElementById('metrics-content').style.display = 'block';
+            } else {
+                console.error("Error al cargar métricas de Visitas/Atenciones:", data.message || dataAten.message);
+            }
+        } catch (err) {
+            console.error("Error de conexión al cargar métricas:", err);
+        }
+    }
+
+    function switchSubTab(tabName) {
+        const btnVisitas = document.getElementById('btn-subtab-visitas');
+        const btnAtenciones = document.getElementById('btn-subtab-atenciones');
+        const contentVisitas = document.getElementById('subtab-content-visitas');
+        const contentAtenciones = document.getElementById('subtab-content-atenciones');
+
+        if (tabName === 'visitas') {
+            btnVisitas.style.color = 'var(--primary)';
+            btnVisitas.style.borderBottom = '3px solid var(--primary)';
+            btnVisitas.style.fontWeight = '800';
+
+            btnAtenciones.style.color = '#64748b';
+            btnAtenciones.style.borderBottom = 'none';
+            btnAtenciones.style.fontWeight = '700';
+
+            contentVisitas.style.display = 'block';
+            contentAtenciones.style.display = 'none';
+        } else {
+            btnAtenciones.style.color = 'var(--primary)';
+            btnAtenciones.style.borderBottom = '3px solid var(--primary)';
+            btnAtenciones.style.fontWeight = '800';
+
+            btnVisitas.style.color = '#64748b';
+            btnVisitas.style.borderBottom = 'none';
+            btnVisitas.style.fontWeight = '700';
+
+            contentVisitas.style.display = 'none';
+            contentAtenciones.style.display = 'block';
+        }
+
+        // Si tenemos datos de auditoria en cache, volver a renderizar filtrando por la sub-pestaña activa
+        if (cacheAuditoria) {
+            renderizarTimelineAuditoria();
+        }
+    }
+
+    function renderizarGraficosGlobales(data) {
+        // Destruir gráficos anteriores para evitar fugas de memoria o errores
+        if (globalCharts.estados) globalCharts.estados.destroy();
+        if (globalCharts.evolucion) globalCharts.evolucion.destroy();
+        if (globalCharts.problemas) globalCharts.problemas.destroy();
+
+        const isDarkTheme = document.body.classList.contains('dark-mode');
+        const textColor = isDarkTheme ? '#f8fafc' : '#64748b';
+        const gridColor = isDarkTheme ? '#334155' : '#e2e8f0';
+        const chartBgColor = isDarkTheme ? '#1e293b' : '#ffffff';
+        const barColor = isDarkTheme ? '#3b82f6' : '#0f172a';
+
+        // 1. Gráfico de Estados (Doughnut)
+        const ctxEstados = document.getElementById('chartEstados').getContext('2d');
+        globalCharts.estados = new Chart(ctxEstados, {
+            type: 'doughnut',
+            data: {
+                labels: ['Completadas', 'Reagendadas', 'Canceladas', 'Pendientes'],
+                datasets: [{
+                    data: [
+                        data.estados.FINALIZADA,
+                        data.estados.REAGENDADA,
+                        data.estados.CANCELADA,
+                        data.estados.PENDIENTE
+                    ],
+                    backgroundColor: ['#10b981', '#3b82f6', '#ef4444', '#cbd5e1'],
+                    borderWidth: 2,
+                    borderColor: chartBgColor
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            color: textColor,
+                            font: { family: 'Inter', weight: 600, size: 10 },
+                            boxWidth: 10,
+                            padding: 8
+                        }
+                    }
+                },
+                cutout: '70%'
+            }
+        });
+
+        // 2. Gráfico de Evolución Semanal (Line)
+        const ctxEvolucion = document.getElementById('chartEvolucionGlobal').getContext('2d');
+        
+        const gradient = ctxEvolucion.createLinearGradient(0, 0, 0, 160);
+        gradient.addColorStop(0, isDarkTheme ? 'rgba(59, 130, 246, 0.2)' : 'rgba(220, 38, 38, 0.2)');
+        gradient.addColorStop(1, isDarkTheme ? 'rgba(59, 130, 246, 0.0)' : 'rgba(220, 38, 38, 0.0)');
+
+        globalCharts.evolucion = new Chart(ctxEvolucion, {
+            type: 'line',
+            data: {
+                labels: data.evolucion.map(e => e.label),
+                datasets: [{
+                    label: 'Visitas',
+                    data: data.evolucion.map(e => e.cantidad),
+                    borderColor: isDarkTheme ? '#3b82f6' : '#dc2626',
+                    borderWidth: 3,
+                    backgroundColor: gradient,
+                    fill: true,
+                    tension: 0.35,
+                    pointBackgroundColor: isDarkTheme ? '#3b82f6' : '#dc2626',
+                    pointBorderColor: chartBgColor,
+                    pointBorderWidth: 1.5,
+                    pointRadius: 3,
+                    pointHoverRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            color: textColor,
+                            font: { family: 'Inter', size: 9, weight: 600 }
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: gridColor },
+                        ticks: {
+                            color: textColor,
+                            font: { family: 'Inter', size: 9 }
+                        }
+                    }
+                }
+            }
+        });
+
+        // 3. Gráfico de Problemas Comunes (Horizontal Bar)
+        const ctxProblemas = document.getElementById('chartProblemasComunes').getContext('2d');
+        globalCharts.problemas = new Chart(ctxProblemas, {
+            type: 'bar',
+            data: {
+                labels: data.top_problemas.map(p => p.problema),
+                datasets: [{
+                    data: data.top_problemas.map(p => p.cantidad),
+                    backgroundColor: barColor,
+                    borderRadius: 6,
+                    barThickness: 12
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grid: { color: gridColor },
+                        ticks: {
+                            color: textColor,
+                            font: { family: 'Inter', size: 9 }
+                        }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: {
+                            color: textColor,
+                            font: { family: 'Inter', size: 9, weight: 600 }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function renderizarGraficosAtenciones(data) {
+        if (globalCharts.atenCanales) globalCharts.atenCanales.destroy();
+        if (globalCharts.atenAcciones) globalCharts.atenAcciones.destroy();
+        if (globalCharts.atenEvolucion) globalCharts.atenEvolucion.destroy();
+        if (globalCharts.atenSolicitudes) globalCharts.atenSolicitudes.destroy();
+
+        const isDarkTheme = document.body.classList.contains('dark-mode');
+        const textColor = isDarkTheme ? '#f8fafc' : '#64748b';
+        const gridColor = isDarkTheme ? '#334155' : '#e2e8f0';
+        const chartBgColor = isDarkTheme ? '#1e293b' : '#ffffff';
+
+        // 1. Canales (Doughnut)
+        const ctxCanales = document.getElementById('chartAtenCanales').getContext('2d');
+        const labelsMedios = Object.keys(data.medios || {});
+        const valoresMedios = Object.values(data.medios || {});
+
+        globalCharts.atenCanales = new Chart(ctxCanales, {
+            type: 'doughnut',
+            data: {
+                labels: labelsMedios,
+                datasets: [{
+                    data: valoresMedios,
+                    backgroundColor: ['#6366f1', '#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#cbd5e1'],
+                    borderWidth: 2,
+                    borderColor: chartBgColor
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            color: textColor,
+                            font: { family: 'Inter', weight: 600, size: 10 },
+                            boxWidth: 10,
+                            padding: 8
+                        }
+                    }
+                },
+                cutout: '70%'
+            }
+        });
+
+        // 2. Acciones (Horizontal Bar)
+        const ctxAcciones = document.getElementById('chartAtenAcciones').getContext('2d');
+        globalCharts.atenAcciones = new Chart(ctxAcciones, {
+            type: 'bar',
+            data: {
+                labels: data.acciones.map(a => a.accion),
+                datasets: [{
+                    data: data.acciones.map(a => a.cantidad),
+                    backgroundColor: isDarkTheme ? '#818cf8' : '#4f46e5',
+                    borderRadius: 6,
+                    barThickness: 12
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grid: { color: gridColor },
+                        ticks: {
+                            color: textColor,
+                            font: { family: 'Inter', size: 9 }
+                        }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: {
+                            color: textColor,
+                            font: { family: 'Inter', size: 9, weight: 600 }
+                        }
+                    }
+                }
+            }
+        });
+
+        // 3. Evolución (Line)
+        const ctxAtenEvol = document.getElementById('chartAtenEvolucion').getContext('2d');
+        const gradient = ctxAtenEvol.createLinearGradient(0, 0, 0, 160);
+        gradient.addColorStop(0, isDarkTheme ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.2)');
+        gradient.addColorStop(1, isDarkTheme ? 'rgba(16, 185, 129, 0.0)' : 'rgba(16, 185, 129, 0.0)');
+
+        globalCharts.atenEvolucion = new Chart(ctxAtenEvol, {
+            type: 'line',
+            data: {
+                labels: data.evolucion.map(e => e.label),
+                datasets: [{
+                    label: 'Atenciones',
+                    data: data.evolucion.map(e => e.cantidad),
+                    borderColor: '#10b981',
+                    borderWidth: 3,
+                    backgroundColor: gradient,
+                    fill: true,
+                    tension: 0.35,
+                    pointBackgroundColor: '#10b981',
+                    pointBorderColor: chartBgColor,
+                    pointBorderWidth: 1.5,
+                    pointRadius: 3,
+                    pointHoverRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            color: textColor,
+                            font: { family: 'Inter', size: 9, weight: 600 }
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: gridColor },
+                        ticks: {
+                            color: textColor,
+                            font: { family: 'Inter', size: 9 }
+                        }
+                    }
+                }
+            }
+        });
+
+        // 4. Solicitudes (Horizontal Bar)
+        const ctxSolicitudes = document.getElementById('chartAtenSolicitudes').getContext('2d');
+        globalCharts.atenSolicitudes = new Chart(ctxSolicitudes, {
+            type: 'bar',
+            data: {
+                labels: data.solicitudes.map(s => s.solicitud),
+                datasets: [{
+                    data: data.solicitudes.map(s => s.cantidad),
+                    backgroundColor: '#f59e0b',
+                    borderRadius: 6,
+                    barThickness: 12
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grid: { color: gridColor },
+                        ticks: {
+                            color: textColor,
+                            font: { family: 'Inter', size: 9 }
+                        }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: {
+                            color: textColor,
+                            font: { family: 'Inter', size: 9, weight: 600 }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    async function buscarHistorialAvanzado() {
+        const contrato = document.getElementById('busqueda_contrato').value.trim();
+        const desde = document.getElementById('busqueda_desde').value;
+        const hasta = document.getElementById('busqueda_hasta').value;
+        
+        if (!contrato) { 
+            alert("Por favor, ingrese un número de contrato."); 
+            return; 
+        }
+
+        const res = await fetch(`/api/admin/auditoria_cliente?contrato=${contrato}&desde=${desde}&hasta=${hasta}`);
+        const data = await res.json();
+
+        // Mostrar sección de resultados
+        document.getElementById('resultados-auditoria').style.display = 'block';
+        document.getElementById('contrato-id-tag').innerText = '#' + contrato;
+        
+        if (data.length > 0) {
+            document.getElementById('contrato-cliente-tag').innerText = data[0].cliente;
+            
+            const totalVisitas = data.filter(v => v.tipo_registro === 'visita_tecnica').length;
+            const totalAtenciones = data.filter(v => v.tipo_registro === 'atencion').length;
+            
+            document.getElementById('contrato-kpi-visitas').innerText = totalVisitas;
+            document.getElementById('contrato-kpi-atenciones').innerText = totalAtenciones;
+            
+            // Calcular promedio de estrellas de visitas
+            const calificadas = data.filter(v => v.tipo_registro === 'visita_tecnica' && v.calificacion_estrellas != null);
+            if (calificadas.length > 0) {
+                const prom = calificadas.reduce((acc, v) => acc + v.calificacion_estrellas, 0) / calificadas.length;
+                document.getElementById('contrato-kpi-estrellas').innerHTML = `${prom.toFixed(1)} <span style="font-size:0.8rem;color:#eab308;">⭐</span>`;
+            } else {
+                document.getElementById('contrato-kpi-estrellas').innerText = '-';
+            }
+        } else {
+            document.getElementById('contrato-cliente-tag').innerText = 'Contrato no encontrado';
+            document.getElementById('contrato-kpi-visitas').innerText = '0';
+            document.getElementById('contrato-kpi-atenciones').innerText = '0';
+            document.getElementById('contrato-kpi-estrellas').innerText = '-';
+        }
+
+        // Almacenar en caché y renderizar
+        cacheAuditoria = data;
+        renderizarTimelineAuditoria();
+    }
+
+    function renderizarTimelineAuditoria() {
+        if (!cacheAuditoria) return;
+
+        const subTabActive = document.getElementById('subtab-content-visitas').style.display !== 'none' ? 'visitas' : 'atenciones';
+        
+        // Filtrar datos según la sub-pestaña activa
+        let dataFiltrada = [];
+        if (subTabActive === 'visitas') {
+            dataFiltrada = cacheAuditoria.filter(v => v.tipo_registro === 'visita_tecnica');
+        } else {
+            dataFiltrada = cacheAuditoria.filter(v => v.tipo_registro === 'atencion');
+        }
+
+        // Renderizar la línea de tiempo
+        const timeline = document.getElementById('timeline-auditoria');
+        const contrato = document.getElementById('busqueda_contrato').value.trim();
+
+        if (dataFiltrada.length === 0) {
+            const tipoNombre = subTabActive === 'visitas' ? 'visitas técnicas' : 'atenciones de soporte';
+            timeline.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #64748b; font-style: italic;">
+                    No se encontraron ${tipoNombre} para el contrato #${contrato} en el período seleccionado.
+                </div>
+            `;
+            return;
+        }
+
+        timeline.innerHTML = dataFiltrada.map(v => {
+            if (v.tipo_registro === 'atencion') {
+                const fechaObj = new Date(v.fecha_programada + 'T00:00:00');
+                const dateFormatted = fechaObj.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                const timeFormatted = v.hora ? ` a las ${v.hora}` : '';
+
+                // Determinar icono y color basado en medio_contacto
+                let contactIcon = 'fa-solid fa-comment-dots';
+                let contactColor = '#6366f1'; // Indigo (Default/WhatsApp)
+                
+                if (v.tecnico_apoyo) {
+                    const c_med = v.tecnico_apoyo.toUpperCase();
+                    if (c_med.includes('WHATSAPP') || c_med.includes('WPP')) {
+                        contactIcon = 'fa-brands fa-whatsapp';
+                        contactColor = '#10b981'; // Green
+                    } else if (c_med.includes('TELEFONO') || c_med.includes('LLAMADA')) {
+                        contactIcon = 'fa-solid fa-phone';
+                        contactColor = '#3b82f6'; // Blue
+                    } else if (c_med.includes('OFICINA') || c_med.includes('PRESENCIAL')) {
+                        contactIcon = 'fa-solid fa-building';
+                        contactColor = '#f59e0b'; // Amber
+                    }
+                }
+
+                return `
+                    <div class="timeline-item atencion" style="border-left-color: ${contactColor};">
+                        <div class="timeline-badge" style="background-color: ${contactColor}; border: none;">
+                            <i class="${contactIcon}" style="font-size:0.75rem; color: white;"></i>
+                        </div>
+                        <div class="timeline-content" style="border-left: 4px solid ${contactColor};">
+                            <div class="timeline-header">
+                                <span class="timeline-date"><i class="fa-regular fa-calendar" style="margin-right:5px;"></i> ${dateFormatted}${timeFormatted}</span>
+                                <span class="timeline-status" style="background: #e0e7ff; color: #4338ca; font-weight: 700; font-size: 0.75rem; padding: 4px 10px; border-radius: 20px;">SOPORTE</span>
+                            </div>
+                            <div class="timeline-body">
+                                <h5 class="timeline-problem"><i class="fa-solid fa-headset" style="color: ${contactColor}; font-size:0.9rem; margin-right:5px;"></i> Soporte: ${v.problema || 'Atención general'}</h5>
+                                <div class="timeline-solution" style="border-left-color: ${contactColor};">
+                                    <strong>Acción:</strong> ${v.solucion_tecnico || 'Consulta / Información'}
+                                    ${v.observacion_tecnico ? `<p style="margin:6px 0 0 0; font-size:0.85rem; color:#475569; font-style:italic;">"${v.observacion_tecnico}"</p>` : ''}
+                                </div>
+                            </div>
+                            <div class="timeline-footer">
+                                <div class="timeline-techs">
+                                    <span class="tech-pill"><i class="fa-solid fa-user-check"></i> Agente: ${v.tecnico_principal || 'Importado'}</span>
+                                    <span class="tech-pill"><i class="fa-solid fa-comments"></i> Vía: ${v.tecnico_apoyo || 'WhatsApp'}</span>
+                                    ${v.olt ? `<span class="tech-pill"><i class="fa-solid fa-network-wired"></i> OLT: ${v.olt}</span>` : ''}
+                                </div>
+                                <span style="font-size:0.75rem; color:#94a3b8; font-weight:bold; font-family:monospace;">ID: #AT-${v.id_visita}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                const colorClass = v.estado === 'FINALIZADA' ? 'finalizada' : v.estado === 'REAGENDADA' ? 'reagendada' : v.estado === 'PENDIENTE' ? 'pendiente' : 'cancelada';
+                
+                let statusBadge = v.estado;
+                if (v.estado === 'FINALIZADA') statusBadge = 'Efectiva';
+                else if (v.estado === 'SOLVENTADA_REMOTA') statusBadge = 'Solventada Remota';
+                else if (v.estado === 'EN_RUTA') statusBadge = 'Técnico en Camino';
+                else if (v.estado === 'EN_PROGRESO') statusBadge = 'Trabajo en Progreso';
+
+                let starsHTML = '';
+                if (v.calificacion_estrellas) {
+                    starsHTML = `
+                        <div style="display:flex; align-items:center; gap:8px; margin-top:10px; background: #fef9c3; padding: 6px 12px; border-radius: 8px; width: fit-content; border: 1px solid #fef08a;">
+                            <span style="color:#eab308; font-weight:bold; font-size:0.9rem; letter-spacing: 2px;">
+                                ${'★'.repeat(v.calificacion_estrellas)}${'☆'.repeat(5 - v.calificacion_estrellas)}
+                            </span>
+                            <span style="font-size:0.8rem; color:#854d0e; font-weight:600; font-style:italic;">
+                                ${v.calificacion_comentario ? `"${v.calificacion_comentario}"` : 'Calificado'}
+                            </span>
+                        </div>
+                    `;
+                }
+
+                const fechaObj = new Date(v.fecha_programada + 'T00:00:00');
+                const dateFormatted = fechaObj.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                
+                let techApoyoHTML = '';
+                if (v.tecnico_apoyo) {
+                    techApoyoHTML = `<span class="tech-pill"><i class="fa-solid fa-user-group"></i> Apoyo: ${v.tecnico_apoyo}</span>`;
+                }
+
+                let solutionHTML = '';
+                if (v.solucion_tecnico) {
+                    solutionHTML = `
+                        <div class="timeline-solution">
+                            <strong>Solución Aplicada:</strong> ${v.solucion_tecnico}
+                            ${v.observacion_tecnico ? `<p style="margin:6px 0 0 0; font-size:0.85rem; color:#475569; font-style:italic;">"${v.observacion_tecnico}"</p>` : ''}
+                        </div>
+                    `;
+                } else {
+                    solutionHTML = `
+                        <div class="timeline-solution" style="border-left-color: #cbd5e1; background: #f8fafc; color: #64748b;">
+                            <em>Sin solución registrada (visita pendiente, reprogramada o cancelada).</em>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="timeline-item ${colorClass}">
+                        <div class="timeline-badge" style="background-color: ${v.estado === 'FINALIZADA' ? '#10b981' : v.estado === 'REAGENDADA' ? '#3b82f6' : v.estado === 'PENDIENTE' ? '#94a3b8' : '#ef4444'}; border: none;">
+                            <i class="fa-solid ${v.estado === 'FINALIZADA' ? 'fa-check' : v.estado === 'REAGENDADA' ? 'fa-clock' : v.estado === 'PENDIENTE' ? 'fa-hourglass-start' : 'fa-xmark'}" style="font-size:0.75rem; color: white;"></i>
+                        </div>
+                        <div class="timeline-content">
+                            <div class="timeline-header">
+                                <span class="timeline-date"><i class="fa-regular fa-calendar" style="margin-right:5px;"></i> ${dateFormatted}</span>
+                                <span class="timeline-status ${colorClass}">${statusBadge}</span>
+                            </div>
+                            <div class="timeline-body">
+                                <h5 class="timeline-problem"><i class="fa-solid fa-wrench" style="color: #b91c1c; font-size:0.9rem; margin-right:5px;"></i> Visita: ${v.problema}</h5>
+                                ${solutionHTML}
+                                ${starsHTML}
+                            </div>
+                            <div class="timeline-footer">
+                                <div class="timeline-techs">
+                                    <span class="tech-pill"><i class="fa-solid fa-user-tie"></i> Técnico: ${v.tecnico_principal || 'Sin asignar'}</span>
+                                    ${techApoyoHTML}
+                                </div>
+                                <span style="font-size:0.75rem; color:#94a3b8; font-weight:bold; font-family:monospace;">ID: #VT-${v.id_visita}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }).join('');
+    }
+
+    function descargarReportePDF() {
+        const contrato = document.getElementById('busqueda_contrato').value.trim();
+        const desde = document.getElementById('busqueda_desde').value;
+        const hasta = document.getElementById('busqueda_hasta').value;
+        if (!contrato) {
+            alert("Por favor, ingrese un número de contrato primero.");
+            return;
+        }
+        
+        const btn = document.querySelector('button[onclick="descargarReportePDF()"]');
+        const originalHtml = btn ? btn.innerHTML : null;
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generando...`;
+        }
+
+        const url = `/api/admin/reporte_pdf?contrato=${contrato}&desde=${desde}&hasta=${hasta}`;
+        
+        fetch(url)
+            .then(res => {
+                if (!res.ok) {
+                    if (res.status === 401) {
+                        throw new Error("No autorizado. Por favor vuelve a iniciar sesión.");
+                    }
+                    throw new Error("Error al generar el reporte PDF.");
+                }
+                return res.blob();
+            })
+            .then(blob => {
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = `Reporte_Auditoria_${contrato}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(downloadUrl);
+            })
+            .catch(err => {
+                alert("❌ " + err.message);
+            })
+            .finally(() => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                }
+            });
+    }
+</script>

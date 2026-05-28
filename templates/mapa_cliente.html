@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Futurity - Rastreo en Camino</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+</head>
+
+<body class="body-mapa-cliente">
+
+    <div id="pantalla-llegada" class="llegada">
+        <h2>📍 ¡Hemos llegado!</h2>
+        <p>El técnico ya se encuentra en tu domicilio realizando la visita.</p>
+        <p style="margin-top: 30px; opacity: 0.8;">Gracias por confiar en Futurity.</p>
+    </div>
+
+    <div id="panel-calificacion" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100vh; background: white; z-index: 9999; padding: 20px; text-align: center; justify-content: center; align-items: center; flex-direction: column; box-sizing: border-box;">
+        <h2 style="color: #d32f2f; font-weight: bold; margin-bottom: 5px;">¡Visita Finalizada!</h2>
+        <p style="color: #64748b; margin-bottom: 25px;">¿Qué tal te pareció el servicio de <strong id="calif-nombre-tecnico" style="color: #1e293b;">tu técnico</strong>?</p>
+        
+        <form id="form-calificacion" onsubmit="enviarCalificacion(event)" style="width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 15px;">
+            <div class="estrellas" style="font-size: 2rem; color: #ffd700; cursor: pointer; display: flex; justify-content: space-evenly;">
+                <label><input type="radio" name="estrellas" value="1" required style="display: none;"> ⭐ 1</label>
+                <label><input type="radio" name="estrellas" value="2" style="display: none;"> ⭐ 2</label>
+                <label><input type="radio" name="estrellas" value="3" style="display: none;"> ⭐ 3</label>
+                <label><input type="radio" name="estrellas" value="4" style="display: none;"> ⭐ 4</label>
+                <label><input type="radio" name="estrellas" value="5" style="display: none;"> ⭐ 5</label>
+            </div>
+            
+            <textarea name="comentario" rows="3" placeholder="Déjanos un comentario (opcional)..." style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; font-size: 1rem; box-sizing: border-box; font-family: inherit; margin-top: 15px;"></textarea>
+            
+            <button type="submit" style="width: 100%; background-color: #10b981; color: white; border: none; padding: 15px; border-radius: 10px; font-weight: bold; font-size: 1.1rem; cursor: pointer;">
+                Enviar Calificación
+            </button>
+        </form>
+        
+        <div id="mensaje-gracias" style="display: none; margin-top: 25px;">
+            <h3 style="color: #10b981;">¡Gracias por ayudarnos a mejorar!</h3>
+            <p style="color: #64748b; font-size: 0.9rem;">Tus comentarios son muy valiosos para nosotros.</p>
+        </div>
+    </div>
+
+
+    <div id="interfaz-rastreo">
+        <div class="header">
+            <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 5px;">
+                <img src="{{ url_for('static', filename='img/logo_futurity.png') }}" alt="Futurity Logo" style="width: 32px; height: 32px; border-radius: 6px;">
+                <h1 style="margin: 0;">Futurity</h1>
+            </div>
+            <p>Hola, {{ visita.cliente }}</p>
+        </div>
+
+        <div id="mapa" style="height: 55vh; width: 100%; min-height: 350px; z-index: 1;"></div>
+
+        <div class="info-card">
+            <div class="status-badge">🚗 Técnico en camino</div>
+            <div style="display: flex; align-items: center; gap: 15px; margin-top: 10px;">
+                <div style="position: relative; width: 60px; height: 60px;">
+                    <img id="img-tecnico" src="" alt="Técnico" onclick="abrirFotoModal('tecnico')" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; display: none; border: 2px solid #e2e8f0; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <img id="img-tecnico-apoyo" src="" alt="Técnico Apoyo" style="width: 35px; height: 35px; border-radius: 50%; object-fit: cover; display: none; border: 2px solid #fff; position: absolute; bottom: -5px; right: -10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                </div>
+                <div>
+                    <p class="tech-name" id="nombre-tecnico">{{ visita.tecnico_principal }}</p>
+                    <p class="mensaje" style="margin: 2px 0; font-size: 0.85rem; font-weight: bold;">Vehículo: <span id="vehiculo-placa">Consultando...</span></p>
+                </div>
+                <img id="img-vehiculo" src="" alt="Vehículo" onclick="abrirFotoModal('vehiculo')" style="width: 85px; height: 55px; border-radius: 6px; object-fit: cover; display: none; border: 2px solid #e2e8f0; margin-left: auto; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            </div>
+            <p class="mensaje" style="margin-top: 15px; font-size: 0.9rem;">Puedes seguir su ubicación en tiempo real en el mapa superior.</p>
+        </div>
+    </div>
+
+    <div id="modal-visor-fotos" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100vh; background: rgba(0,0,0,0.85); z-index: 10000; justify-content: center; align-items: center; flex-direction: column; padding: 20px; box-sizing: border-box; cursor: pointer;" onclick="cerrarFotoModal()">
+        <span style="color: white; font-size: 2.5rem; position: absolute; top: 15px; right: 25px;">&times;</span>
+        
+        <img id="img-modal-ampliada" src="" style="box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+        
+        <p id="texto-modal-foto" style="color: white; margin-top: 20px; font-weight: bold; font-size: 1.2rem; text-align: center;"></p>
+        <p style="color: #cbd5e1; font-size: 0.85rem; margin-top: 5px;">Toca cualquier parte para cerrar</p>
+    </div>
+
+    <script>
+        const token = "{{ token }}";
+        let mapa, marcador;
+        let primeraVez = true;
+
+        // Configuración inicial del mapa (Centrado en Cuenca por defecto)
+        mapa = L.map('mapa').setView([-2.9001, -79.0059], 13);
+
+        // Capa base de calles (OpenStreetMap)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(mapa);
+
+        // Ícono personalizado del "Carrito" del técnico
+        const iconoTecnico = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/3204/3204905.png', // Un icono de auto o furgoneta
+            iconSize: [40, 40],
+            iconAnchor: [20, 20]
+        });
+
+        // Guardamos el cronómetro en una variable para poder apagarlo después
+        let intervaloRastreo;
+
+        // Función que consulta el servidor
+        function actualizarUbicacion() {
+            fetch(`/api/rastreo_ubicacion/${token}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Si la visita está FINALIZADA, mostramos calificación y APAGAMOS EL BUCLE
+                    if (data.estado === 'FINALIZADA') {
+                        clearInterval(intervaloRastreo);
+                        document.getElementById('interfaz-rastreo').style.display = 'none';
+                        document.getElementById('pantalla-llegada').style.display = 'none';
+                        document.getElementById('panel-calificacion').style.display = 'flex';
+                        
+                        // Mostrar nombres en la calificación
+                        const nombreTecnicoEl = document.getElementById('calif-nombre-tecnico');
+                        if (data.tecnico && data.tecnico_apoyo) {
+                            const n1 = data.tecnico.split(' ')[0];
+                            const n2 = data.tecnico_apoyo.split(' ')[0];
+                            nombreTecnicoEl.innerText = n1 + " y " + n2;
+                        } else if (data.tecnico) {
+                            nombreTecnicoEl.innerText = data.tecnico;
+                        }
+                        return; 
+                    }
+                    
+                    // Si el técnico llegó (EN_PROGRESO), ocultamos el mapa, pero SEGUIMOS el bucle para esperar a que finalice
+                    if (data.estado === 'EN_PROGRESO') {
+                        document.getElementById('interfaz-rastreo').style.display = 'none';
+                        document.getElementById('pantalla-llegada').style.display = 'flex';
+                        return; 
+                    }
+                        
+                    // CAMBIO 2: Escudo para evitar que el JS explote si no hay coordenadas aún
+                    if (data.status === 'ok' && data.lat && data.lon) {
+                        const nuevaUbicacion = [data.lat, data.lon];
+                        
+                        // Actualizar fotos y placa si vienen en la respuesta
+                        if (data.tecnico_foto) {
+                            const imgTec = document.getElementById('img-tecnico');
+                            imgTec.src = data.tecnico_foto;
+                            imgTec.style.display = 'block';
+                        }
+                        if (data.tecnico_apoyo_foto) {
+                            const imgApoyo = document.getElementById('img-tecnico-apoyo');
+                            imgApoyo.src = data.tecnico_apoyo_foto;
+                            imgApoyo.style.display = 'block';
+                        }
+                        if (data.vehiculo_foto) {
+                            const imgVeh = document.getElementById('img-vehiculo');
+                            imgVeh.src = data.vehiculo_foto;
+                            imgVeh.style.display = 'block';
+                        }
+                        if (data.placa) {
+                            document.getElementById('vehiculo-placa').innerText = data.placa;
+                        }
+
+                        // Actualizar nombre (Si hay apoyo, muestra "Tecnico & Apoyo")
+                        const nombreTecnicoEl = document.getElementById('nombre-tecnico');
+                        if (data.tecnico && data.tecnico_apoyo) {
+                            const n1 = data.tecnico.split(' ')[0];
+                            const n2 = data.tecnico_apoyo.split(' ')[0];
+                            nombreTecnicoEl.innerText = n1 + " & " + n2;
+                        } else if (data.tecnico) {
+                            nombreTecnicoEl.innerText = data.tecnico;
+                        }
+
+                        if (primeraVez) {
+                            marcador = L.marker(nuevaUbicacion, {icon: iconoTecnico}).addTo(mapa);
+                            mapa.setView(nuevaUbicacion, 16);
+                            primeraVez = false;
+                        } else {
+                            marcador.setLatLng(nuevaUbicacion);
+                        }
+                    } else {
+                        // Mensaje de fallback si la ruta aún no tiene coordenadas válidas
+                        document.getElementById('vehiculo-placa').innerText = "Esperando inicio de ruta...";
+                    }
+                })
+                .catch(err => console.log("Esperando conexión del técnico..."));
+        }
+
+        // Ejecutar inmediatamente y luego encender el cronómetro cada 5 segundos
+        actualizarUbicacion();
+        intervaloRastreo = setInterval(actualizarUbicacion, 5000);
+
+        // --- SISTEMA DE CALIFICACIÓN ---
+        // Dar feedback visual al seleccionar estrellas
+        const radios = document.querySelectorAll('input[name="estrellas"]');
+        radios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                // Quitamos el borde o fondo de todos y se lo ponemos al seleccionado
+                const labels = document.querySelectorAll('.estrellas label');
+                labels.forEach(l => {
+                    l.style.backgroundColor = 'transparent';
+                    l.style.border = '2px solid transparent';
+                    l.style.padding = '5px 10px';
+                    l.style.borderRadius = '10px';
+                });
+                this.parentElement.style.backgroundColor = '#fffbeb';
+                this.parentElement.style.border = '2px solid #fde047';
+            });
+        });
+
+        function enviarCalificacion(e) {
+            e.preventDefault();
+            const form = document.getElementById('form-calificacion');
+            const formData = new FormData(form);
+            
+            fetch(`/api/cliente/calificar/${token}`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'ok') {
+                    form.style.display = 'none';
+                    document.getElementById('mensaje-gracias').style.display = 'block';
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(err => alert("Ocurrió un error al enviar la calificación. Por favor, intenta de nuevo."));
+        }
+
+        // --- VISOR DE FOTOS (TÉCNICO Y FURGONETA) ---
+        function abrirFotoModal(tipo) {
+            const imgAmpliada = document.getElementById('img-modal-ampliada');
+            const textoModal = document.getElementById('texto-modal-foto');
+            
+            if (tipo === 'tecnico') {
+                const srcTecnico = document.getElementById('img-tecnico').src;
+                if (srcTecnico) {
+                    imgAmpliada.src = srcTecnico;
+                    // Diseño redondo para el técnico
+                    imgAmpliada.style.borderRadius = '50%'; 
+                    imgAmpliada.style.width = '250px';
+                    imgAmpliada.style.height = '250px';
+                    imgAmpliada.style.objectFit = 'cover';
+                    textoModal.innerText = 'Tu Técnico Asignado';
+                    document.getElementById('modal-visor-fotos').style.display = 'flex';
+                }
+            } else if (tipo === 'vehiculo') {
+                const srcVehiculo = document.getElementById('img-vehiculo').src;
+                if (srcVehiculo) {
+                    imgAmpliada.src = srcVehiculo;
+                    // Diseño rectangular para la furgoneta
+                    imgAmpliada.style.borderRadius = '8px';
+                    imgAmpliada.style.width = 'auto';
+                    imgAmpliada.style.height = 'auto';
+                    imgAmpliada.style.maxWidth = '100%';
+                    imgAmpliada.style.maxHeight = '50vh';
+                    imgAmpliada.style.objectFit = 'contain';
+                    textoModal.innerText = 'Vehículo de Soporte';
+                    document.getElementById('modal-visor-fotos').style.display = 'flex';
+                }
+            }
+        }
+
+        function cerrarFotoModal() {
+            document.getElementById('modal-visor-fotos').style.display = 'none';
+        }
+
+    </script>
+</body>
+
+</html>

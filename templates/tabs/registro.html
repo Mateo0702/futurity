@@ -1,0 +1,180 @@
+<div id="tab-registro" class="tab-content">
+    <h2>Registrar Nueva Visita</h2>
+    <div class="card">
+        <form action="/api/visitas" method="POST">
+
+            <h3 style="margin-bottom: 15px; color: var(--primary); font-size: 1.1rem;">Datos de Asignación</h3>
+            <div class="form-grid">
+
+                <div class="form-group">
+                    <label>Fecha Programada (Día de la Visita):</label>
+                    <input type="date" name="fecha_programada" id="fecha_programada" required class="form-control">
+                    <script>
+                        // Obtener la fecha local exacta del equipo del usuario
+                        const fechaLocal = new Date();
+                        
+                        const anio = fechaLocal.getFullYear();
+                        // Los meses en JavaScript empiezan en 0, por eso sumamos 1. 
+                        // padStart asegura que el mes y día siempre tengan 2 dígitos (ej. "05" en lugar de "5")
+                        const mes = String(fechaLocal.getMonth() + 1).padStart(2, '0');
+                        const dia = String(fechaLocal.getDate()).padStart(2, '0');
+
+                        // Armar el formato YYYY-MM-DD y aplicarlo como mínimo
+                        document.getElementById('fecha_programada').min = `${anio}-${mes}-${dia}`;
+                    </script>
+                </div>
+
+                <div class="form-group">
+                    <label>Prioridad de Atención:</label>
+                    <select name="prioridad" class="form-control" required>
+                        <option value="ALTA">🔴 ALTA</option>
+                        <option value="MEDIA" selected>🟡 MEDIA</option>
+                        <option value="BAJA">⚪ BAJA</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Técnico Principal:</label>
+                    <select name="tecnico_asignado" class="form-control" required>
+                        <option value="">-- Seleccione el Técnico Responsable --</option>
+                        {% for tecnico in tecnicos %}
+                        <option value="{{ tecnico.nombre }}">{{ tecnico.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Técnico de Apoyo (Opcional):</label>
+                    <select name="tecnico_apoyo" class="form-control">
+                        <option value="">-- Sin Apoyo --</option>
+                        {% for tecnico in tecnicos %}
+                        <option value="{{ tecnico.nombre }}">{{ tecnico.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 25px; margin-bottom: 15px; color: var(--primary); font-size: 1.1rem;">Datos del
+                Cliente</h3>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Empresa:</label>
+                    <select name="empresa" required class="form-control">
+                        <option value="SERVICABLE">SERVICABLE</option>
+                        <option value="FIBRACOM">FIBRACOM</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Contrato:</label>
+                    <input type="text" name="contrato" placeholder="Ej. 47d" class="form-control">
+                </div>
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px;">
+                        <label style="margin: 0;">Nombre del Cliente:</label>
+                        <button type="button" onclick="cargarHistorial(document.getElementById('input-cliente-registro').value)" 
+                            style="background-color: #f8fafc; border: 1px solid #cbd5e1; color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                            <i class="fa-solid fa-clock-rotate-left"></i> Ver Historial
+                        </button>
+                    </div>
+                    <input type="text" name="cliente" id="input-cliente-registro" required placeholder="Ej. SUQUISUPA IÑAGUAZA..."
+                        class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Teléfonos:</label>
+                    <input type="text" name="telefonos" placeholder="Ej. 593 99 232 1716" class="form-control">
+                </div>
+            </div>
+
+            <h3 style="margin-top: 25px; margin-bottom: 15px; color: var(--primary); font-size: 1.1rem;">Ubicación</h3>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Sector:</label>
+                    <select name="sector" required class="form-control">
+                        <option value="">-- Seleccionar Sector --</option>
+                        {% for sector in sectores %}
+                        <option value="{{ sector.nombre_sector }}">{{ sector.nombre_sector }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Dirección Exacta:</label>
+                    <input type="text" name="direccion" required placeholder="Calle sin nombre, referencias..."
+                        class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Latitud (Opcional):</label>
+                    <input type="text" name="latitud" placeholder="-2.897..." class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Longitud (Opcional):</label>
+                    <input type="text" name="longitud" placeholder="-78.998..." class="form-control">
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>Preferencia Horaria (Cliente):</label>
+                    <input type="text" name="preferencia_horaria" placeholder="Ej. tarde, mañana, 8:30" required
+                        class="form-control">
+                </div>
+            </div>
+
+            <h3 style="margin-top: 25px; margin-bottom: 15px; color: var(--primary); font-size: 1.1rem;">Detalles
+                Técnicos</h3>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Servicio:</label>
+                    <select name="servicio" required class="form-control">
+                        <option value="">-- Seleccionar --</option>
+                        <option value="INTERNET_GPON">INTERNET_GPON</option>
+                        <option value="COMBO_GPON">COMBO_GPON</option>
+                        <option value="CABLE_GPON">CABLE_GPON</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Velocidad Mbps:</label>
+                    <input type="number" name="velocidad_mbps" placeholder="Ej. 500" class="form-control">
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>Problema Reportado:</label>
+                    <select name="problema" required class="form-control">
+                        <option value="">-- Seleccionar Problema --</option>
+                        {% for prob in problemas %}
+                        <option value="{{ prob.nombre }}">{{ prob.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>Observación Callcenter:</label>
+                    <textarea name="observacion_callcenter" rows="2"
+                        style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); font-family: inherit; font-size: 0.95rem; resize: vertical;"
+                        placeholder="Cliente indica problemas en la señal..."></textarea>
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <h4 style="margin-bottom: 15px; color: #475569; font-size: 0.95rem; font-weight: 700;">Información de Conexión (Opcional):</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px;">
+                        <div>
+                            <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px; display: block;">CAJA:</label>
+                            <input type="text" name="info_caja" class="form-control" placeholder="Ej. NAP-01">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px; display: block;">HILO:</label>
+                            <input type="text" name="info_hilo" class="form-control" placeholder="Ej. 12">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px; display: block;">IP (Estática):</label>
+                            <input type="text" name="info_ip" class="form-control" placeholder="192.168.x.x">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px; display: block;">Usuario (PPPoE):</label>
+                            <input type="text" name="info_usr" class="form-control" placeholder="Usuario">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px; display: block;">Clave (PPPoE):</label>
+                            <input type="text" name="info_pas" class="form-control" placeholder="Contraseña">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-block" style="margin-top: 20px;">Guardar Visita</button>
+        </form>
+    </div>
+</div>

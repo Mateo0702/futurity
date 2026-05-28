@@ -1,0 +1,589 @@
+<div id="tab-registro-atencion" class="tab-content">
+    <div style="background: white; padding: 30px; border-radius: 20px; margin-bottom: 25px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div>
+            <h1 style="margin: 0; font-size: 1.8rem; color: #0f172a; font-weight: 800; letter-spacing: -0.02em;">Registro de Atenciones Diarias</h1>
+            <p style="margin-top: 5px; color: #64748b; font-size: 0.95rem; font-weight: 500;">Registra llamadas, WhatsApps, cobros y atenciones de oficina en tiempo real.</p>
+        </div>
+        <div style="background: #f1f5f9; padding: 10px 18px; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 10px;">
+            <div style="width: 10px; height: 10px; border-radius: 50%; background: #10b981; animation: pulse 2s infinite;"></div>
+            <span style="font-size: 0.85rem; font-weight: 700; color: #334155;">Agente: <span style="color: var(--primary);" id="agente-sesion-tag">{{ asesor }}</span></span>
+        </div>
+    </div>
+
+    <style>
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        
+        .atencion-layout {
+            display: grid;
+            grid-template-columns: 1.6fr 1fr;
+            gap: 25px;
+            align-items: start;
+        }
+        
+        @media (max-width: 1024px) {
+            .atencion-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Widget Cronómetro */
+        .stopwatch-card {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #334155;
+        }
+        
+        .stopwatch-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        
+        .stopwatch-display {
+            font-size: 3rem;
+            font-weight: 800;
+            font-family: monospace;
+            margin: 15px 0;
+            letter-spacing: 2px;
+            color: #818cf8;
+            text-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+        }
+        
+        .stopwatch-btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+        
+        .stopwatch-btn.start { background: #10b981; color: white; }
+        .stopwatch-btn.start:hover { background: #059669; }
+        .stopwatch-btn.pause { background: #f59e0b; color: white; }
+        .stopwatch-btn.pause:hover { background: #d97706; }
+        .stopwatch-btn.reset { background: #ef4444; color: white; }
+        .stopwatch-btn.reset:hover { background: #dc2626; }
+        
+        /* Alerta de Visita Requerida */
+        .visita-alerta {
+            background: #e0e7ff;
+            border: 1px solid #c7d2fe;
+            border-left: 5px solid #6366f1;
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            animation: slideDown 0.3s ease;
+        }
+        
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Historial Reciente */
+        .historial-reciente-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .historial-reciente-table th {
+            text-align: left;
+            padding: 12px 16px;
+            background: #f8fafc;
+            color: #64748b;
+            font-weight: 700;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .historial-reciente-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f1f5f9;
+            color: #334155;
+        }
+        .historial-reciente-table tr:hover {
+            background: #f8fafc;
+        }
+        
+        .badge-atencion-tipo {
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+    </style>
+
+    <div class="atencion-layout">
+        <!-- Formulario de Registro (Izquierda) -->
+        <div class="card" style="padding: 30px;">
+            <form id="form-registro-atencion" onsubmit="event.preventDefault(); guardarAtencion();">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #f1f5f9; padding-bottom: 15px;">
+                    <h3 style="margin: 0; color: var(--primary); font-size: 1.15rem; font-weight: 800;"><i class="fa-solid fa-square-plus" style="margin-right: 8px;"></i> Ingreso de Atención</h3>
+                    <span style="font-size: 0.8rem; color: #94a3b8; font-weight: 600;" id="form-fecha-hora-live"></span>
+                </div>
+
+                <div class="form-grid">
+                    <!-- Contrato con Búsqueda -->
+                    <div class="form-group">
+                        <label style="font-weight: 700;">Contrato:</label>
+                        <div style="position: relative;">
+                            <input type="text" name="contrato" id="aten_contrato" placeholder="Ej. 47d" class="form-control" style="padding-right: 40px;">
+                            <span id="aten_contrato_loading" style="position: absolute; right: 12px; top: 12px; display: none;" class="spinner"></span>
+                            <span id="aten_contrato_ok" style="position: absolute; right: 12px; top: 12px; display: none; color: #10b981;"><i class="fa-solid fa-circle-check"></i></span>
+                        </div>
+                        <small style="color: #94a3b8;">Presiona Tab o sal del campo para autocompletar.</small>
+                    </div>
+
+                    <!-- Nombre del Cliente -->
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px;">
+                            <label style="margin: 0; font-weight: 700;">Nombre del Cliente:</label>
+                            <button type="button" onclick="cargarHistorialDesdeAtenciones()" 
+                                style="background-color: #f8fafc; border: 1px solid #cbd5e1; color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                <i class="fa-solid fa-clock-rotate-left"></i> Historial (3m)
+                            </button>
+                        </div>
+                        <input type="text" name="cliente" id="aten_cliente" required placeholder="Nombre completo" class="form-control">
+                    </div>
+
+                    <!-- Teléfono 1 -->
+                    <div class="form-group">
+                        <label style="font-weight: 700;">Teléfono Principal:</label>
+                        <input type="text" name="telefono1" id="aten_telefono1" placeholder="Ej. 0992321716" class="form-control">
+                    </div>
+
+                    <!-- Teléfono 2 -->
+                    <div class="form-group">
+                        <label style="font-weight: 700;">Teléfono Secundario:</label>
+                        <input type="text" name="telefono2" id="aten_telefono2" placeholder="Opcional" class="form-control">
+                    </div>
+
+                    <!-- Sector -->
+                    <div class="form-group">
+                        <label style="font-weight: 700;">Sector:</label>
+                        <select name="sector" id="aten_sector" class="form-control">
+                            <option value="">-- Seleccionar Sector --</option>
+                            {% for sector in sectores %}
+                            <option value="{{ sector.nombre_sector }}">{{ sector.nombre_sector }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Fecha de Instalación (Oculta/Informativa) -->
+                    <div class="form-group">
+                        <label style="font-weight: 700;">Fecha Instalación:</label>
+                        <input type="date" name="fecha_instalacion" id="aten_fecha_instalacion" class="form-control" readonly style="background: #f1f5f9; cursor: not-allowed; color: #64748b;">
+                    </div>
+                </div>
+
+                <div style="margin-top: 25px; margin-bottom: 20px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px;">
+                    <h4 style="margin: 0; color: #475569; font-size: 1rem; font-weight: 800;"><i class="fa-solid fa-headset" style="margin-right: 8px;"></i> Clasificación del Soporte</h4>
+                </div>
+
+                <div class="form-grid">
+                    <!-- Tipo de Atención -->
+                    <div class="form-group">
+                        <label style="font-weight: 700;">Tipo de Atención:</label>
+                        <select name="tipo_atencion" id="aten_tipo_atencion" required class="form-control">
+                            <option value="SERVICIO TÉCNICO" selected>SERVICIO TÉCNICO</option>
+                            <option value="ATENCIÓN AL CLIENTE">ATENCIÓN AL CLIENTE</option>
+                            <option value="COBRANZAS">COBRANZAS</option>
+                            <option value="VENTAS">VENTAS</option>
+                            <option value="CANCELACIÓN">CANCELACIÓN</option>
+                            <option value="OTROS">OTROS</option>
+                        </select>
+                    </div>
+
+                    <!-- Tipo de Solicitud -->
+                    <div class="form-group">
+                        <label style="font-weight: 700;">Tipo de Solicitud:</label>
+                        <select name="tipo_solicitud" id="aten_tipo_solicitud" required class="form-control">
+                            <option value="SOPORTE TÉCNICO" selected>SOPORTE TÉCNICO</option>
+                            <option value="RECLAMO">RECLAMO</option>
+                            <option value="PAGO FACTURA">PAGO FACTURA</option>
+                            <option value="ACUERDO DE PAGOS">ACUERDO DE PAGOS</option>
+                            <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
+                            <option value="CONSULTA">CONSULTA</option>
+                            <option value="CANCELACIÓN DEFINITIVA">CANCELACIÓN DEFINITIVA</option>
+                            <option value="ACTUALIZACION DE DATOS">ACTUALIZACION DE DATOS</option>
+                            <option value="FACTURACION">FACTURACION</option>
+                            <option value="COBRANZAS">COBRANZAS</option>
+                            <option value="INCREMENTO MEGAS">INCREMENTO MEGAS</option>
+                            <option value="RECONEXION">RECONEXION</option>
+                            <option value="CONTRATA ZAPPING">CONTRATA ZAPPING</option>
+                            <option value="CORTE VOLUNTARIO">CORTE VOLUNTARIO</option>
+                            <option value="ACTUALIZACION DE DEBITO">ACTUALIZACION DE DEBITO</option>
+                            <option value="DEBITO DE CTA O T/C">DEBITO DE CTA O T/C</option>
+                            <option value="ENTREGA DE EQUIPOS">ENTREGA DE EQUIPOS</option>
+                            <option value="INSTALACION ADICIONAL">INSTALACION ADICIONAL</option>
+                            <option value="INSTALACION NUEVA">INSTALACION NUEVA</option>
+                            <option value="RETENCIÓN">RETENCIÓN</option>
+                            <option value="RETIRAR EQUIPOS">RETIRAR EQUIPOS</option>
+                            <option value="TRANSFERENCIA">TRANSFERENCIA</option>
+                        </select>
+                    </div>
+
+                    <!-- Medio de Contacto -->
+                    <div class="form-group">
+                        <label style="font-weight: 700;">Medio de Contacto:</label>
+                        <select name="medio_contacto" id="aten_medio_contacto" required class="form-control">
+                            <option value="WHATSAPP" selected>WHATSAPP</option>
+                            <option value="TELEFONO">TELÉFONO</option>
+                            <option value="OFICINA">OFICINA</option>
+                            <option value="REDES SOCIALES">REDES SOCIALES</option>
+                            <option value="CHAT INTERNO">CHAT INTERNO</option>
+                        </select>
+                    </div>
+
+                    <!-- Acción Realizada -->
+                    <div class="form-group">
+                        <label style="font-weight: 700;">Acción Realizada:</label>
+                        <select name="accion" id="aten_accion" required class="form-control" onchange="verificarAccionVisita(this.value)">
+                            <option value="SOPORTE MEDIANTE MENSAJES" selected>SOPORTE MEDIANTE MENSAJES</option>
+                            <option value="SOPORTE MEDIANTE LLAMADA">SOPORTE MEDIANTE LLAMADA</option>
+                            <option value="VISITA TECNICA">VISITA TÉCNICA</option>
+                            <option value="VISITA TECNICA COBRADA">VISITA TÉCNICA COBRADA</option>
+                            <option value="SE DA INFORMACION">SE DA INFORMACIÓN</option>
+                            <option value="ESCALAR A TECNOLOGIA">ESCALAR A TECNOLOGÍA</option>
+                            <option value="RETENCION">RETENCIÓN</option>
+                        </select>
+                    </div>
+
+                    <!-- Motivo -->
+                    <div class="form-group">
+                        <label style="font-weight: 700;">Motivo de Consulta:</label>
+                        <select name="motivo" id="aten_motivo" required class="form-control">
+                            <option value="EQUIPOS APAGADOS">EQUIPOS APAGADOS</option>
+                            <option value="EQUIPOS INHIBIDOS">EQUIPOS INHIBIDOS</option>
+                            <option value="INFORMACION / PAGOS" selected>INFORMACIÓN / PAGOS</option>
+                            <option value="DESCONFIGURACIÓN DE EQUIPOS">DESCONFIGURACIÓN DE EQUIPOS</option>
+                            <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
+                            <option value="MIGRACIÓN DE SERVICIO">MIGRACIÓN DE SERVICIO</option>
+                            <option value="LENTITUD">LENTITUD</option>
+                            <option value="SIN SEÑAL / PON ROJO">SIN SEÑAL / PON ROJO</option>
+                            <option value="CABLE CAIDO">CABLE CAÍDO</option>
+                        </select>
+                    </div>
+
+
+                </div>
+
+                <!-- Alerta dinámica de Visita Técnica -->
+                <div id="aten_alerta_visita" class="visita-alerta" style="display: none;">
+                    <div>
+                        <strong style="color: #4f46e5; display: block;"><i class="fa-solid fa-circle-exclamation"></i> Visita Técnica Requerida</strong>
+                        <span style="font-size: 0.8rem; color: #475569;">Esta atención está catalogada como Visita. Puedes agendarla de inmediato.</span>
+                    </div>
+                    <button type="button" onclick="transferirARegistroVisitas()" class="btn" style="background: #6366f1; color: white; font-size: 0.8rem; padding: 6px 12px; border-radius: 8px;">
+                        <i class="fa-solid fa-calendar-plus"></i> Agendar Visita
+                    </button>
+                </div>
+
+                <div style="margin-top: 25px; margin-bottom: 20px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px;">
+                    <h4 style="margin: 0; color: #475569; font-size: 1rem; font-weight: 800;"><i class="fa-solid fa-network-wired" style="margin-right: 8px;"></i> Detalles de Conexión / OLT</h4>
+                </div>
+
+                <div class="form-grid">
+                    <!-- OLT -->
+                    <div class="form-group" style="grid-column: span 3;">
+                        <label style="font-weight: 700;">Nodo / OLT:</label>
+                        <select name="olt" id="aten_olt" class="form-control">
+                            <option value="">-- Sin Especificar / Ninguno --</option>
+                            <option value="1.18">1.18</option>
+                            <option value="1.50">1.50</option>
+                            <option value="99.1">99.1</option>
+                            <option value="BAÑOS">BAÑOS</option>
+                            <option value="AZOGUES">AZOGUES</option>
+                            <option value="ESTADIO">ESTADIO</option>
+                            <option value="BASES">BASES</option>
+                            <option value="RB">RB</option>
+                            <option value="HFC">HFC</option>
+                            <option value="FIBRACOM VALLE">FIBRACOM VALLE</option>
+                            <option value="FIBRACOM SANTA ANA">FIBRACOM SANTA ANA</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Observaciones -->
+                <div class="form-group" style="margin-top: 20px;">
+                    <label style="font-weight: 700;">Observación / Comentarios de la Atención:</label>
+                    <textarea name="observacion" id="aten_observacion" rows="3" class="form-control" style="resize: vertical; font-family: inherit; font-size: 0.95rem; width: 100%; box-sizing: border-box;" placeholder="Describe detalladamente el soporte brindado o el acuerdo al que se llegó..."></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-block" style="margin-top: 25px; font-weight: 800; font-size: 1.05rem;"><i class="fa-solid fa-floppy-disk" style="margin-right: 8px;"></i> Registrar Atención Diaria</button>
+            </form>
+        </div>
+
+        <!-- Registro de Hoy (Derecha) -->
+        <div style="display: flex; flex-direction: column; gap: 25px;">
+            <!-- Ayuda / Buenas Prácticas -->
+            <div class="card" style="padding: 20px; background: #fafafa; border: 1px dashed #cbd5e1;">
+                <h4 style="margin: 0 0 10px 0; color: #475569; font-size: 0.85rem; font-weight: bold; text-transform: uppercase;"><i class="fa-solid fa-circle-info" style="color: var(--primary);"></i> Consejos Rápidos</h4>
+                <ul style="margin: 0; padding-left: 20px; font-size: 0.8rem; color: #64748b; line-height: 1.5;">
+                    <li>Busca primero por número de contrato para evitar errores en el nombre y sector del cliente.</li>
+                    <li>Si el cliente requiere visita, marca la Acción como "VISITA TÉCNICA" y usa el botón morado de programación rápida.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla inferior de últimas atenciones registradas hoy -->
+    <div class="card" style="margin-top: 30px; padding: 25px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 15px; margin-bottom: 20px;">
+            <h3 style="margin: 0; font-size: 1.1rem; color: #0f172a; font-weight: 800;"><i class="fa-solid fa-list-check" style="color: var(--primary); margin-right: 8px;"></i> Mis Atenciones de Hoy</h3>
+            <span class="badge" style="background: #e0e7ff; color: #4338ca; font-weight: 700;" id="aten_contador_hoy">0 registros</span>
+        </div>
+        <div style="overflow-x: auto;">
+            <table class="historial-reciente-table">
+                <thead>
+                    <tr>
+                        <th>Hora</th>
+                        <th>Contrato</th>
+                        <th>Cliente</th>
+                        <th>Sector</th>
+                        <th>Tipo</th>
+                        <th>Solicitud</th>
+                        <th>Medio</th>
+                        <th>Acción</th>
+                        <th>Observación</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-atenciones-hoy">
+                    <tr>
+                        <td colspan="9" style="text-align: center; color: #94a3b8; padding: 30px 0;">No has ingresado atenciones el día de hoy.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- AUTOCOMPLETADO POR CONTRATO (BLUR) ---
+    document.getElementById('aten_contrato').addEventListener('blur', function() {
+        const contrato = this.value.trim();
+        if (!contrato) return;
+        
+        const loader = document.getElementById('aten_contrato_loading');
+        const checkIcon = document.getElementById('aten_contrato_ok');
+        
+        loader.style.display = 'block';
+        checkIcon.style.display = 'none';
+        
+        fetch(`/api/cliente/buscar_contrato_json?contrato=${encodeURIComponent(contrato)}`)
+            .then(res => {
+                if (res.ok) return res.json();
+                throw new Error('No encontrado');
+            })
+            .then(data => {
+                loader.style.display = 'none';
+                if (data.status === 'success') {
+                    checkIcon.style.display = 'block';
+                    
+                    document.getElementById('aten_cliente').value = data.cliente.cliente;
+                    document.getElementById('aten_telefono1').value = data.cliente.telefono1 || '';
+                    document.getElementById('aten_telefono2').value = data.cliente.telefono2 || '';
+                    
+                    // Pre-seleccionar sector
+                    if (data.cliente.sector) {
+                        const sectorSelect = document.getElementById('aten_sector');
+                        const sectorVal = data.cliente.sector.trim().toUpperCase();
+                        const options = Array.from(sectorSelect.options);
+                        const match = options.find(opt => opt.value.toUpperCase() === sectorVal);
+                        if (match) {
+                            sectorSelect.value = match.value;
+                        }
+                    }
+                    
+                    // Fecha de instalación
+                    if (data.cliente.fecha_instalacion) {
+                        document.getElementById('aten_fecha_instalacion').value = data.cliente.fecha_instalacion.split('T')[0];
+                    }
+                }
+            })
+            .catch(err => {
+                loader.style.display = 'none';
+                checkIcon.style.display = 'none';
+                console.log('Cliente no encontrado en el directorio.');
+            });
+    });
+
+    // --- VERIFICAR ACCIÓN DE VISITA ---
+    function verificarAccionVisita(valor) {
+        const alerta = document.getElementById('aten_alerta_visita');
+        if (valor === 'VISITA TECNICA' || valor === 'VISITA TECNICA COBRADA') {
+            alerta.style.display = 'flex';
+        } else {
+            alerta.style.display = 'none';
+        }
+    }
+
+    // --- TRANSFERIR A REGISTRO DE VISITAS ---
+    function transferirARegistroVisitas() {
+        const contrato = document.getElementById('aten_contrato').value.trim();
+        const cliente = document.getElementById('aten_cliente').value.trim();
+        const sector = document.getElementById('aten_sector').value;
+        const tels = [];
+        const tel1 = document.getElementById('aten_telefono1').value.trim();
+        const tel2 = document.getElementById('aten_telefono2').value.trim();
+        if (tel1) tels.push(tel1);
+        if (tel2) tels.push(tel2);
+        
+        // Ir a la pestaña de Registrar Visita
+        const navRegistro = document.querySelector('.nav-item[data-tab="tab-registro"]');
+        if (navRegistro) {
+            // Llenar campos en el formulario de visitas
+            const inputContrato = document.querySelector('input[name="contrato"]');
+            const inputCliente = document.getElementById('input-cliente-registro');
+            const inputSector = document.querySelector('select[name="sector"]');
+            const inputTelefonos = document.querySelector('input[name="telefonos"]');
+            const inputObs = document.querySelector('textarea[name="observacion_callcenter"]');
+            const selectProblema = document.querySelector('select[name="problema"]');
+            
+            if (inputContrato) inputContrato.value = contrato;
+            if (inputCliente) inputCliente.value = cliente;
+            if (inputSector && sector) inputSector.value = sector;
+            if (inputTelefonos) inputTelefonos.value = tels.join(', ');
+            if (inputObs) inputObs.value = `Visita requerida según atención previa. Observación: ${document.getElementById('aten_observacion').value}`;
+            
+            // Forzar disparo de blur y autocompletado en el formulario de visitas si es necesario
+            if (inputContrato) {
+                inputContrato.dispatchEvent(new Event('blur'));
+            }
+            
+            navRegistro.click();
+        }
+    }
+
+    // --- GUARDAR ATENCIÓN (POST AJAX) ---
+    function guardarAtencion() {
+        const form = document.getElementById('form-registro-atencion');
+        const formData = new FormData(form);
+        const data = {};
+        formData.forEach((value, key) => data[key] = value);
+
+        fetch('/api/admin/atenciones', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(res => res.json())
+        .then(resData => {
+            if (resData.status === 'success') {
+                alert('✓ Atención registrada con éxito');
+                form.reset();
+                document.getElementById('aten_contrato_ok').style.display = 'none';
+                document.getElementById('aten_alerta_visita').style.display = 'none';
+                
+                // Recargar historial del agente de hoy
+                cargarAtencionesHoy();
+            } else {
+                alert('Error al registrar: ' + resData.message);
+            }
+        })
+        .catch(err => {
+            alert('Error de red al registrar la atención');
+        });
+    }
+
+    // --- CARGAR HISTORIAL DE HOY ---
+    function cargarAtencionesHoy() {
+        fetch('/api/admin/atenciones/recientes')
+            .then(res => res.json())
+            .then(data => {
+                const tbody = document.getElementById('tabla-atenciones-hoy');
+                const contador = document.getElementById('aten_contador_hoy');
+                
+                if (data.status === 'success' && data.atenciones.length > 0) {
+                    contador.innerText = `${data.atenciones.length} registros`;
+                    
+                    tbody.innerHTML = data.atenciones.map(at => {
+                        const obs = at.observacion || '-';
+                        const hora = at.hora ? at.hora.substring(0, 5) : '-';
+                        
+                        return `
+                            <tr>
+                                <td style="font-weight: 700; color: var(--primary);">${hora}</td>
+                                <td style="font-weight: 700;">#${at.contrato || '-'}</td>
+                                <td style="font-weight: bold; color: #0f172a;">${at.cliente}</td>
+                                <td><span class="badge" style="background:#f1f5f9; color:#334155; font-size:0.75rem;">${at.sector || '-'}</span></td>
+                                <td><span class="badge" style="background:#e0f2fe; color:#0369a1; font-weight:700; font-size:0.7rem;">${at.tipo_atencion || '-'}</span></td>
+                                <td><span class="badge" style="background:#fef3c7; color:#b45309; font-weight:700; font-size:0.7rem;">${at.tipo_solicitud || '-'}</span></td>
+                                <td>
+                                    <span class="badge-atencion-tipo" style="
+                                        background: ${at.medio_contacto === 'WHATSAPP' ? '#d1fae5' : at.medio_contacto === 'TELEFONO' ? '#dbeafe' : '#f3e8ff'};
+                                        color: ${at.medio_contacto === 'WHATSAPP' ? '#065f46' : at.medio_contacto === 'TELEFONO' ? '#1e40af' : '#6b21a8'};
+                                    ">
+                                        ${at.medio_contacto || '-'}
+                                    </span>
+                                </td>
+                                <td><span class="badge" style="background:#ece9fc; color:#4c1d95; font-size:0.7rem; font-weight:700;">${at.accion || '-'}</span></td>
+                                <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; color: #64748b;" title="${obs}">${obs}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                } else {
+                    contador.innerText = '0 registros';
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="9" style="text-align: center; color: #94a3b8; padding: 30px 0;">No has ingresado atenciones el día de hoy.</td>
+                        </tr>
+                    `;
+                }
+            })
+            .catch(err => {
+                console.error('Error cargando atenciones de hoy:', err);
+            });
+    }
+
+    // --- MOSTRAR HISTORIAL GENERAL DESDE FORMULARIO DE ATENCIONES ---
+    function cargarHistorialDesdeAtenciones() {
+        const cliente = document.getElementById('aten_cliente').value.trim();
+        cargarHistorial(cliente);
+    }
+
+    // --- REFRESH RELOJ LIVE ---
+    setInterval(() => {
+        const ahora = new Date();
+        document.getElementById('form-fecha-hora-live').innerText = 
+            ahora.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' }) + ' ' +
+            ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }, 1000);
+
+    // Inicializar cargas al abrir
+    document.addEventListener("DOMContentLoaded", function() {
+        // Cargar atenciones si la pestaña se activa
+        const navItemAtencion = document.querySelector('.nav-item[data-tab="tab-registro-atencion"]');
+        if (navItemAtencion) {
+            navItemAtencion.addEventListener('click', function() {
+                cargarAtencionesHoy();
+            });
+        }
+        
+        const tabAtencion = document.getElementById('tab-registro-atencion');
+        if (tabAtencion && tabAtencion.classList.contains('active')) {
+            cargarAtencionesHoy();
+        }
+    });
+</script>

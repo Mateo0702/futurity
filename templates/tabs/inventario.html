@@ -1,0 +1,429 @@
+<div id="tab-inventario" class="tab-content">
+    
+    <div style="background: white; padding: 30px; border-radius: 20px; margin-bottom: 25px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm);">
+        <h1 style="margin: 0; font-size: 1.8rem; color: #0f172a; font-weight: 800; letter-spacing: -0.02em;">Control de Inventario y Bodega</h1>
+        <p style="margin-top: 5px; color: #64748b; font-size: 0.95rem; font-weight: 500;">Administración de stock en bodega principal y control de materiales en custodia de técnicos.</p>
+    </div>
+
+    <!-- Spinner de Carga -->
+    <div id="inventario-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; background: white; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm); margin-bottom: 25px;">
+        <div class="spinner"></div>
+        <p style="margin-top: 15px; color: #64748b; font-weight: 600;">Cargando estado del inventario...</p>
+    </div>
+
+    <!-- Contenido Principal de Inventario -->
+    <div id="inventario-content" style="display: none; margin-bottom: 25px;">
+        
+        <!-- KPIs de Inventario -->
+        <div class="metric-kpi-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 25px;">
+            <div class="metric-kpi-card" style="background: white; padding: 20px; border-radius: 20px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 20px;">
+                <div class="metric-kpi-icon" style="background: rgba(31, 73, 125, 0.1); color: #1f497d; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                    <i class="fa-solid fa-warehouse"></i>
+                </div>
+                <div class="metric-kpi-info">
+                    <h3 id="inv-kpi-bodega" style="font-size: 1.8rem; font-weight: 800; margin: 0; color: #0f172a;">0</h3>
+                    <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Stock en Bodega</p>
+                </div>
+            </div>
+            
+            <div class="metric-kpi-card" style="background: white; padding: 20px; border-radius: 20px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 20px;">
+                <div class="metric-kpi-icon" style="background: rgba(99, 102, 241, 0.1); color: #6366f1; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                    <i class="fa-solid fa-people-carry-box"></i>
+                </div>
+                <div class="metric-kpi-info">
+                    <h3 id="inv-kpi-custodia" style="font-size: 1.8rem; font-weight: 800; margin: 0; color: #0f172a;">0</h3>
+                    <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Custodia Técnicos</p>
+                </div>
+            </div>
+            
+            <div class="metric-kpi-card" style="background: white; padding: 20px; border-radius: 20px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 20px;">
+                <div class="metric-kpi-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                    <i class="fa-solid fa-wrench"></i>
+                </div>
+                <div class="metric-kpi-info">
+                    <h3 id="inv-kpi-consumido" style="font-size: 1.8rem; font-weight: 800; margin: 0; color: #0f172a;">0</h3>
+                    <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Consumo Total</p>
+                </div>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px;">
+            
+            <!-- Lado Izquierdo: Stock en Bodega -->
+            <div class="card" style="padding: 25px; background: white; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #1f497d;">
+                        <i class="fa-solid fa-boxes-stacked" style="margin-right: 8px;"></i> Stock en Bodega Principal
+                    </h3>
+                    <button type="button" onclick="abrirModalIngresoBodega()" class="btn" style="padding: 8px 15px; font-size: 0.85rem; background-color: #1f497d; border-color: #1f497d; display: flex; align-items: center; gap: 6px;">
+                        <i class="fa-solid fa-plus"></i> Ingresar Material
+                    </button>
+                </div>
+                <div class="table-container" style="border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="padding: 12px 15px;">Material</th>
+                                <th style="padding: 12px 15px; text-align: center;">U. Medida</th>
+                                <th style="padding: 12px 15px; text-align: center;">Disponible</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bodega-tbody">
+                            <!-- Inyectado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Lado Derecho: Custodia e Inventario por Técnico -->
+            <div class="card" style="padding: 25px; background: white; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+                    <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #6366f1;">
+                        <i class="fa-solid fa-people-carry-box" style="margin-right: 8px;"></i> Asignación y Custodia de Técnicos
+                    </h3>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" onclick="abrirModalEntrega()" class="btn" style="padding: 8px 15px; font-size: 0.85rem; background-color: #6366f1; border-color: #6366f1; display: flex; align-items: center; gap: 6px; color: white;">
+                            <i class="fa-solid fa-truck-ramp-box"></i> Entregar Material
+                        </button>
+                        <button type="button" onclick="abrirModalDevolucion()" class="btn" style="padding: 8px 15px; font-size: 0.85rem; background-color: #ef4444; border-color: #ef4444; display: flex; align-items: center; gap: 6px; color: white;">
+                            <i class="fa-solid fa-rotate-left"></i> Devolución
+                        </button>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label for="filtro-tecnico-inv" style="font-weight: 700; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Filtrar por Técnico:</label>
+                    <select id="filtro-tecnico-inv" class="form-control" style="padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%; outline: none;" onchange="renderizarInventarioTecnicos()">
+                        <!-- Inyectado por JS -->
+                    </select>
+                </div>
+
+                <div class="table-container" style="border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="padding: 12px 15px;">Material</th>
+                                <th style="padding: 12px 15px; text-align: center;">U. Medida</th>
+                                <th style="padding: 12px 15px; text-align: center;">En Custodia</th>
+                                <th style="padding: 12px 15px; text-align: center;">Consumido</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tecnicos-tbody">
+                            <!-- Inyectado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- MODAL 1: INGRESO A BODEGA -->
+    <div id="modalIngresoBodega" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+        <div style="background-color: #ffffff; color: #0f172a; border-radius: 12px; width: 100%; max-width: 450px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+            <div style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background-color: #f8fafc; border-radius: 12px 12px 0 0;">
+                <h5 style="margin: 0; color: #1f497d; font-size: 1.1rem; font-weight: bold;"><i class="fa-solid fa-plus-circle"></i> Ingresar Material a Bodega</h5>
+                <button type="button" onclick="cerrarModalIngresoBodega()" style="background: none; border: none; color: #64748b; font-size: 1.8rem; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
+            </div>
+            <div style="padding: 20px;">
+                <form id="form-ingreso-bodega" onsubmit="event.preventDefault(); guardarIngresoBodega();">
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Seleccione Material:</label>
+                        <select id="ingreso_material" class="form-control" style="padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%;" required>
+                            <!-- Inyectado por JS -->
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <label style="font-weight: bold; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Cantidad a Ingresar:</label>
+                        <input type="number" id="ingreso_cantidad" class="form-control" min="1" placeholder="Ej. 100" style="padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%;" required>
+                    </div>
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <button type="button" onclick="cerrarModalIngresoBodega()" class="btn btn-secondary" style="padding: 10px 18px; border-radius: 10px;">Cancelar</button>
+                        <button type="submit" class="btn" style="padding: 10px 20px; border-radius: 10px; background-color: #1f497d; border-color: #1f497d;">Guardar Ingreso</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: ENTREGAR A TÉCNICO -->
+    <div id="modalEntrega" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+        <div style="background-color: #ffffff; color: #0f172a; border-radius: 12px; width: 100%; max-width: 450px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+            <div style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background-color: #f8fafc; border-radius: 12px 12px 0 0;">
+                <h5 style="margin: 0; color: #6366f1; font-size: 1.1rem; font-weight: bold;"><i class="fa-solid fa-truck-ramp-box"></i> Entregar Material a Técnico</h5>
+                <button type="button" onclick="cerrarModalEntrega()" style="background: none; border: none; color: #64748b; font-size: 1.8rem; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
+            </div>
+            <div style="padding: 20px;">
+                <form id="form-entrega-tecnico" onsubmit="event.preventDefault(); guardarEntregaTecnico();">
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Seleccione Técnico:</label>
+                        <select id="entrega_tecnico" class="form-control" style="padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%;" required>
+                            <!-- Inyectado por JS -->
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Seleccione Material:</label>
+                        <select id="entrega_material" class="form-control" style="padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%;" required>
+                            <!-- Inyectado por JS -->
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <label style="font-weight: bold; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Cantidad a Entregar:</label>
+                        <input type="number" id="entrega_cantidad" class="form-control" min="1" placeholder="Ej. 50" style="padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%;" required>
+                    </div>
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <button type="button" onclick="cerrarModalEntrega()" class="btn btn-secondary" style="padding: 10px 18px; border-radius: 10px;">Cancelar</button>
+                        <button type="submit" class="btn" style="padding: 10px 20px; border-radius: 10px; background-color: #6366f1; border-color: #6366f1; color: white;">Entregar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: DEVOLUCIÓN DE TÉCNICO -->
+    <div id="modalDevolucion" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+        <div style="background-color: #ffffff; color: #0f172a; border-radius: 12px; width: 100%; max-width: 450px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+            <div style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background-color: #f8fafc; border-radius: 12px 12px 0 0;">
+                <h5 style="margin: 0; color: #ef4444; font-size: 1.1rem; font-weight: bold;"><i class="fa-solid fa-rotate-left"></i> Devolución de Insumos a Bodega</h5>
+                <button type="button" onclick="cerrarModalDevolucion()" style="background: none; border: none; color: #64748b; font-size: 1.8rem; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
+            </div>
+            <div style="padding: 20px;">
+                <form id="form-devolucion-tecnico" onsubmit="event.preventDefault(); guardarDevolucionTecnico();">
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Seleccione Técnico:</label>
+                        <select id="devolucion_tecnico" class="form-control" style="padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%;" required>
+                            <!-- Inyectado por JS -->
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Seleccione Material:</label>
+                        <select id="devolucion_material" class="form-control" style="padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%;" required>
+                            <!-- Inyectado por JS -->
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <label style="font-weight: bold; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Cantidad a Devolver:</label>
+                        <input type="number" id="devolucion_cantidad" class="form-control" min="1" placeholder="Ej. 10" style="padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%;" required>
+                    </div>
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <button type="button" onclick="cerrarModalDevolucion()" class="btn btn-secondary" style="padding: 10px 18px; border-radius: 10px;">Cancelar</button>
+                        <button type="submit" class="btn" style="padding: 10px 20px; border-radius: 10px; background-color: #ef4444; border-color: #ef4444; color: white;">Devolver a Bodega</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    let cacheInventarioData = null;
+
+    document.addEventListener("DOMContentLoaded", function() {
+        // Cargar inventario al activar pestaña
+        const navInventario = document.querySelector('.nav-item[data-tab="tab-inventario"]');
+        if (navInventario) {
+            navInventario.addEventListener('click', function() {
+                cargarDatosInventario();
+            });
+        }
+    });
+
+    async function cargarDatosInventario() {
+        document.getElementById('inventario-loader').style.display = 'flex';
+        document.getElementById('inventario-content').style.display = 'none';
+
+        try {
+            const res = await fetch('/api/admin/inventario');
+            const data = await res.json();
+
+            if (data.status === 'ok') {
+                cacheInventarioData = data;
+
+                // 1. Rellenar KPIs
+                let totalBodega = 0;
+                let totalCustodia = 0;
+                let totalConsumido = 0;
+
+                data.materiales.forEach(m => {
+                    totalBodega += m.stock_bodega;
+                });
+
+                Object.values(data.inventario_tecnicos).forEach(tecInv => {
+                    Object.values(tecInv).forEach(info => {
+                        totalCustodia += info.cantidad_disponible;
+                        totalConsumido += info.total_usado;
+                    });
+                });
+
+                document.getElementById('inv-kpi-bodega').innerText = totalBodega;
+                document.getElementById('inv-kpi-custodia').innerText = totalCustodia;
+                document.getElementById('inv-kpi-consumido').innerText = totalConsumido;
+
+                // 2. Renderizar Tabla Bodega
+                const bodegaTbody = document.getElementById('bodega-tbody');
+                bodegaTbody.innerHTML = data.materiales.map(m => `
+                    <tr>
+                        <td style="padding: 12px 15px; font-weight: bold; color: var(--text-main);">${m.nombre_material}</td>
+                        <td style="padding: 12px 15px; text-align: center; color: var(--sidebar-text); font-size: 0.85rem; font-weight: 600;">${m.unidad_medida}</td>
+                        <td style="padding: 12px 15px; text-align: center; font-weight: 800; color: #1f497d; font-size: 1.05rem;">${m.stock_bodega}</td>
+                    </tr>
+                `).join('');
+
+                // 3. Rellenar Selectores de Modales
+                const optMateriales = data.materiales.map(m => `<option value="${m.id_material}">${m.nombre_material} (${m.unidad_medida})</option>`).join('');
+                document.getElementById('ingreso_material').innerHTML = optMateriales;
+                document.getElementById('entrega_material').innerHTML = optMateriales;
+                document.getElementById('devolucion_material').innerHTML = optMateriales;
+
+                const optTecnicos = data.tecnicos.map(t => `<option value="${t}">${t}</option>`).join('');
+                document.getElementById('entrega_tecnico').innerHTML = optTecnicos;
+                document.getElementById('devolucion_tecnico').innerHTML = optTecnicos;
+
+                // Selector de Filtro en sección técnicos
+                const filtroTec = document.getElementById('filtro-tecnico-inv');
+                const selectedTecValue = filtroTec.value;
+                filtroTec.innerHTML = data.tecnicos.map(t => `<option value="${t}">${t}</option>`).join('');
+                
+                // Intentar mantener el técnico seleccionado previamente
+                if (selectedTecValue && data.tecnicos.includes(selectedTecValue)) {
+                    filtroTec.value = selectedTecValue;
+                }
+
+                // 4. Renderizar Tabla Custodia
+                renderizarInventarioTecnicos();
+
+                document.getElementById('inventario-loader').style.display = 'none';
+                document.getElementById('inventario-content').style.display = 'block';
+            } else {
+                console.error("Error al cargar inventario:", data.message);
+            }
+        } catch (err) {
+            console.error("Error de conexión en inventario:", err);
+        }
+    }
+
+    function renderizarInventarioTecnicos() {
+        if (!cacheInventarioData) return;
+        const data = cacheInventarioData;
+        const tecSeleccionado = document.getElementById('filtro-tecnico-inv').value;
+        const tecTbody = document.getElementById('tecnicos-tbody');
+
+        if (!tecSeleccionado) {
+            tecTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #64748b; padding: 20px;">No hay técnicos seleccionados.</td></tr>`;
+            return;
+        }
+
+        const tecInv = data.inventario_tecnicos[tecSeleccionado] || {};
+        
+        tecTbody.innerHTML = data.materiales.map(m => {
+            const info = tecInv[m.id_material.toString()] || { cantidad_disponible: 0, total_usado: 0 };
+            return `
+                <tr>
+                    <td style="padding: 12px 15px; font-weight: bold; color: var(--text-main);">${m.nombre_material}</td>
+                    <td style="padding: 12px 15px; text-align: center; color: var(--sidebar-text); font-size: 0.85rem; font-weight: 600;">${m.unidad_medida}</td>
+                    <td style="padding: 12px 15px; text-align: center; font-weight: 800; color: #6366f1; font-size: 1.05rem;">${info.cantidad_disponible}</td>
+                    <td style="padding: 12px 15px; text-align: center; font-weight: 700; color: #10b981;">${info.total_usado}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // --- FUNCIONES MODALES ---
+
+    function abrirModalIngresoBodega() {
+        document.getElementById('modalIngresoBodega').style.display = 'flex';
+    }
+
+    function cerrarModalIngresoBodega() {
+        document.getElementById('modalIngresoBodega').style.display = 'none';
+        document.getElementById('form-ingreso-bodega').reset();
+    }
+
+    async function guardarIngresoBodega() {
+        const id_material = document.getElementById('ingreso_material').value;
+        const cantidad = document.getElementById('ingreso_cantidad').value;
+
+        try {
+            const res = await fetch('/api/admin/inventario/bodega/ingreso', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id_material: parseInt(id_material), cantidad: parseInt(cantidad) })
+            });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                cerrarModalIngresoBodega();
+                cargarDatosInventario();
+            } else {
+                alert("Error: " + data.message);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function abrirModalEntrega() {
+        document.getElementById('modalEntrega').style.display = 'flex';
+    }
+
+    function cerrarModalEntrega() {
+        document.getElementById('modalEntrega').style.display = 'none';
+        document.getElementById('form-entrega-tecnico').reset();
+    }
+
+    async function guardarEntregaTecnico() {
+        const tecnico = document.getElementById('entrega_tecnico').value;
+        const id_material = document.getElementById('entrega_material').value;
+        const cantidad = document.getElementById('entrega_cantidad').value;
+
+        try {
+            const res = await fetch('/api/admin/inventario/tecnico/entrega', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tecnico_nombre: tecnico, id_material: parseInt(id_material), cantidad: parseInt(cantidad) })
+            });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                cerrarModalEntrega();
+                cargarDatosInventario();
+            } else {
+                alert("Error: " + data.message);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function abrirModalDevolucion() {
+        document.getElementById('modalDevolucion').style.display = 'flex';
+    }
+
+    function cerrarModalDevolucion() {
+        document.getElementById('modalDevolucion').style.display = 'none';
+        document.getElementById('form-devolucion-tecnico').reset();
+    }
+
+    async function guardarDevolucionTecnico() {
+        const tecnico = document.getElementById('devolucion_tecnico').value;
+        const id_material = document.getElementById('devolucion_material').value;
+        const cantidad = document.getElementById('devolucion_cantidad').value;
+
+        try {
+            const res = await fetch('/api/admin/inventario/tecnico/devolucion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tecnico_nombre: tecnico, id_material: parseInt(id_material), cantidad: parseInt(cantidad) })
+            });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                cerrarModalDevolucion();
+                cargarDatosInventario();
+            } else {
+                alert("Error: " + data.message);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+</script>
