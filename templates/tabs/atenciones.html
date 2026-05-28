@@ -416,7 +416,7 @@
                     
                     // Fecha de instalación
                     if (data.cliente.fecha_instalacion) {
-                        document.getElementById('aten_fecha_instalacion').value = data.cliente.fecha_instalacion.split('T')[0];
+                        document.getElementById('aten_fecha_instalacion').value = data.cliente.fecha_instalacion.split(/[T ]/)[0];
                     }
                 }
             })

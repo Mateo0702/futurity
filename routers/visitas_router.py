@@ -151,11 +151,24 @@ def buscar_cliente(contrato):
         cliente = cursor.fetchone()
         
         if cliente:
-            tel1 = cliente['telefono1'] or ""
-            tel2 = cliente['telefono2'] or ""
+            tel1 = str(cliente['telefono1']).strip() if cliente['telefono1'] else ""
+            if tel1.endswith('.0') or tel1.endswith(',0'):
+                tel1 = tel1[:-2]
+            if tel1.lower() in ['nan', 'none']:
+                tel1 = ""
+
+            tel2 = str(cliente['telefono2']).strip() if cliente['telefono2'] else ""
+            if tel2.endswith('.0') or tel2.endswith(',0'):
+                tel2 = tel2[:-2]
+            if tel2.lower() in ['nan', 'none']:
+                tel2 = ""
+
             telefonos = tel1
             if tel2 and tel2 != tel1:
-                telefonos += f" / {tel2}"
+                if telefonos:
+                    telefonos += f" / {tel2}"
+                else:
+                    telefonos = tel2
 
             return jsonify({
                 "cliente": cliente['nombre_cliente'],

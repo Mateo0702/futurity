@@ -58,14 +58,26 @@ def importar_excel_a_base():
         
         # 6. Iterar fila por fila el DataFrame de Pandas
         for index, fila in df.iterrows():
-            # Mapeo exacto haciendo match con los nombres reales de las columnas en tu Excel
+            # Limpieza de teléfonos flotantes (.0) provenientes de Excel
+            tel1_raw = str(fila['Telefono1']).strip() if pd.notna(fila['Telefono1']) else None
+            if tel1_raw and (tel1_raw.endswith('.0') or tel1_raw.endswith(',0')):
+                tel1_raw = tel1_raw[:-2]
+            if tel1_raw in ['', 'nan', 'NAN', 'None', 'NONE']:
+                tel1_raw = None
+
+            tel2_raw = str(fila['Telefono2']).strip() if pd.notna(fila['Telefono2']) else None
+            if tel2_raw and (tel2_raw.endswith('.0') or tel2_raw.endswith(',0')):
+                tel2_raw = tel2_raw[:-2]
+            if tel2_raw in ['', 'nan', 'NAN', 'None', 'NONE']:
+                tel2_raw = None
+
             datos_cliente = (
                 str(fila['# Contrato']).strip(),
                 str(fila['Fecha Instalacion']).strip() if pd.notna(fila['Fecha Instalacion']) else None,
                 str(fila['Cliente']).strip().upper(),
                 str(fila['Zona']).strip().upper() if pd.notna(fila['Zona']) else None,
-                str(fila['Telefono1']).strip() if pd.notna(fila['Telefono1']) else None,
-                str(fila['Telefono2']).strip() if pd.notna(fila['Telefono2']) else None
+                tel1_raw,
+                tel2_raw
             )
             
             cursor.execute(query_insert, datos_cliente)

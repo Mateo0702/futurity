@@ -29,11 +29,22 @@ def buscar_contrato_json():
             # Formatear fecha si existe
             if isinstance(cliente['fecha_instalacion'], (datetime, date)):
                 cliente['fecha_instalacion'] = cliente['fecha_instalacion'].isoformat()
+            elif isinstance(cliente['fecha_instalacion'], str) and len(cliente['fecha_instalacion']) >= 10:
+                cliente['fecha_instalacion'] = cliente['fecha_instalacion'][:10]
             
+            # Limpiar formatos flotantes (.0) si existieran
+            for k in ['telefono1', 'telefono2']:
+                val = cliente[k]
+                if val:
+                    val_str = str(val).strip()
+                    if val_str.endswith('.0') or val_str.endswith(',0'):
+                        val_str = val_str[:-2]
+                    cliente[k] = val_str
+
             # Combinar teléfonos de forma limpia
             tels = []
-            if cliente['telefono1']: tels.append(str(cliente['telefono1']).strip())
-            if cliente['telefono2']: tels.append(str(cliente['telefono2']).strip())
+            if cliente['telefono1']: tels.append(cliente['telefono1'])
+            if cliente['telefono2']: tels.append(cliente['telefono2'])
             cliente['telefonos'] = ", ".join(tels)
             
             return jsonify({"status": "success", "cliente": cliente})
