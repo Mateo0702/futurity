@@ -472,7 +472,7 @@ def obtener_sectores_activos():
     if not conexion: return []
     try:
         cursor = conexion.cursor(dictionary=True)
-        cursor.execute("SELECT nombre_sector FROM catalogo_sectores WHERE activo = TRUE ORDER BY nombre_sector ASC")
+        cursor.execute("SELECT nombre_sector, latitud_defecto, longitud_defecto FROM catalogo_sectores WHERE activo = TRUE ORDER BY nombre_sector ASC")
         return cursor.fetchall()
     except Exception as e:
         print(f"Error al obtener sectores: {e}")

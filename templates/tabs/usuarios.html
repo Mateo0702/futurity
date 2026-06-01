@@ -85,6 +85,7 @@
                             <th style="padding: 16px 20px;">Nombre</th>
                             <th style="padding: 16px 20px;">Placa del Vehículo</th>
                             <th style="padding: 16px 20px; text-align: center; width: 120px;">Vehículo</th>
+                            <th style="padding: 16px 20px; text-align: center;">Área de Trabajo</th>
                             <th style="padding: 16px 20px; text-align: center;">Estado</th>
                             <th style="padding: 16px 20px; text-align: center;">Acciones</th>
                         </tr>
@@ -171,6 +172,13 @@
                             <input type="text" id="tecnico-placa" required class="form-control" placeholder="Ej. ABE-9377" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit;">
                         </div>
                         <div>
+                            <label for="tecnico-area-trabajo" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Área de Trabajo</label>
+                            <select id="tecnico-area-trabajo" required class="form-control" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit; background-color:#ffffff;">
+                                <option value="SOPORTE">🛠️ SOPORTE TÉCNICO</option>
+                                <option value="INSTALACIONES">🔌 INSTALACIONES</option>
+                            </select>
+                        </div>
+                        <div style="grid-column: span 2;">
                             <label for="tecnico-activo" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Estado de Asignación</label>
                             <select id="tecnico-activo" required class="form-control" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit; background-color:#ffffff;">
                                 <option value="1">DISPONIBLE / ACTIVO</option>
@@ -616,6 +624,9 @@
             const perfilUrl = `/static/uploads/${tec.foto_perfil || 'default_avatar.png'}`;
             const vehiculoUrl = `/static/uploads/${tec.foto_vehiculo || 'furgoneta_milton.jpeg'}`;
 
+            const areaClass = tec.area_trabajo === 'INSTALACIONES' ? 'bodega' : 'tecnico';
+            const areaTxt = tec.area_trabajo === 'INSTALACIONES' ? '🔌 INSTALACIONES' : '🛠️ SOPORTE';
+
             return `
                 <tr style="border-bottom: 1px solid #e2e8f0; transition: background-color 0.2s;">
                     <td style="padding: 10px 20px; text-align: center;">
@@ -625,6 +636,9 @@
                     <td style="padding: 14px 20px; color: #475569; font-weight: 600;">${tec.placa_vehiculo || 'S/P'}</td>
                     <td style="padding: 10px 20px; text-align: center;">
                         <img src="${vehiculoUrl}" alt="Vehículo ${tec.nombre}" style="width: 80px; height: 45px; border-radius: 8px; object-fit: cover; border: 1.5px solid var(--border-color); background: #f1f5f9;">
+                    </td>
+                    <td style="padding: 14px 20px; text-align: center;">
+                        <span class="badge-role ${areaClass}" style="font-size: 0.75rem; padding: 4px 10px; border-radius: 20px; font-weight: 800;">${areaTxt}</span>
                     </td>
                     <td style="padding: 14px 20px; text-align: center;">
                         <span class="badge-status ${statusClass}">${statusTxt}</span>
@@ -688,6 +702,7 @@
                 document.getElementById('tecnico-nombre').value = tec.nombre;
                 document.getElementById('tecnico-placa').value = tec.placa_vehiculo || 'S/P';
                 document.getElementById('tecnico-activo').value = tec.activo ? "1" : "0";
+                document.getElementById('tecnico-area-trabajo').value = tec.area_trabajo || 'SOPORTE';
 
                 if (tec.foto_perfil) {
                     const imgPerfil = document.getElementById('preview-perfil');
@@ -704,6 +719,7 @@
         } else {
             title.innerHTML = '<i class="fa-solid fa-plus"></i> Registrar Técnico de Campo';
             idField.value = "";
+            document.getElementById('tecnico-area-trabajo').value = 'SOPORTE';
         }
 
         modal.style.display = 'flex';
@@ -727,6 +743,7 @@
         formData.set('nombre', document.getElementById('tecnico-nombre').value.trim());
         formData.set('placa_vehiculo', document.getElementById('tecnico-placa').value.trim());
         formData.set('activo', document.getElementById('tecnico-activo').value);
+        formData.set('area_trabajo', document.getElementById('tecnico-area-trabajo').value);
 
         fetch(url, {
             method: 'POST', // Siempre POST para enviar ficheros (multipart)

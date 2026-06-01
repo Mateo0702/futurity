@@ -34,13 +34,26 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Técnico Principal:</label>
-                    <select name="tecnico_asignado" class="form-control" required>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px;">
+                        <label style="margin: 0; font-weight: 700; color: #475569; font-size: 0.85rem;">Técnico Principal:</label>
+                        <button type="button" onclick="recomendarTecnicoCercano()" 
+                            style="background-color: #f8fafc; border: 1px solid #cbd5e1; color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                            <i class="fa-solid fa-location-crosshairs"></i> Recomendar Cercano
+                        </button>
+                    </div>
+                    <select name="tecnico_asignado" id="registro-tecnico-asignado" class="form-control" required>
                         <option value="">-- Seleccione el Técnico Responsable --</option>
                         {% for tecnico in tecnicos %}
                         <option value="{{ tecnico.nombre }}">{{ tecnico.nombre }}</option>
                         {% endfor %}
                     </select>
+                    <!-- Contenedor dinámico de recomendaciones de técnicos cercanos -->
+                    <div id="contenedor-recomendaciones-tecnicos" style="display: none; margin-top: 8px; padding: 10px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; font-size: 0.85rem; color: #166534; box-shadow: var(--shadow-sm);">
+                        <strong>📍 Recomendaciones de Soporte Cercano:</strong>
+                        <ul id="lista-recomendaciones-tecnicos" style="margin: 5px 0 0 0; padding-left: 20px; list-style-type: disc; display: flex; flex-direction: column; gap: 4px;">
+                            <!-- Dinámico -->
+                        </ul>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -89,10 +102,10 @@
             <div class="form-grid">
                 <div class="form-group">
                     <label>Sector:</label>
-                    <select name="sector" required class="form-control">
+                    <select name="sector" id="registro-sector" required class="form-control" onchange="autoCompletarCoordenadasSector(this)">
                         <option value="">-- Seleccionar Sector --</option>
                         {% for sector in sectores %}
-                        <option value="{{ sector.nombre_sector }}">{{ sector.nombre_sector }}</option>
+                        <option value="{{ sector.nombre_sector }}" data-lat="{{ sector.latitud_defecto }}" data-lon="{{ sector.longitud_defecto }}">{{ sector.nombre_sector }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -103,11 +116,11 @@
                 </div>
                 <div class="form-group">
                     <label>Latitud (Opcional):</label>
-                    <input type="text" name="latitud" placeholder="-2.897..." class="form-control">
+                    <input type="text" name="latitud" id="registro-latitud" placeholder="-2.897..." class="form-control">
                 </div>
                 <div class="form-group">
                     <label>Longitud (Opcional):</label>
-                    <input type="text" name="longitud" placeholder="-78.998..." class="form-control">
+                    <input type="text" name="longitud" id="registro-longitud" placeholder="-78.998..." class="form-control">
                 </div>
                 <div class="form-group" style="grid-column: span 2;">
                     <label>Preferencia Horaria (Cliente):</label>
@@ -178,3 +191,92 @@
         </form>
     </div>
 </div>
+
+<script>
+    function autoCompletarCoordenadasSector(select) {
+        const selectedOption = select.options[select.selectedIndex];
+        const lat = selectedOption.getAttribute('data-lat');
+        const lon = selectedOption.getAttribute('data-lon');
+        
+        const inputLat = document.getElementById('registro-latitud');
+        const inputLon = document.getElementById('registro-longitud');
+        
+        if (lat && lon) {
+            inputLat.value = lat;
+            inputLon.value = lon;
+            console.log(`Coordenadas auto-completadas para el sector: ${lat}, ${lon}`);
+            
+            // Ocultar recomendaciones anteriores por si cambió el sector
+            document.getElementById('contenedor-recomendaciones-tecnicos').style.display = 'none';
+        } else {
+            inputLat.value = '';
+            inputLon.value = '';
+        }
+    }
+
+    function recomendarTecnicoCercano() {
+        const lat = document.getElementById('registro-latitud').value.trim();
+        const lon = document.getElementById('registro-longitud').value.trim();
+        
+        if (!lat || !lon) {
+            alert("Por favor, seleccione un sector o ingrese coordenadas de latitud/longitud primero.");
+            return;
+        }
+        
+        const contenedor = document.getElementById('contenedor-recomendaciones-tecnicos');
+        const lista = document.getElementById('lista-recomendaciones-tecnicos');
+        
+        lista.innerHTML = '<li><i class="fa-solid fa-spinner fa-spin"></i> Buscando técnicos de soporte más cercanos...</li>';
+        contenedor.style.display = 'block';
+        
+        fetch(`/api/admin/tecnicos/mas_cercano?lat=${lat}&lon=${lon}`)
+            .then(res => res.json())
+            .then(data => {
+                lista.innerHTML = '';
+                if (data.status === 'ok') {
+                    if (data.recomendados.length === 0) {
+                        lista.innerHTML = '<li style="color: #c2410c;"><i class="fa-solid fa-triangle-exclamation"></i> No hay técnicos activos de soporte con señal GPS hoy.</li>';
+                    } else {
+                        data.recomendados.forEach(tec => {
+                            const li = document.createElement('li');
+                            li.style.display = 'flex';
+                            li.style.justifyContent = 'space-between';
+                            li.style.alignItems = 'center';
+                            li.style.width = '100%';
+                            li.innerHTML = `
+                                <span>
+                                    <strong>${tec.nombre}</strong> (a ${tec.distancia_km} km) 
+                                    <span style="font-size: 0.75rem; color: #15803d; background: #dcfce7; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 5px;">${tec.estado}</span>
+                                </span>
+                                <button type="button" onclick="seleccionarTecnicoRecomendado('${tec.nombre}')" 
+                                    style="background-color: #166534; color: white; border: none; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: background 0.2s;">
+                                    Asignar
+                                </button>
+                            `;
+                            lista.appendChild(li);
+                        });
+                    }
+                } else {
+                    lista.innerHTML = `<li style="color: #b91c1c;">Error: ${data.message}</li>`;
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                lista.innerHTML = '<li style="color: #b91c1c;">Error de conexión con el servidor.</li>';
+            });
+    }
+
+    function seleccionarTecnicoRecomendado(nombre) {
+        const selectTec = document.getElementById('registro-tecnico-asignado');
+        if (selectTec) {
+            selectTec.value = nombre;
+            // Mostrar una alerta sutil o confirmación visual
+            const contenedor = document.getElementById('contenedor-recomendaciones-tecnicos');
+            contenedor.style.backgroundColor = '#dcfce7'; // Cambiar a verde de éxito temporalmente
+            setTimeout(() => {
+                contenedor.style.display = 'none';
+                contenedor.style.backgroundColor = '#f0fdf4'; // Restaurar color original
+            }, 800);
+        }
+    }
+</script>

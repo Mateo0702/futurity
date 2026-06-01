@@ -98,10 +98,11 @@ def panel_tecnico(nombre_tecnico):
     cursor.execute("SELECT nombre FROM catalogo_modelos_router WHERE activo = 1 ORDER BY nombre ASC")
     catalogo_router = cursor.fetchall()
 
-    # Obtener estado de actividad del técnico
-    cursor.execute("SELECT estado_actividad FROM tecnicos WHERE nombre = %s", (nombre_real,))
+    # Obtener estado de actividad y área de trabajo del técnico
+    cursor.execute("SELECT estado_actividad, area_trabajo FROM tecnicos WHERE nombre = %s", (nombre_real,))
     tec_estado_row = cursor.fetchone()
     estado_actividad = tec_estado_row['estado_actividad'] if tec_estado_row else 'Disponible'
+    area_trabajo = tec_estado_row['area_trabajo'] if (tec_estado_row and tec_estado_row['area_trabajo']) else 'SOPORTE'
     
     cursor.close()
     conexion.close()
@@ -114,6 +115,7 @@ def panel_tecnico(nombre_tecnico):
                            visitas=visitas_del_tecnico, 
                            tecnico=nombre_real,
                            estado_actividad=estado_actividad,
+                           area_trabajo=area_trabajo,
                            soluciones=soluciones,
                            catalogo=catalogo_materiales,
                            catalogo_ont=catalogo_ont,           
@@ -513,6 +515,47 @@ def descanso_tecnico():
             """, (nuevo_estado, tecnico_nombre))
             conexion.commit()
             return jsonify({"status": "ok", "estado": nuevo_estado})
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+        finally:
+            cursor.close()
+            conexion.close()
+            
+    return jsonify({"status": "error", "message": "Faltan parámetros"}), 400
+
+
+@tecnico_bp.route('/api/tecnico/area_trabajo', methods=['POST'])
+def cambiar_area_trabajo():
+    if 'user_id' not in session or session.get('user_role') != 'TECNICO':
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    if request.is_json:
+        datos = request.get_json() or {}
+    else:
+        datos = request.form
+        
+    area = datos.get('area_trabajo')
+    tecnico_nombre = session.get('user_name')
+
+    if not area and not request.is_json:
+        area = request.form.get('area_trabajo')
+
+    if tecnico_nombre and area:
+        area = area.upper().strip()
+        if area not in ['SOPORTE', 'INSTALACIONES']:
+            return jsonify({"status": "error", "message": "Área de trabajo no válida"}), 400
+            
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        try:
+            cursor.execute("""
+                UPDATE tecnicos 
+                SET area_trabajo = %s,
+                    ultima_conexion = NOW()
+                WHERE nombre = %s
+            """, (area, tecnico_nombre))
+            conexion.commit()
+            return jsonify({"status": "ok", "area_trabajo": area})
         except Exception as e:
             return jsonify({"status": "error", "message": str(e)}), 500
         finally:

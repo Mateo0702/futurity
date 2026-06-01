@@ -235,7 +235,7 @@ def list_tecnicos():
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
-            SELECT id_tecnico, nombre, activo, foto_perfil, foto_vehiculo, placa_vehiculo 
+            SELECT id_tecnico, nombre, activo, foto_perfil, foto_vehiculo, placa_vehiculo, area_trabajo 
             FROM tecnicos 
             WHERE nombre NOT IN ('TECNOLOGIA', 'NO TECNICO')
             ORDER BY id_tecnico DESC
@@ -258,6 +258,7 @@ def create_tecnico():
     nombre = request.form.get('nombre', '').strip()
     placa = request.form.get('placa_vehiculo', 'S/P').strip()
     activo = int(request.form.get('activo', 1))
+    area_trabajo = request.form.get('area_trabajo', 'SOPORTE').strip()
 
     if not nombre:
         return jsonify({"status": "error", "message": "El nombre del técnico es obligatorio."}), 400
@@ -278,9 +279,9 @@ def create_tecnico():
             return jsonify({"status": "error", "message": "Ya existe un técnico con este nombre."}), 400
 
         cursor.execute("""
-            INSERT INTO tecnicos (nombre, activo, foto_perfil, foto_vehiculo, placa_vehiculo)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (nombre, activo, foto_perfil, foto_vehiculo, placa))
+            INSERT INTO tecnicos (nombre, activo, foto_perfil, foto_vehiculo, placa_vehiculo, area_trabajo)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (nombre, activo, foto_perfil, foto_vehiculo, placa, area_trabajo))
         conn.commit()
 
         return jsonify({"status": "ok", "message": "Técnico creado con éxito."})
@@ -300,6 +301,7 @@ def update_tecnico(id_tecnico):
     nombre = request.form.get('nombre', '').strip()
     placa = request.form.get('placa_vehiculo', 'S/P').strip()
     activo = int(request.form.get('activo', 1))
+    area_trabajo = request.form.get('area_trabajo', 'SOPORTE').strip()
 
     if not nombre:
         return jsonify({"status": "error", "message": "El nombre del técnico es obligatorio."}), 400
@@ -332,9 +334,9 @@ def update_tecnico(id_tecnico):
 
         cursor.execute("""
             UPDATE tecnicos
-            SET nombre = %s, activo = %s, foto_perfil = %s, foto_vehiculo = %s, placa_vehiculo = %s
+            SET nombre = %s, activo = %s, foto_perfil = %s, foto_vehiculo = %s, placa_vehiculo = %s, area_trabajo = %s
             WHERE id_tecnico = %s
-        """, (nombre, activo, foto_perfil, foto_vehiculo, placa, id_tecnico))
+        """, (nombre, activo, foto_perfil, foto_vehiculo, placa, area_trabajo, id_tecnico))
         conn.commit()
 
         # Si cambió el nombre del técnico, sincronizar también su cuenta en usuarios_callcenter si existe

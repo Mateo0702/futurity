@@ -10,12 +10,40 @@
 </head>
 
 <body class="body-tecnico">
+    <script>
+        (function() {
+            if (localStorage.getItem('theme') === 'dark') {
+                document.body.classList.add('dark-mode');
+            }
+        })();
+    </script>
+
+    <!-- BANNER DE ESTADO OFFLINE -->
+    <div id="offline-banner" style="display: none; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; text-align: center; padding: 12px; font-weight: 800; position: sticky; top: 0; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.15); font-size: 0.95rem;">
+        <i class="fa-solid fa-wifi-slash fa-fade" style="margin-right: 8px;"></i>
+        <span id="offline-banner-text">Sin conexión - Los cambios se guardarán localmente</span>
+    </div>
+
+    <!-- BANNER DE SINCRONIZACIÓN -->
+    <div id="sync-banner" style="display: none; background: linear-gradient(135deg, #10b981, #059669); color: white; text-align: center; padding: 12px; font-weight: 800; position: sticky; top: 0; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.15); font-size: 0.95rem;">
+        <i class="fa-solid fa-arrows-rotate fa-spin" style="margin-right: 8px;"></i>
+        <span>Conexión restablecida - Sincronizando cambios locales...</span>
+    </div>
 
     <div class="panel-container">
 
         <div class="sidebar-tecnico">
             <h2>Hola, {{ tecnico }}</h2>
             <p>Tus visitas programadas para hoy</p>
+            
+            <div style="margin-top: 15px; margin-bottom: 20px; text-align: left; background: rgba(255, 255, 255, 0.05); padding: 12px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);">
+                <label style="font-size: 0.8rem; color: #94a3b8; font-weight: 800; display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;"><i class="fa-solid fa-briefcase"></i> Área de Trabajo:</label>
+                <select id="select-area-trabajo" onchange="cambiarAreaTrabajo(this.value)" style="width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.2); background-color: #0f172a; color: #fff; font-size: 0.85rem; font-weight: 700; outline: none; cursor: pointer; transition: border-color 0.2s;">
+                    <option value="SOPORTE" {% if area_trabajo == 'SOPORTE' %}selected{% endif %}>🛠️ Soporte Técnico</option>
+                    <option value="INSTALACIONES" {% if area_trabajo == 'INSTALACIONES' %}selected{% endif %}>🔌 Instalaciones</option>
+                </select>
+            </div>
+
             <button id="theme-toggle-tecnico" class="theme-btn-tecnico theme-dark" title="Alternar Modo Oscuro">
                 <i class="fa-solid fa-moon"></i> <span>Modo Oscuro</span>
             </button>
@@ -129,7 +157,7 @@
                 {% endif %}
 
                 {% if visita.estado == 'PENDIENTE' or visita.estado == 'REAGENDADA' %}
-                <form action="/api/tecnico/en_camino/{{ visita.id_visita }}" method="POST">
+                <form onsubmit="procesarAccionFormulario(event, {{ visita.id_visita }}, '/api/tecnico/en_camino/{{ visita.id_visita }}', 'camino')">
                     <button type="submit" class="btn-action-route">
                         <i class="fa-solid fa-truck-fast"></i> Voy en Camino
                     </button>
@@ -145,7 +173,7 @@
                         <i class="fa-brands fa-whatsapp" style="font-size: 1.25rem;"></i> Avisar al Cliente
                     </button>
 
-                    <form action="/api/tecnico/iniciar/{{ visita.id_visita }}" method="POST">
+                    <form onsubmit="procesarAccionFormulario(event, {{ visita.id_visita }}, '/api/tecnico/iniciar/{{ visita.id_visita }}', 'iniciar')">
                         <button type="submit" class="btn-action-start">
                             <i class="fa-solid fa-play"></i> Llegué / Iniciar Trabajo
                         </button>
@@ -162,7 +190,7 @@
                 <div style="background-color: #eff6ff; padding: 18px; border-radius: 12px; margin-top: 15px; border: 1px solid #bfdbfe;">
                     <h3 style="margin-top: 0; color: #1e3a8a; font-size: 1.1rem; font-weight: 800; margin-bottom: 12px;">Cierre de Visita</h3>
 
-                    <form action="/api/tecnico/finalizar/{{ visita.id_visita }}" method="POST">
+                    <form onsubmit="procesarAccionFormulario(event, {{ visita.id_visita }}, '/api/tecnico/finalizar/{{ visita.id_visita }}', 'finalizar')">
                         <div style="margin-bottom: 12px;">
                             <label style="font-weight: 700; color: #475569; font-size: 0.85rem;">Solución del Técnico:</label>
                             <select name="solucion_tecnico" required>
@@ -424,9 +452,17 @@
                 }
             })
             .catch(err => {
-                btn.disabled = false;
-                console.error(err);
-                alert('Error de conexión.');
+                console.log('Error de conexión en descanso, guardando en local:', err);
+                encolarAccionOffline(0, '/api/tecnico/descanso', { accion: accion }, 'descanso');
+                
+                // Actualizar UI para reflejar estado pendiente
+                btn.disabled = true;
+                btn.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+                btn.style.borderColor = '#d97706';
+                btn.style.color = '#fff';
+                btn.innerHTML = estaEnDescanso ? '<i class="fa-solid fa-wifi-slash"></i> Pendiente Terminar (Offline)' : '<i class="fa-solid fa-wifi-slash"></i> Pendiente Iniciar (Offline)';
+                
+                actualizarBannerOffline();
             });
         }
 
@@ -654,6 +690,363 @@
                 if (span) span.textContent = 'Modo Claro';
             }
         }
+    </script>
+
+    <!-- Script de Sincronización Offline -->
+    <script>
+        // --- 7. SINCRONIZACIÓN OFFLINE (SOPORTE BAJA COBERTURA) ---
+        let estaSincronizando = false;
+
+        function cambiarAreaTrabajo(nuevaArea) {
+            const select = document.getElementById('select-area-trabajo');
+            select.disabled = true;
+            
+            fetch('/api/tecnico/area_trabajo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ area_trabajo: nuevaArea })
+            })
+            .then(res => res.json())
+            .then(data => {
+                select.disabled = false;
+                if (data.status === 'ok') {
+                    alert('Área de trabajo actualizada a: ' + (nuevaArea === 'SOPORTE' ? 'Soporte Técnico' : 'Instalaciones'));
+                    window.location.reload();
+                } else {
+                    alert(data.message || 'Error al cambiar área de trabajo');
+                    window.location.reload();
+                }
+            })
+            .catch(err => {
+                console.log('Error de conexión en cambio de área, encolando en local:', err);
+                encolarAccionOffline(0, '/api/tecnico/area_trabajo', { area_trabajo: nuevaArea }, 'area_trabajo');
+                
+                // Actualizar UI indicando cambio pendiente
+                select.disabled = true;
+                select.style.borderColor = '#d97706';
+                select.style.color = '#f59e0b';
+                
+                alert('Sin conexión. El cambio de área se procesará cuando recuperes cobertura.');
+                actualizarBannerOffline();
+            });
+        }
+
+        function serializeForm(form) {
+            const formData = new FormData(form);
+            const obj = {};
+            for (let key of formData.keys()) {
+                const values = formData.getAll(key);
+                if (key.endsWith('[]')) {
+                    obj[key] = values;
+                } else {
+                    obj[key] = values.length > 1 ? values : values[0];
+                }
+            }
+            return obj;
+        }
+
+        function sendFormRequest(endpoint, serializedData) {
+            const formData = new FormData();
+            for (const key in serializedData) {
+                if (Array.isArray(serializedData[key])) {
+                    serializedData[key].forEach(val => formData.append(key, val));
+                } else {
+                    formData.append(key, serializedData[key]);
+                }
+            }
+            return fetch(endpoint, {
+                method: 'POST',
+                body: formData
+            });
+        }
+
+        function procesarAccionFormulario(event, idVisita, endpoint, tipo) {
+            event.preventDefault();
+            const form = event.target;
+            
+            // Validar coordenadas si es cierre de visita
+            if (tipo === 'finalizar') {
+                const coordsInput = document.getElementById(`coords-${idVisita}`);
+                if (coordsInput && !coordsInput.value) {
+                    alert("Por favor, capture su ubicación GPS antes de finalizar.");
+                    return;
+                }
+            }
+            
+            const data = serializeForm(form);
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalBtnHTML = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
+            
+            sendFormRequest(endpoint, data)
+                .then(response => {
+                    if (response.ok) {
+                        window.location.reload();
+                    } else {
+                        alert('El servidor respondió con un error. Intente nuevamente.');
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalBtnHTML;
+                    }
+                })
+                .catch(err => {
+                    console.log('Error de conexión o de red detectado, guardando en local:', err);
+                    encolarAccionOffline(idVisita, endpoint, data, tipo);
+                    mostrarAccionEncoladaUI(form, submitBtn, tipo);
+                    actualizarBannerOffline();
+                });
+        }
+
+        function obtenerColaOffline() {
+            try {
+                return JSON.parse(localStorage.getItem('offline_sync_queue')) || [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function guardarColaOffline(queue) {
+            localStorage.setItem('offline_sync_queue', JSON.stringify(queue));
+        }
+
+        function encolarAccionOffline(visitaId, endpoint, data, tipo) {
+            const queue = obtenerColaOffline();
+            // Evitar meter la misma acción duplicada en la cola
+            const yaExiste = queue.some(item => item.endpoint === endpoint && item.tipo === tipo);
+            if (!yaExiste) {
+                queue.push({
+                    id: Date.now(),
+                    visitaId: visitaId,
+                    endpoint: endpoint,
+                    data: data,
+                    tipo: tipo
+                });
+                guardarColaOffline(queue);
+            }
+        }
+
+        function mostrarAccionEncoladaUI(form, submitBtn, tipo) {
+            submitBtn.disabled = true;
+            submitBtn.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+            submitBtn.style.borderColor = '#d97706';
+            submitBtn.style.color = '#fff';
+            
+            if (tipo === 'camino') {
+                submitBtn.innerHTML = '<i class="fa-solid fa-wifi-slash"></i> Pendiente de Ruta (Offline)';
+            } else if (tipo === 'iniciar') {
+                submitBtn.innerHTML = '<i class="fa-solid fa-wifi-slash"></i> Pendiente de Iniciar (Offline)';
+            } else if (tipo === 'finalizar') {
+                submitBtn.innerHTML = '<i class="fa-solid fa-wifi-slash"></i> Cierre Guardado Localmente';
+            }
+            
+            // Deshabilitar todos los inputs dentro de este formulario
+            const inputs = form.querySelectorAll('input, select, textarea, button:not([type="submit"])');
+            inputs.forEach(el => el.disabled = true);
+            
+            // Agregar un mensaje informativo
+            if (!form.querySelector('.offline-form-msg')) {
+                const msg = document.createElement('div');
+                msg.className = 'offline-form-msg';
+                msg.style.color = '#d97706';
+                msg.style.fontWeight = '800';
+                msg.style.fontSize = '0.85rem';
+                msg.style.marginTop = '10px';
+                msg.style.textAlign = 'center';
+                msg.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Guardado. Se sincronizará automáticamente al recuperar señal.';
+                form.appendChild(msg);
+            }
+        }
+
+        function actualizarBannerOffline() {
+            const banner = document.getElementById('offline-banner');
+            const bannerText = document.getElementById('offline-banner-text');
+            const queue = obtenerColaOffline();
+            
+            if (!navigator.onLine || queue.length > 0) {
+                banner.style.display = 'block';
+                if (queue.length > 0) {
+                    bannerText.innerHTML = `Modo Sin Conexión - ${queue.length} cambio(s) pendiente(s) de sincronizar`;
+                } else {
+                    bannerText.innerHTML = `Modo Sin Conexión - Guardando cambios localmente`;
+                }
+            } else {
+                banner.style.display = 'none';
+            }
+        }
+
+        async function procesarColaSincronizacion() {
+            if (estaSincronizando) return;
+            
+            const queue = obtenerColaOffline();
+            if (queue.length === 0) {
+                actualizarBannerOffline();
+                return;
+            }
+            
+            if (!navigator.onLine) {
+                actualizarBannerOffline();
+                return;
+            }
+            
+            estaSincronizando = true;
+            
+            const syncBanner = document.getElementById('sync-banner');
+            const offlineBanner = document.getElementById('offline-banner');
+            if (offlineBanner) offlineBanner.style.display = 'none';
+            if (syncBanner) syncBanner.style.display = 'block';
+            
+            console.log(`Intentando sincronizar ${queue.length} acciones...`);
+            let huboExito = false;
+            
+            while (queue.length > 0) {
+                const item = queue[0];
+                try {
+                    console.log(`Procesando envío de acción ${item.tipo} para visita #${item.visitaId}...`);
+                    const response = await sendFormRequest(item.endpoint, item.data);
+                    if (response.ok) {
+                        queue.shift(); // Remover el primero procesado
+                        guardarColaOffline(queue);
+                        huboExito = true;
+                    } else {
+                        console.log(`El servidor retornó error para la acción ${item.tipo}. Abortando.`);
+                        break; // Detener en el primer fallo para preservar orden FIFO
+                    }
+                } catch (err) {
+                    console.log(`Error de red al intentar enviar ${item.tipo}. Abortando.`, err);
+                    break; // Detener en el primer fallo para preservar orden FIFO
+                }
+            }
+            
+            estaSincronizando = false;
+            if (syncBanner) syncBanner.style.display = 'none';
+            
+            if (huboExito) {
+                window.location.reload();
+            } else {
+                actualizarBannerOffline();
+            }
+        }
+
+        function inicializarFormulariosDesdeCola() {
+            const queue = obtenerColaOffline();
+            if (queue.length === 0) return;
+            
+            actualizarBannerOffline();
+            
+            queue.forEach(item => {
+                // Encontrar el formulario correspondiente
+                const form = document.querySelector(`form[onsubmit*="${item.endpoint}"]`) || 
+                             document.querySelector(`form[onsubmit*="${item.visitaId}"]`);
+                if (form) {
+                    // Rellenar campos simples
+                    for (const key in item.data) {
+                        if (key.endsWith('[]')) continue; // Saltar materiales
+                        
+                        const el = form.querySelector(`[name="${key}"]`);
+                        if (el) {
+                            el.value = item.data[key];
+                        }
+                    }
+                    
+                    // Recrear materiales dinámicos
+                    if (item.data['materiales_seleccionados[]'] && item.data['cantidades_materiales[]']) {
+                        const matIds = item.data['materiales_seleccionados[]'];
+                        const cants = item.data['cantidades_materiales[]'];
+                        const contenedor = document.getElementById(`contenedor-materiales-dinamicos-${item.visitaId}`);
+                        
+                        if (contenedor) {
+                            contenedor.innerHTML = '';
+                            const msg = document.getElementById(`msg-sin-materiales-${item.visitaId}`);
+                            if (msg) msg.style.display = 'none';
+                            
+                            for (let i = 0; i < matIds.length; i++) {
+                                const matId = matIds[i];
+                                const cant = cants[i];
+                                if (matId && cant) {
+                                    const filaId = 'material_row_' + Date.now() + '_' + i;
+                                    let opcionesHTML = `<option value="" disabled>-- Seleccione material --</option>`;
+                                    catalogoMateriales.forEach(mat => {
+                                        const selected = mat.id == matId ? 'selected' : '';
+                                        opcionesHTML += `<option value="${mat.id}" ${selected}>${mat.nombre} (${mat.unidad})</option>`;
+                                    });
+                                    
+                                    const nuevaFila = document.createElement('div');
+                                    nuevaFila.id = filaId;
+                                    nuevaFila.className = 'd-flex align-items-center mb-2 p-2 bg-white rounded border shadow-sm';
+                                    nuevaFila.style.gap = '8px';
+                                    nuevaFila.innerHTML = `
+                                        <div style="flex: 2; min-width: 0;">
+                                            <select name="materiales_seleccionados[]" class="form-control" required style="font-size: 0.85rem; height: 42px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%;" disabled>
+                                                ${opcionesHTML}
+                                            </select>
+                                        </div>
+                                        <div style="width: 70px; flex-shrink: 0;">
+                                            <input type="number" name="cantidades_materiales[]" class="form-control text-center" value="${cant}" min="1" required style="font-size: 0.9rem; height: 42px; border-radius: 8px; border: 1px solid #cbd5e1; padding: 5px;" disabled>
+                                        </div>
+                                        <div style="flex-shrink: 0;">
+                                            <button type="button" class="btn btn-outline-danger d-flex align-items-center justify-content-center" style="height: 42px; width: 42px; border-radius: 8px; padding: 0; font-size: 0.9rem; border: 1px solid #ef4444; background-color: white; color: #ef4444;" disabled>
+                                                ❌
+                                            </button>
+                                        </div>
+                                    `;
+                                    contenedor.appendChild(nuevaFila);
+                                }
+                            }
+                        }
+                    }
+                    
+                    const submitBtn = form.querySelector('button[type="submit"]');
+                    if (submitBtn) {
+                        mostrarAccionEncoladaUI(form, submitBtn, item.tipo);
+                    }
+                }
+            });
+
+            // Sincronizar estado del botón de descanso si está encolado
+            const queuedDescanso = queue.find(item => item.endpoint === '/api/tecnico/descanso');
+            if (queuedDescanso) {
+                const btn = document.getElementById('btn-toggle-descanso');
+                const txt = document.getElementById('txt-estado-jornada');
+                if (btn && txt) {
+                    const accion = queuedDescanso.data.accion;
+                    btn.disabled = true;
+                    btn.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+                    btn.style.borderColor = '#d97706';
+                    btn.style.color = '#fff';
+                    btn.innerHTML = accion === 'terminar' ? '<i class="fa-solid fa-wifi-slash"></i> Pendiente Terminar (Offline)' : '<i class="fa-solid fa-wifi-slash"></i> Pendiente Iniciar (Offline)';
+                }
+            }
+
+            // Sincronizar select de área de trabajo si está encolado
+            const queuedArea = queue.find(item => item.endpoint === '/api/tecnico/area_trabajo');
+            if (queuedArea) {
+                const select = document.getElementById('select-area-trabajo');
+                if (select) {
+                    select.value = queuedArea.data.area_trabajo;
+                    select.disabled = true;
+                    select.style.borderColor = '#d97706';
+                    select.style.color = '#f59e0b';
+                }
+            }
+        }
+
+        window.addEventListener('online', () => {
+            console.log('Restableciendo conexión...');
+            procesarColaSincronizacion();
+        });
+
+        window.addEventListener('offline', () => {
+            console.log('Se perdió la conexión...');
+            actualizarBannerOffline();
+        });
+
+        // Loop periódico cada 15 segundos
+        setInterval(procesarColaSincronizacion, 15000);
+
+        window.addEventListener('DOMContentLoaded', () => {
+            inicializarFormulariosDesdeCola();
+            procesarColaSincronizacion();
+        });
     </script>
 </body>
 

@@ -298,6 +298,7 @@ def api_tecnicos_ubicaciones():
             WHERE activo = 1 
               AND latitud_actual IS NOT NULL 
               AND longitud_actual IS NOT NULL
+              AND ultima_conexion >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)
         """
         cursor.execute(query)
         ubicaciones = cursor.fetchall()
@@ -2894,6 +2895,81 @@ def api_tecnico_devolucion():
         return jsonify({"status": "ok", "message": "Devolución registrada con éxito"})
     except Exception as e:
         conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@admin_bp.route('/api/admin/tecnicos/mas_cercano', methods=['GET'])
+def obtener_tecnico_mas_cercano():
+    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+        
+    lat_str = request.args.get('lat')
+    lon_str = request.args.get('lon')
+    
+    if not lat_str or not lon_str:
+        return jsonify({"status": "error", "message": "Parámetros lat y lon son requeridos"}), 400
+        
+    try:
+        lat_visita = float(lat_str)
+        lon_visita = float(lon_str)
+    except ValueError:
+        return jsonify({"status": "error", "message": "Coordenadas no válidas"}), 400
+        
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+        
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        # Consultamos técnicos activos, cuyo área de trabajo sea SOPORTE,
+        # y que tengan coordenadas GPS reales (no nulas) registradas.
+        cursor.execute("""
+            SELECT id_tecnico, nombre, latitud_actual, longitud_actual, estado_actividad, placa_vehiculo
+            FROM tecnicos
+            WHERE activo = 1 
+              AND area_trabajo = 'SOPORTE'
+              AND latitud_actual IS NOT NULL 
+              AND longitud_actual IS NOT NULL
+              AND ultima_conexion >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)
+        """)
+        tecnicos = cursor.fetchall()
+        
+        import math
+        recomendados = []
+        for tec in tecnicos:
+            lat_tec = float(tec['latitud_actual'])
+            lon_tec = float(tec['longitud_actual'])
+            
+            # Haversine distance
+            R = 6371.0
+            phi1 = math.radians(lat_visita)
+            phi2 = math.radians(lat_tec)
+            delta_phi = math.radians(lat_tec - lat_visita)
+            delta_lambda = math.radians(lon_tec - lon_visita)
+            
+            a = math.sin(delta_phi / 2.0)**2 + \
+                math.cos(phi1) * math.cos(phi2) * \
+                math.sin(delta_lambda / 2.0)**2
+            c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+            distancia = R * c
+            
+            recomendados.append({
+                "id_tecnico": tec['id_tecnico'],
+                "nombre": tec['nombre'],
+                "estado": tec['estado_actividad'] or 'Disponible',
+                "placa": tec['placa_vehiculo'] or 'S/P',
+                "distancia_km": round(distancia, 2)
+            })
+            
+        # Ordenar de menor a mayor distancia
+        recomendados.sort(key=lambda x: x['distancia_km'])
+        
+        # Devolver el top 3
+        return jsonify({"status": "ok", "recomendados": recomendados[:3]})
+    except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()
