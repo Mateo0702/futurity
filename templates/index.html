@@ -110,6 +110,18 @@
     </nav>
 
     <main class="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages" style="margin-bottom: 20px;">
+                    {% for category, message in messages %}
+                        <div class="error-msg" style="margin-top: 0; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left-color: {% if category == 'warning' %}#f59e0b{% elif category == 'danger' %}#ef4444{% else %}#10b981{% endif %}; background-color: {% if category == 'warning' %}#fffbeb{% elif category == 'danger' %}#fef2f2{% else %}#ecfdf5{% endif %}; color: {% if category == 'warning' %}#b45309{% elif category == 'danger' %}#b91c1c{% else %}#047857{% endif %}; border-left-style: solid; border-left-width: 4px; padding: 15px; border-radius: 8px;">
+                            <span style="font-weight: 500;"><i class="fa-solid {% if category == 'warning' %}fa-triangle-exclamation{% elif category == 'danger' %}fa-circle-xmark{% else %}fa-circle-check{% endif %}" style="margin-right: 8px;"></i> {{ message }}</span>
+                            <button onclick="this.parentElement.remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: inherit; line-height: 1; padding: 0 5px;">&times;</button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
         {% include 'tabs/visitas.html' %}
         {% include 'tabs/registro.html' %}
         {% include 'tabs/atenciones.html' %}

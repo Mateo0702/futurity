@@ -1504,3 +1504,40 @@ body.dark-mode .body-tecnico [id^="material_row_"] button {
   border-color: #ef4444 !important;
   color: #fca5a5 !important;
 }
+
+/* ==========================================
+   SOBREESCRITURA DE FILAS EN MODO OSCURO (CONTRASTE ALTO)
+   ========================================== */
+body.dark-mode .fila-pendiente {
+  background-color: #1e293b !important;
+  border-left: 4px solid #475569 !important;
+}
+
+body.dark-mode .fila-verde {
+  background-color: #064e3b !important; /* Verde oscuro (Tailwind green-900) */
+}
+
+body.dark-mode .fila-roja {
+  background-color: #7f1d1d !important; /* Rojo oscuro (Tailwind red-900) */
+}
+
+body.dark-mode .fila-celeste {
+  background-color: #0c4a6e !important; /* Azul oscuro (Tailwind sky-900) */
+}
+
+body.dark-mode .fila-naranja {
+  background-color: #7c2d12 !important; /* Naranja oscuro (Tailwind orange-900) */
+}
+
+body.dark-mode .fila-morada {
+  background-color: #581c87 !important; /* Morado oscuro (Tailwind purple-900) */
+}
+
+body.dark-mode .fila-amarilla {
+  background-color: #713f12 !important; /* Amarillo/Dorado oscuro (Tailwind yellow-900) */
+}
+
+body.dark-mode .fila-blanca {
+  background-color: #1e293b !important; /* Gris oscuro para saturación */
+  border-color: #334155 !important;
+}

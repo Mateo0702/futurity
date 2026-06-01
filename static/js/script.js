@@ -95,15 +95,42 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- 4. AUTO-REFRESH DE LA PESTAÑA VISITAS ---
-    // Recarga la página cada 30 segundos SOLO si el usuario está viendo la tabla de visitas
-    // (así protegemos que no se le borre lo que esté escribiendo en Registrar Visita)
+    // --- 4. AUTO-REFRESH INTELIGENTE DE LA PESTAÑA VISITAS (NO DESTRUCTIVO) ---
+    let ultimaActividad = Date.now();
+    const registrarActividad = () => { ultimaActividad = Date.now(); };
+    
+    // Registrar actividad del usuario para no interrumpirlo
+    document.addEventListener('mousemove', registrarActividad);
+    document.addEventListener('keydown', registrarActividad);
+    document.addEventListener('click', registrarActividad);
+    document.addEventListener('touchstart', registrarActividad);
+
     setInterval(() => {
         const tabVisitas = document.getElementById('tab-visitas');
         if (tabVisitas && tabVisitas.classList.contains('active')) {
+            // 1. Evitar si hubo actividad del usuario en los últimos 15 segundos
+            if (Date.now() - ultimaActividad < 15000) return;
+            
+            // 2. Evitar si hay algún input, textarea o select con el foco activo (escribiendo/seleccionando)
+            const elementoActivo = document.activeElement;
+            if (elementoActivo && ['INPUT', 'TEXTAREA', 'SELECT'].includes(elementoActivo.tagName)) return;
+            
+            // 3. Evitar si el buscador de clientes tiene algún texto escrito
+            const buscadorCliente = document.querySelector('input[name="buscar_cliente"]');
+            if (buscadorCliente && buscadorCliente.value.trim() !== "") return;
+            
+            // 4. Evitar si el usuario tiene abierta la sección de detalles de alguna visita
+            const detallesAbiertos = document.querySelectorAll('tr[id^="detalles-"]:not([style*="display: none"])');
+            if (detallesAbiertos.length > 0) return;
+            
+            // 5. Evitar si el modal de historial de visitas está abierto en pantalla
+            const modalHistorial = document.getElementById('modalHistorial');
+            if (modalHistorial && modalHistorial.style.display === 'flex') return;
+
+            // Si es seguro, recarga para actualizar cronómetros y estados de visitas
             location.reload();
         }
-    }, 30000); // 30 segundos
+    }, 30000); // Revisar cada 30 segundos
 
 });
 

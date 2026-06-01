@@ -124,7 +124,24 @@ def dashboard():
         return redirect(url_for('login'))
 
     # 1. Filtros de búsqueda (Fecha y Texto)
-    fecha_busqueda = request.args.get('fecha_filtro', date.today().isoformat())
+    fecha_filtro_raw = request.args.get('fecha_filtro')
+    if fecha_filtro_raw is None:
+        # Carga inicial sin filtro especificado
+        fecha_busqueda = date.today().isoformat()
+    elif not fecha_filtro_raw.strip():
+        # Formulario enviado pero la fecha está vacía (p. ej., por fecha inválida en el navegador o campo limpio)
+        flash('Por favor seleccione o ingrese una fecha válida. Mostrando las visitas de hoy.', 'warning')
+        fecha_busqueda = date.today().isoformat()
+    else:
+        try:
+            fecha_filtro_raw = fecha_filtro_raw.strip()
+            # Validamos que la fecha tenga el formato y sea una fecha real en el calendario
+            from datetime import datetime
+            datetime.strptime(fecha_filtro_raw, '%Y-%m-%d')
+            fecha_busqueda = fecha_filtro_raw
+        except ValueError:
+            flash(f'La fecha "{fecha_filtro_raw}" no es válida. Se muestran las visitas de hoy.', 'warning')
+            fecha_busqueda = date.today().isoformat()
     texto_busqueda = request.args.get('buscar_cliente', '').strip()
 
     conexion = get_db_connection()

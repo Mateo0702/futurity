@@ -1,4 +1,4 @@
-from flask import Blueprint, request, redirect, url_for, session, jsonify
+from flask import Blueprint, request, redirect, url_for, session, jsonify, flash
 from db_config import get_db_connection
 from utils import normalizar_horario_texto 
 from datetime import date
@@ -14,7 +14,15 @@ def registrar_visita():
     try:
         creado_por = session['user_name']
 
-        fecha_programada = request.form.get('fecha_programada')
+        fecha_programada = request.form.get('fecha_programada', '').strip()
+        
+        # VALIDACIÓN: Formato de fecha y existencia real en el calendario
+        try:
+            from datetime import datetime
+            datetime.strptime(fecha_programada, '%Y-%m-%d')
+        except (ValueError, TypeError):
+            flash(f'La fecha programada "{fecha_programada}" no es válida.', 'danger')
+            return redirect(url_for('dashboard'))
         
         # VALIDACIÓN: No permitir crear visitas en el pasado
         if fecha_programada < str(date.today()):
@@ -187,7 +195,16 @@ def buscar_cliente(contrato):
 
 @visitas_bp.route('/api/visitas/reagendar/<int:id_visita>', methods=['POST'])
 def reagendar_visita(id_visita):
-    nueva_fecha = request.form.get('nueva_fecha')
+    nueva_fecha = request.form.get('nueva_fecha', '').strip()
+    
+    # VALIDACIÓN: Formato de fecha y existencia real en el calendario
+    try:
+        from datetime import datetime
+        datetime.strptime(nueva_fecha, '%Y-%m-%d')
+    except (ValueError, TypeError):
+        flash(f'La fecha de reagendamiento "{nueva_fecha}" no es válida.', 'danger')
+        return redirect(url_for('dashboard'))
+
     nueva_prioridad = request.form.get('nueva_prioridad') # Por si ahora urge más
     observacion_adicional = request.form.get('observacion_reagendado')
     
@@ -214,7 +231,7 @@ def reagendar_visita(id_visita):
         cursor.close()
         conexion.close()
         
-    return redirect(url_for('visitas.dashboard'))
+    return redirect(url_for('dashboard'))
 
 @visitas_bp.route('/api/visitas/<int:id_visita>/cancelar', methods=['POST'])
 def cancelar_visita(id_visita):
