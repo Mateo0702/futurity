@@ -8,6 +8,7 @@ from routers.tecnico_router import tecnico_bp
 from routers.cliente_router import cliente_bp
 from routers.admin_router import admin_bp
 from routers.atenciones_router import atenciones_bp
+from routers.usuarios_router import usuarios_bp
 # Tus módulos internos
 from optimizador import interpretar_preferencia_horaria
 from db_config import get_db_connection
@@ -27,6 +28,7 @@ app.register_blueprint(tecnico_bp)
 app.register_blueprint(cliente_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(atenciones_bp)
+app.register_blueprint(usuarios_bp)
 
 # --- FILTROS ---
 @app.template_filter('minutos_a_hora')
@@ -105,7 +107,34 @@ def login():
             session['user_role'] = usuario['rol']
             session['session_token'] = nuevo_token # Guardamos el token en la cookie del navegador
             
-            return redirect(url_for('dashboard'))
+            # Redireccionar según el rol del usuario
+            rol = usuario.get('rol', 'ASESOR')
+            if rol == 'TECNICO':
+                # Actualizar estado global del técnico en la base de datos
+                conexion_tec = get_db_connection()
+                if conexion_tec:
+                    cursor_tec = conexion_tec.cursor()
+                    try:
+                        cursor_tec.execute("""
+                            UPDATE tecnicos 
+                            SET estado_actividad = 'Sesión Iniciada', 
+                                latitud_actual = NULL, 
+                                longitud_actual = NULL, 
+                                ultima_conexion = NOW()
+                            WHERE nombre = %s
+                        """, (usuario['nombre'],))
+                        conexion_tec.commit()
+                    except Exception as e:
+                        print(f"Error updating status during login: {e}")
+                    finally:
+                        cursor_tec.close()
+                        conexion_tec.close()
+                nombre_url = usuario['nombre'].replace(' ', '_')
+                return redirect(url_for('tecnico.panel_tecnico', nombre_tecnico=nombre_url))
+            elif rol == 'BODEGA':
+                return redirect(url_for('dashboard', tab='inventario'))
+            else:
+                return redirect(url_for('dashboard'))
         else:
             flash('Correo corporativo o contraseña incorrectos.', 'danger')
             
@@ -113,6 +142,28 @@ def login():
 
 @app.route('/logout')
 def logout():
+    tecnico_nombre = session.get('user_name')
+    rol = session.get('user_role')
+    if rol == 'TECNICO' and tecnico_nombre:
+        conexion = get_db_connection()
+        if conexion:
+            cursor = conexion.cursor()
+            try:
+                cursor.execute("""
+                    UPDATE tecnicos 
+                    SET estado_actividad = 'Desconectado', 
+                        latitud_actual = NULL, 
+                        longitud_actual = NULL, 
+                        ultima_conexion = NOW()
+                    WHERE nombre = %s
+                """, (tecnico_nombre,))
+                conexion.commit()
+            except Exception as e:
+                print(f"Error updating status during logout: {e}")
+            finally:
+                cursor.close()
+                conexion.close()
+
     session.clear() # Borramos la sesión
     return redirect(url_for('login'))
 
@@ -122,6 +173,21 @@ def logout():
 def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
+
+    rol = session.get('user_role')
+    if rol == 'TECNICO':
+        nombre_url = session.get('user_name', '').replace(' ', '_')
+        return redirect(url_for('tecnico.panel_tecnico', nombre_tecnico=nombre_url))
+
+    # Determinar la pestaña activa por defecto según el rol si no se especifica en la URL
+    tab_param = request.args.get('tab', '')
+    if not tab_param:
+        if rol == 'BODEGA':
+            active_tab = 'inventario'
+        else:
+            active_tab = 'visitas'
+    else:
+        active_tab = tab_param
 
     # 1. Filtros de búsqueda (Fecha y Texto)
     fecha_filtro_raw = request.args.get('fecha_filtro')
@@ -281,6 +347,7 @@ def dashboard():
                            visitas=visitas, 
                            stats=stats, 
                            fecha_actual=fecha_busqueda,
+                           active_tab=active_tab,
                            sectores=obtener_sectores_activos(), 
                            tecnicos=obtener_tecnicos_activos(),
                            problemas=obtener_problemas_activos(),
@@ -289,7 +356,7 @@ def dashboard():
                            labels_barras=labels_barras, val_barras=valores_barras,
                            labels_prob=labels_prob, val_prob=valores_prob,
                            labels_sec=labels_sec, val_sec=valores_sec,
-                        labels_tiempos=labels_tiempos, 
+                           labels_tiempos=labels_tiempos, 
                            valores_tiempos=valores_tiempos)
 
 

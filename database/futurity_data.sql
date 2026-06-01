@@ -231,7 +231,7 @@ CREATE TABLE visitas_materiales (
 
 ALTER TABLE tecnicos 
 ADD COLUMN foto_perfil VARCHAR(255) DEFAULT 'default_avatar.png',
-ADD COLUMN foto_vehiculo VARCHAR(255) DEFAULT 'default_van.png',
+ADD COLUMN foto_vehiculo VARCHAR(255) DEFAULT 'furgoneta_milton.jpeg',
 ADD COLUMN placa_vehiculo VARCHAR(255) DEFAULT 'S/P';
 
 UPDATE tecnicos 

@@ -19,6 +19,13 @@ from urllib.parse import urlencode
 
 @admin_bp.route('/admin/control_calidad')
 def dashboard_calidad():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    if session.get('user_role') not in ['ADMIN']:
+        from flask import flash
+        flash('No tienes permiso para acceder al control de calidad.', 'danger')
+        return redirect(url_for('dashboard'))
+
     # Redireccionar al dashboard de la app con el parámetro tab=control-calidad y pasar los filtros
     args = request.args.to_dict()
     args['tab'] = 'control-calidad'
@@ -30,6 +37,8 @@ def dashboard_calidad():
 def api_dashboard_calidad():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para ver datos de control de calidad."}), 403
         
     conexion = get_db_connection()
     if not conexion:
@@ -120,6 +129,11 @@ def api_dashboard_calidad():
 
 @admin_bp.route('/api/admin/auditoria_cliente', methods=['GET'])
 def auditoria_cliente():
+    if 'user_id' not in session:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para realizar auditorías de clientes."}), 403
+
     contrato = request.args.get('contrato', '').strip()
     desde = request.args.get('desde', '')
     hasta = request.args.get('hasta', '')
@@ -256,8 +270,57 @@ def auditoria_cliente():
             
     return jsonify(resultados)
 
+@admin_bp.route('/api/admin/tecnicos/ubicaciones', methods=['GET'])
+def api_tecnicos_ubicaciones():
+    if 'user_id' not in session:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para ver la ubicación de los técnicos."}), 403
+        
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        # Consulta para traer la ubicación actual global de cada técnico activo
+        query = """
+            SELECT id_tecnico,
+                   nombre AS tecnico, 
+                   latitud_actual AS lat, 
+                   longitud_actual AS lon, 
+                   ultima_conexion AS ultima_actualizacion, 
+                   estado_actividad AS estado, 
+                   foto_perfil,
+                   foto_vehiculo,
+                   placa_vehiculo
+            FROM tecnicos
+            WHERE activo = 1 
+              AND latitud_actual IS NOT NULL 
+              AND longitud_actual IS NOT NULL
+        """
+        cursor.execute(query)
+        ubicaciones = cursor.fetchall()
+        
+        # Formatear fecha/hora a ISO para serialización JSON
+        for u in ubicaciones:
+            if u['ultima_actualizacion']:
+                u['ultima_actualizacion'] = u['ultima_actualizacion'].isoformat()
+            
+        return jsonify({"status": "ok", "ubicaciones": ubicaciones})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
 @admin_bp.route('/api/admin/metricas_globales', methods=['GET'])
 def metricas_globales():
+    if 'user_id' not in session:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas globales."}), 403
+
     conexion = get_db_connection()
     if not conexion:
         return jsonify({"status": "error", "message": "No se pudo conectar a la base de datos"}), 500
@@ -422,6 +485,8 @@ class NumberedCanvas(canvas.Canvas):
 def reporte_pdf():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para descargar reportes."}), 403
 
     contrato = request.args.get('contrato', '').strip()
     desde = request.args.get('desde', '')
@@ -2620,19 +2685,13 @@ def download_excel_cuadro_mando():
         )
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-    finally:
-        cursor.close()
-        conexion.close()
-
-
-# ==========================================
-# ENDPOINTS DE CONTROL DE INVENTARIO Y BODEGA
-# ==========================================
 
 @admin_bp.route('/api/admin/inventario', methods=['GET'])
 def api_obtener_inventario():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN', 'BODEGA']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para ver inventario."}), 403
         
     conexion = get_db_connection()
     if not conexion:
@@ -2645,50 +2704,51 @@ def api_obtener_inventario():
         cursor.execute("SELECT id_material, nombre_material, unidad_medida, stock_bodega FROM materiales ORDER BY nombre_material ASC")
         materiales = cursor.fetchall()
         
-        # 2. Obtener lista de técnicos activos
-        cursor.execute("SELECT nombre FROM tecnicos WHERE activo = 1 ORDER BY nombre ASC")
-        tecnicos = [t['nombre'] for t in cursor.fetchall()]
+        # 2. Obtener lista de placas de vehículos activos
+        cursor.execute("SELECT DISTINCT placa_vehiculo FROM tecnicos WHERE activo = 1 ORDER BY placa_vehiculo ASC")
+        placas = [p['placa_vehiculo'] for p in cursor.fetchall() if p['placa_vehiculo']]
         
-        # 3. Obtener stock disponible en custodia de los técnicos
-        cursor.execute("SELECT tecnico_nombre, id_material, cantidad_disponible FROM inventario_tecnicos")
+        # 3. Obtener stock disponible en custodia por placa
+        cursor.execute("SELECT placa_vehiculo, id_material, cantidad_disponible FROM inventario_tecnicos")
         custodia_raw = cursor.fetchall()
         
-        # 4. Obtener consumo histórico (usado) por técnico
+        # 4. Obtener consumo histórico (usado) por placa
         cursor.execute("""
-            SELECT vt.tecnico_principal, vm.id_material, SUM(vm.cantidad_usada) as total_usado
+            SELECT t.placa_vehiculo, vm.id_material, SUM(vm.cantidad_usada) as total_usado
             FROM visitas_materiales vm
             JOIN visitas_tecnicas vt ON vm.id_visita = vt.id_visita
-            WHERE vt.estado = 'FINALIZADA' AND vt.tecnico_principal IS NOT NULL
-            GROUP BY vt.tecnico_principal, vm.id_material
+            JOIN tecnicos t ON vt.tecnico_principal = t.nombre
+            WHERE vt.estado = 'FINALIZADA' AND t.placa_vehiculo IS NOT NULL
+            GROUP BY t.placa_vehiculo, vm.id_material
         """)
         consumo_raw = cursor.fetchall()
         
-        # Estructurar la respuesta por técnico y material
+        # Estructurar la respuesta por placa y material
         inventario_tecnicos = {}
-        for tec in tecnicos:
-            inventario_tecnicos[tec] = {}
+        for placa in placas:
+            inventario_tecnicos[placa] = {}
             for mat in materiales:
-                inventario_tecnicos[tec][str(mat['id_material'])] = {
+                inventario_tecnicos[placa][str(mat['id_material'])] = {
                     "cantidad_disponible": 0,
                     "total_usado": 0
                 }
                 
         for row in custodia_raw:
-            tec = row['tecnico_nombre']
+            placa = row['placa_vehiculo']
             id_mat = str(row['id_material'])
-            if tec in inventario_tecnicos and id_mat in inventario_tecnicos[tec]:
-                inventario_tecnicos[tec][id_mat]['cantidad_disponible'] = row['cantidad_disponible']
+            if placa in inventario_tecnicos and id_mat in inventario_tecnicos[placa]:
+                inventario_tecnicos[placa][id_mat]['cantidad_disponible'] = row['cantidad_disponible']
                 
         for row in consumo_raw:
-            tec = row['tecnico_principal']
+            placa = row['placa_vehiculo']
             id_mat = str(row['id_material'])
-            if tec in inventario_tecnicos and id_mat in inventario_tecnicos[tec]:
-                inventario_tecnicos[tec][id_mat]['total_usado'] = int(row['total_usado'] or 0)
+            if placa in inventario_tecnicos and id_mat in inventario_tecnicos[placa]:
+                inventario_tecnicos[placa][id_mat]['total_usado'] = int(row['total_usado'] or 0)
                 
         return jsonify({
             "status": "ok",
             "materiales": materiales,
-            "tecnicos": tecnicos,
+            "tecnicos": placas,  # Retorna placas bajo la clave 'tecnicos' para compatibilidad con el JS
             "inventario_tecnicos": inventario_tecnicos
         })
         
@@ -2703,6 +2763,8 @@ def api_obtener_inventario():
 def api_bodega_ingreso():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN', 'BODEGA']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para ingresar insumos a bodega."}), 403
         
     datos = request.get_json() or {}
     id_material = datos.get('id_material')
@@ -2735,13 +2797,15 @@ def api_bodega_ingreso():
 def api_tecnico_entrega():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN', 'BODEGA']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para entregar insumos a técnicos."}), 403
         
     datos = request.get_json() or {}
-    tecnico_nombre = datos.get('tecnico_nombre')
+    placa_vehiculo = datos.get('tecnico_nombre') or datos.get('placa_vehiculo')
     id_material = datos.get('id_material')
     cantidad = datos.get('cantidad')
     
-    if not tecnico_nombre or not id_material or not cantidad or int(cantidad) <= 0:
+    if not placa_vehiculo or not id_material or not cantidad or int(cantidad) <= 0:
         return jsonify({"status": "error", "message": "Parámetros inválidos"}), 400
         
     conexion = get_db_connection()
@@ -2764,15 +2828,15 @@ def api_tecnico_entrega():
             WHERE id_material = %s
         """, (int(cantidad), int(id_material)))
         
-        # 3. Sumar al técnico
+        # 3. Sumar a la placa
         cursor.execute("""
-            INSERT INTO inventario_tecnicos (tecnico_nombre, id_material, cantidad_disponible)
+            INSERT INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible)
             VALUES (%s, %s, %s)
             ON DUPLICATE KEY UPDATE cantidad_disponible = cantidad_disponible + VALUES(cantidad_disponible)
-        """, (tecnico_nombre, int(id_material), int(cantidad)))
+        """, (placa_vehiculo, int(id_material), int(cantidad)))
         
         conexion.commit()
-        return jsonify({"status": "ok", "message": "Material entregado al técnico con éxito"})
+        return jsonify({"status": "ok", "message": "Material entregado a la placa con éxito"})
     except Exception as e:
         conexion.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -2785,13 +2849,15 @@ def api_tecnico_entrega():
 def api_tecnico_devolucion():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN', 'BODEGA']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para registrar devoluciones."}), 403
         
     datos = request.get_json() or {}
-    tecnico_nombre = datos.get('tecnico_nombre')
+    placa_vehiculo = datos.get('tecnico_nombre') or datos.get('placa_vehiculo')
     id_material = datos.get('id_material')
     cantidad = datos.get('cantidad')
     
-    if not tecnico_nombre or not id_material or not cantidad or int(cantidad) <= 0:
+    if not placa_vehiculo or not id_material or not cantidad or int(cantidad) <= 0:
         return jsonify({"status": "error", "message": "Parámetros inválidos"}), 400
         
     conexion = get_db_connection()
@@ -2801,21 +2867,21 @@ def api_tecnico_devolucion():
     try:
         cursor = conexion.cursor()
         
-        # 1. Validar que el técnico tenga suficiente cantidad para devolver
+        # 1. Validar que la placa tenga suficiente cantidad para devolver
         cursor.execute("""
             SELECT cantidad_disponible FROM inventario_tecnicos 
-            WHERE tecnico_nombre = %s AND id_material = %s
-        """, (tecnico_nombre, int(id_material)))
+            WHERE placa_vehiculo = %s AND id_material = %s
+        """, (placa_vehiculo, int(id_material)))
         row = cursor.fetchone()
         if not row or row[0] < int(cantidad):
-            return jsonify({"status": "error", "message": "El técnico no dispone de esa cantidad en custodia"}), 400
+            return jsonify({"status": "error", "message": "La placa no dispone de esa cantidad en custodia"}), 400
             
-        # 2. Descontar al técnico
+        # 2. Descontar a la placa
         cursor.execute("""
             UPDATE inventario_tecnicos 
             SET cantidad_disponible = cantidad_disponible - %s 
-            WHERE tecnico_nombre = %s AND id_material = %s
-        """, (int(cantidad), tecnico_nombre, int(id_material)))
+            WHERE placa_vehiculo = %s AND id_material = %s
+        """, (int(cantidad), placa_vehiculo, int(id_material)))
         
         # 3. Sumar a bodega
         cursor.execute("""

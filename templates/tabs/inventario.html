@@ -1,4 +1,4 @@
-<div id="tab-inventario" class="tab-content">
+<div id="tab-inventario" class="tab-content {% if active_tab == 'inventario' %}active{% endif %}">
     
     <div style="background: white; padding: 30px; border-radius: 20px; margin-bottom: 25px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm);">
         <h1 style="margin: 0; font-size: 1.8rem; color: #0f172a; font-weight: 800; letter-spacing: -0.02em;">Control de Inventario y Bodega</h1>
@@ -32,7 +32,7 @@
                 </div>
                 <div class="metric-kpi-info">
                     <h3 id="inv-kpi-custodia" style="font-size: 1.8rem; font-weight: 800; margin: 0; color: #0f172a;">0</h3>
-                    <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Custodia Técnicos</p>
+                    <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Custodia por Placa</p>
                 </div>
             </div>
             
@@ -79,11 +79,11 @@
             <div class="card" style="padding: 25px; background: white; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
                     <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #6366f1;">
-                        <i class="fa-solid fa-people-carry-box" style="margin-right: 8px;"></i> Asignación y Custodia de Técnicos
+                        <i class="fa-solid fa-people-carry-box" style="margin-right: 8px;"></i> Asignación y Custodia por Placa de Vehículo
                     </h3>
                     <div style="display: flex; gap: 10px;">
                         <button type="button" onclick="abrirModalEntrega()" class="btn" style="padding: 8px 15px; font-size: 0.85rem; background-color: #6366f1; border-color: #6366f1; display: flex; align-items: center; gap: 6px; color: white;">
-                            <i class="fa-solid fa-truck-ramp-box"></i> Entregar Material
+                            <i class="fa-solid fa-truck-ramp-box"></i> Entregar a Placa
                         </button>
                         <button type="button" onclick="abrirModalDevolucion()" class="btn" style="padding: 8px 15px; font-size: 0.85rem; background-color: #ef4444; border-color: #ef4444; display: flex; align-items: center; gap: 6px; color: white;">
                             <i class="fa-solid fa-rotate-left"></i> Devolución
@@ -92,7 +92,7 @@
                 </div>
                 
                 <div style="margin-bottom: 15px;">
-                    <label for="filtro-tecnico-inv" style="font-weight: 700; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Filtrar por Técnico:</label>
+                    <label for="filtro-tecnico-inv" style="font-weight: 700; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Filtrar por Placa:</label>
                     <select id="filtro-tecnico-inv" class="form-control" style="padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%; outline: none;" onchange="renderizarInventarioTecnicos()">
                         <!-- Inyectado por JS -->
                     </select>
@@ -151,13 +151,13 @@
     <div id="modalEntrega" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
         <div style="background-color: #ffffff; color: #0f172a; border-radius: 12px; width: 100%; max-width: 450px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
             <div style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background-color: #f8fafc; border-radius: 12px 12px 0 0;">
-                <h5 style="margin: 0; color: #6366f1; font-size: 1.1rem; font-weight: bold;"><i class="fa-solid fa-truck-ramp-box"></i> Entregar Material a Técnico</h5>
+                <h5 style="margin: 0; color: #6366f1; font-size: 1.1rem; font-weight: bold;"><i class="fa-solid fa-truck-ramp-box"></i> Entregar Material a Placa</h5>
                 <button type="button" onclick="cerrarModalEntrega()" style="background: none; border: none; color: #64748b; font-size: 1.8rem; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
             </div>
             <div style="padding: 20px;">
                 <form id="form-entrega-tecnico" onsubmit="event.preventDefault(); guardarEntregaTecnico();">
                     <div style="margin-bottom: 15px;">
-                        <label style="font-weight: bold; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Seleccione Técnico:</label>
+                        <label style="font-weight: bold; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Seleccione Placa:</label>
                         <select id="entrega_tecnico" class="form-control" style="padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%;" required>
                             <!-- Inyectado por JS -->
                         </select>
@@ -191,7 +191,7 @@
             <div style="padding: 20px;">
                 <form id="form-devolucion-tecnico" onsubmit="event.preventDefault(); guardarDevolucionTecnico();">
                     <div style="margin-bottom: 15px;">
-                        <label style="font-weight: bold; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Seleccione Técnico:</label>
+                        <label style="font-weight: bold; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">Seleccione Placa:</label>
                         <select id="devolucion_tecnico" class="form-control" style="padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%;" required>
                             <!-- Inyectado por JS -->
                         </select>

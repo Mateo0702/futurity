@@ -5,7 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Futurity - Centro de Control</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -25,7 +27,8 @@
             </button>
         </div>
 
-        <div class="nav-item active" data-tab="tab-visitas">
+        {% if session.get('user_role') in ['ADMIN', 'ASESOR'] %}
+        <div class="nav-item {% if active_tab == 'visitas' %}active{% endif %}" data-tab="tab-visitas">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                 <line x1="16" y1="2" x2="16" y2="6"></line>
@@ -35,7 +38,15 @@
             <span>Visitas del Día</span>
         </div>
 
-        <div class="nav-item" data-tab="tab-registro">
+        <div class="nav-item {% if active_tab == 'mapa-tecnicos' %}active{% endif %}" data-tab="tab-mapa-tecnicos">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+            <span>Mapa en Vivo</span>
+        </div>
+
+        <div class="nav-item {% if active_tab == 'registro' %}active{% endif %}" data-tab="tab-registro">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
@@ -43,14 +54,14 @@
             <span>Registrar Visita</span>
         </div>
 
-        <div class="nav-item" data-tab="tab-registro-atencion">
+        <div class="nav-item {% if active_tab == 'registro-atencion' %}active{% endif %}" data-tab="tab-registro-atencion">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
             </svg>
             <span>Registrar Atención</span>
         </div>
 
-        <div class="nav-item" data-tab="tab-metricas">
+        <div class="nav-item {% if active_tab == 'metricas' %}active{% endif %}" data-tab="tab-metricas">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 3v18h18"></path>
                 <path d="M18 17V9"></path>
@@ -59,8 +70,10 @@
             </svg>
             <span>Auditoría Clientes</span>
         </div>
+        {% endif %}
 
-        <div class="nav-item" data-tab="tab-reportes">
+        {% if session.get('user_role') in ['ADMIN'] %}
+        <div class="nav-item {% if active_tab == 'reportes' %}active{% endif %}" data-tab="tab-reportes">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                 <polyline points="14 2 14 8 20 8"></polyline>
@@ -71,14 +84,17 @@
             <span>Reportes Calidad</span>
         </div>
 
-        <div class="nav-item" data-tab="tab-control-calidad">
+        <div class="nav-item {% if active_tab == 'control-calidad' %}active{% endif %}" data-tab="tab-control-calidad">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z">
                 </path>
             </svg>
             <span>Control de Calidad</span>
         </div>
-        <div class="nav-item" data-tab="tab-inventario">
+        {% endif %}
+
+        {% if session.get('user_role') in ['ADMIN', 'BODEGA'] %}
+        <div class="nav-item {% if active_tab == 'inventario' %}active{% endif %}" data-tab="tab-inventario">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
                 <line x1="2" y1="10" x2="22" y2="10"></line>
@@ -87,6 +103,19 @@
             </svg>
             <span>Inventario / Bodega</span>
         </div>
+        {% endif %}
+
+        {% if session.get('user_role') in ['ADMIN'] %}
+        <div class="nav-item {% if active_tab == 'usuarios' %}active{% endif %}" data-tab="tab-usuarios">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            <span>Usuarios y Técnicos</span>
+        </div>
+        {% endif %}
 
         <div class="sidebar-footer">
             <div class="profile-card">
@@ -123,12 +152,16 @@
             {% endif %}
         {% endwith %}
         {% include 'tabs/visitas.html' %}
+        {% include 'tabs/mapa_tecnicos.html' %}
         {% include 'tabs/registro.html' %}
         {% include 'tabs/atenciones.html' %}
         {% include 'tabs/reportes.html' %}
         {% include 'tabs/control_calidad.html' %}
         {% include 'tabs/metricas.html' %}
         {% include 'tabs/inventario.html' %}
+        {% if session.get('user_role') == 'ADMIN' %}
+            {% include 'tabs/usuarios.html' %}
+        {% endif %}
     </main>
 
     <div id="modalHistorial"

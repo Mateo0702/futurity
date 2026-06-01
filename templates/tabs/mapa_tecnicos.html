@@ -1,0 +1,261 @@
+<div id="tab-mapa-tecnicos" class="tab-content {% if active_tab == 'mapa-tecnicos' %}active{% endif %}">
+    <div class="hero-card" style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+            <div>
+                <h1 style="margin: 0; font-size: 2.2rem;"><i class="fa-solid fa-map-location-dot"></i> Monitoreo en Vivo</h1>
+                <p style="margin-top: 5px; opacity: 0.9; max-width: 600px;">
+                    Ubicación y estado de los técnicos reportado en tiempo real desde la aplicación de campo.
+                </p>
+            </div>
+            <button onclick="cargarUbicacionesTecnicos()" class="btn" style="background-color: #0f172a; color: white; display: flex; align-items: center; gap: 8px; box-shadow: none; border-radius: 12px; padding: 10px 20px;">
+                <i class="fa-solid fa-arrows-rotate"></i> Actualizar Ubicaciones
+            </button>
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 320px 1fr; gap: 20px; height: calc(100vh - 240px); min-height: 520px; margin-bottom: 20px;">
+        
+        <!-- Panel Izquierdo: Lista de Técnicos -->
+        <div class="card" style="padding: 20px; margin-bottom: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border-color);">
+            <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 1.1rem; color: var(--text-main); display: flex; justify-content: space-between; align-items: center;">
+                <span>Técnicos Activos</span>
+                <span id="contador-tecnicos" style="background-color: #e2e8f0; color: #475569; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">0</span>
+            </h3>
+            
+            <div id="lista-tecnicos-mapa" style="display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex-grow: 1; padding-right: 5px;">
+                <div style="text-align: center; color: #64748b; margin-top: 50px;">
+                    <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; margin-bottom: 10px;"></i>
+                    <p style="font-size: 0.9rem;">Cargando ubicaciones...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel Derecho: El Mapa -->
+        <div class="card" style="padding: 0; margin-bottom: 0; position: relative; overflow: hidden; border: 1px solid var(--border-color);">
+            <div id="mapa-tecnicos-live" style="width: 100%; height: 100%; z-index: 1;"></div>
+        </div>
+
+    </div>
+</div>
+
+<style>
+    .tooltip-tecnico {
+        background-color: #0f172a !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+        font-size: 0.75rem !important;
+        padding: 3px 8px !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.15) !important;
+    }
+    .tooltip-tecnico::before {
+        border-top-color: #0f172a !important;
+    }
+    .item-tecnico-lista:hover {
+        background-color: #f1f5f9 !important;
+        border-color: #cbd5e1 !important;
+        transform: translateY(-1px);
+    }
+    /* Estilos adaptados al modo oscuro si aplica */
+    body.dark-mode .item-tecnico-lista {
+        background-color: #1e293b !important;
+        border-color: #334155 !important;
+    }
+    body.dark-mode .item-tecnico-lista:hover {
+        background-color: #334155 !important;
+    }
+    body.dark-mode .tooltip-tecnico {
+        background-color: #dc2626 !important;
+    }
+</style>
+
+<script>
+    let mapaTecnicos;
+    let marcadoresTecnicos = {};
+
+    function inicializarMapaTecnicos() {
+        if (mapaTecnicos) return; // Si ya fue inicializado, salir
+
+        // Centrado en Cuenca, Ecuador por defecto
+        mapaTecnicos = L.map('mapa-tecnicos-live').setView([-2.9001, -79.0059], 13);
+
+        // Capa de mapas limpia y moderna
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(mapaTecnicos);
+
+        cargarUbicacionesTecnicos();
+
+        // Bucle de auto-actualización cada 10 segundos
+        setInterval(() => {
+            const tab = document.getElementById('tab-mapa-tecnicos');
+            if (tab && tab.classList.contains('active')) {
+                cargarUbicacionesTecnicos();
+            }
+        }, 10000);
+    }
+
+    function cargarUbicacionesTecnicos() {
+        fetch('/api/admin/tecnicos/ubicaciones')
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    actualizarMapaYLista(data.ubicaciones);
+                } else {
+                    console.error("Error backend: ", data.message);
+                }
+            })
+            .catch(err => console.error("Error al cargar ubicaciones: ", err));
+    }
+
+    function actualizarMapaYLista(ubicaciones) {
+        const listaContainer = document.getElementById('lista-tecnicos-mapa');
+        const contadorEl = document.getElementById('contador-tecnicos');
+
+        listaContainer.innerHTML = '';
+        contadorEl.innerText = ubicaciones.length;
+
+        if (ubicaciones.length === 0) {
+            listaContainer.innerHTML = `
+                <div style="text-align: center; color: #64748b; margin-top: 50px;">
+                    <p style="font-size: 0.9rem; font-style: italic;">No hay técnicos activos reportando GPS en este momento.</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Iconos de Leaflet adaptados a los estados
+        const iconoEnRuta = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/3065/3065532.png', // Camioneta
+            iconSize: [36, 36],
+            iconAnchor: [18, 18]
+        });
+
+        const iconoEnProgreso = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/2942/2942503.png', // Herramienta
+            iconSize: [36, 36],
+            iconAnchor: [18, 18]
+        });
+
+        const iconoOffline = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/3204/3204905.png', // Furgoneta normal/gris
+            iconSize: [36, 36],
+            iconAnchor: [18, 18]
+        });
+
+        const nombresActivos = [];
+
+        ubicaciones.forEach(u => {
+            const key = u.tecnico;
+            nombresActivos.push(key);
+            const latLng = [u.lat, u.lon];
+
+            // Seleccionar icono y badges
+            let icono = iconoOffline;
+            let estadoClaseColor = '#64748b'; // gris por defecto
+            let estadoTexto = u.estado || 'INACTIVO';
+
+            if (u.estado.includes('En camino')) {
+                icono = iconoEnRuta;
+                estadoClaseColor = '#f59e0b'; // naranja/amarillo
+            } else if (u.estado.includes('Trabajando')) {
+                icono = iconoEnProgreso;
+                estadoClaseColor = '#ef4444'; // rojo
+            } else if (u.estado === 'En Descanso') {
+                icono = iconoOffline;
+                estadoClaseColor = '#ea580c'; // naranja oscuro
+            } else if (u.estado === 'Sesión Iniciada' || u.estado === 'Disponible') {
+                icono = iconoOffline;
+                estadoClaseColor = '#10b981'; // verde
+            }
+
+            // Calcular diferencia de tiempo de actualización
+            let tiempoTexto = 'Hace un momento';
+            if (u.ultima_actualizacion) {
+                const fechaAct = new Date(u.ultima_actualizacion);
+                const difSegs = Math.floor((new Date() - fechaAct) / 1000);
+                if (difSegs > 3600) {
+                    tiempoTexto = `Hace ${Math.floor(difSegs / 3600)}h`;
+                } else if (difSegs > 60) {
+                    tiempoTexto = `Hace ${Math.floor(difSegs / 60)}m`;
+                } else if (difSegs > 0) {
+                    tiempoTexto = `Hace ${difSegs}s`;
+                }
+            }
+
+            // Crear o mover marcador en el mapa
+            if (marcadoresTecnicos[key]) {
+                marcadoresTecnicos[key].setLatLng(latLng);
+                marcadoresTecnicos[key].setIcon(icono);
+            } else {
+                const marker = L.marker(latLng, { icon: icono }).addTo(mapaTecnicos);
+                marker.bindTooltip(key, { permanent: true, direction: 'top', className: 'tooltip-tecnico' });
+                marcadoresTecnicos[key] = marker;
+            }
+
+            const perfilUrl = `/static/uploads/${u.foto_perfil || 'default_avatar.png'}`;
+            const vehiculoUrl = `/static/uploads/${u.foto_vehiculo || 'furgoneta_milton.jpeg'}`;
+            const placa = u.placa_vehiculo || 'S/P';
+
+            // Popup para clic en el marcador
+            const popupHtml = `
+                <div style="font-family: 'Inter', sans-serif; padding: 5px; width: 220px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                        <img src="${perfilUrl}" alt="${key}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1.5px solid #cbd5e1;">
+                        <div>
+                            <h4 style="margin: 0; color: #0f172a; font-size: 0.95rem; font-weight: 800;">${key}</h4>
+                            <span style="background-color: ${estadoClaseColor}; color: white; padding: 2px 6px; font-size: 0.65rem; font-weight: bold; border-radius: 4px; text-transform: uppercase; display: inline-block; margin-top: 2px;">
+                                ${estadoTexto}
+                            </span>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.8rem; color: #475569; display: flex; flex-direction: column; gap: 3px;">
+                        <div><i class="fa-solid fa-truck" style="color: #94a3b8; width: 16px;"></i> Placa: <strong>${placa}</strong></div>
+                        <div style="text-align: center; margin: 5px 0;">
+                            <img src="${vehiculoUrl}" alt="Furgoneta" style="width: 100%; height: 80px; border-radius: 6px; object-fit: cover; border: 1px solid #e2e8f0;">
+                        </div>
+                        <div style="font-size: 0.7rem; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 4px; display: flex; justify-content: space-between; align-items: center;">
+                            <span>Actualizado:</span>
+                            <strong>${tiempoTexto}</strong>
+                        </div>
+                    </div>
+                </div>
+            `;
+            marcadoresTecnicos[key].bindPopup(popupHtml);
+
+            // HTML del ítem de la lista izquierda
+            const itemHtml = `
+                <div onclick="enfocarTecnico('${key}', ${u.lat}, ${u.lon})" class="item-tecnico-lista" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 12px;">
+                    <img src="${perfilUrl}" alt="${key}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1.5px solid #e2e8f0; flex-shrink: 0;">
+                    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 5px;">
+                            <strong style="color: var(--text-main); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;">${key}</strong>
+                            <span style="background-color: ${estadoClaseColor}; color: white; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px;" title="${estadoTexto}">${estadoTexto}</span>
+                        </div>
+                        <div style="font-size: 0.75rem; color: #64748b; display: flex; justify-content: space-between; align-items: center;">
+                            <span><i class="fa-regular fa-clock" style="width: 13px; color: #94a3b8;"></i> ${tiempoTexto}</span>
+                            <span style="color: #2563eb; font-weight: 700; font-size: 0.7rem;"><i class="fa-solid fa-location-crosshairs"></i> Centrar</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            listaContainer.innerHTML += itemHtml;
+        });
+
+        // Eliminar del mapa los marcadores de técnicos inactivos
+        for (const key in marcadoresTecnicos) {
+            if (!nombresActivos.includes(key)) {
+                mapaTecnicos.removeLayer(marcadoresTecnicos[key]);
+                delete marcadoresTecnicos[key];
+            }
+        }
+    }
+
+    function enfocarTecnico(key, lat, lon) {
+        if (mapaTecnicos && marcadoresTecnicos[key]) {
+            mapaTecnicos.setView([lat, lon], 16);
+            marcadoresTecnicos[key].openPopup();
+        }
+    }
+</script>

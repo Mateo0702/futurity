@@ -1,0 +1,771 @@
+<div id="tab-usuarios" class="tab-content {% if active_tab == 'usuarios' %}active{% endif %}">
+    <!-- Título Principal -->
+    <div style="background: white; padding: 30px; border-radius: 20px; margin-bottom: 25px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div>
+            <h1 style="margin: 0; font-size: 1.8rem; color: #0f172a; font-weight: 800; letter-spacing: -0.02em;">Gestión del Personal</h1>
+            <p style="margin-top: 5px; color: #64748b; font-size: 0.95rem; font-weight: 500;">Administración central de cuentas de usuarios, accesos y catálogo de técnicos de campo.</p>
+        </div>
+    </div>
+
+    <!-- Navegación Interna (Sub-pestañas) -->
+    <div style="display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; flex-wrap: wrap;">
+        <button id="btn-subtab-usuarios" type="button" onclick="switchUsuariosSubTab('usuarios')" style="background: none; border: none; padding: 10px 20px; font-weight: 800; font-size: 0.95rem; color: var(--primary); border-bottom: 3px solid var(--primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
+            <i class="fa-solid fa-users-gear"></i> Cuentas de Usuarios
+        </button>
+        <button id="btn-subtab-tecnicos" type="button" onclick="switchUsuariosSubTab('tecnicos')" style="background: none; border: none; padding: 10px 20px; font-weight: 700; font-size: 0.95rem; color: #64748b; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
+            <i class="fa-solid fa-helmet-safety"></i> Técnicos de Campo
+        </button>
+    </div>
+
+    <!-- SPINNER DE CARGA -->
+    <div id="usuarios-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; background: white; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm); margin-bottom: 25px;">
+        <div class="spinner"></div>
+        <p style="margin-top: 15px; color: #64748b; font-weight: 600;">Cargando información del personal...</p>
+    </div>
+
+    <!-- =========================================================================
+         SECCIÓN 1: USUARIOS
+         ========================================================================= -->
+    <div id="subtab-content-usuarios" class="usuarios-subtab-content" style="display: block;">
+        <!-- Barra de herramientas (Buscador y Añadir) -->
+        <div class="card" style="margin-bottom: 20px; padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap;">
+            <div style="position: relative; flex-grow: 1; max-width: 400px;">
+                <input type="text" id="buscar-usuario-input" onkeyup="filtrarTablaUsuarios()" placeholder="Buscar usuario por nombre o correo..." style="width: 100%; padding: 10px 15px 10px 40px; border-radius: 12px; border: 1px solid #cbd5e1; outline: none; font-family: inherit; font-size: 0.9rem;">
+                <i class="fa-solid fa-search" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #94a3b8;"></i>
+            </div>
+            <button class="btn" onclick="abrirModalUsuario(false)" style="background-color: var(--primary); color: white; display: flex; align-items: center; gap: 8px; font-weight: 700; border-radius: 12px; padding: 10px 20px; height: 42px;">
+                <i class="fa-solid fa-user-plus"></i> Crear Usuario
+            </button>
+        </div>
+
+        <!-- Tabla de Usuarios -->
+        <div class="card" style="padding: 0; overflow: hidden; border-radius: 20px;">
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 800;">
+                            <th style="padding: 16px 20px;">ID</th>
+                            <th style="padding: 16px 20px;">Nombre</th>
+                            <th style="padding: 16px 20px;">Correo Electrónico</th>
+                            <th style="padding: 16px 20px;">Rol</th>
+                            <th style="padding: 16px 20px; text-align: center;">Estado</th>
+                            <th style="padding: 16px 20px; text-align: center;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usuarios-table-body">
+                        <!-- Carga dinámica -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         SECCIÓN 2: TÉCNICOS
+         ========================================================================= -->
+    <div id="subtab-content-tecnicos" class="usuarios-subtab-content" style="display: none;">
+        <!-- Barra de herramientas (Buscador y Añadir) -->
+        <div class="card" style="margin-bottom: 20px; padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap;">
+            <div style="position: relative; flex-grow: 1; max-width: 400px;">
+                <input type="text" id="buscar-tecnico-input" onkeyup="filtrarTablaTecnicos()" placeholder="Buscar técnico por nombre o placa..." style="width: 100%; padding: 10px 15px 10px 40px; border-radius: 12px; border: 1px solid #cbd5e1; outline: none; font-family: inherit; font-size: 0.9rem;">
+                <i class="fa-solid fa-search" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #94a3b8;"></i>
+            </div>
+            <button class="btn" onclick="abrirModalTecnico(false)" style="background-color: var(--primary); color: white; display: flex; align-items: center; gap: 8px; font-weight: 700; border-radius: 12px; padding: 10px 20px; height: 42px;">
+                <i class="fa-solid fa-plus"></i> Registrar Técnico
+            </button>
+        </div>
+
+        <!-- Tabla de Técnicos -->
+        <div class="card" style="padding: 0; overflow: hidden; border-radius: 20px;">
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 800;">
+                            <th style="padding: 16px 20px; text-align: center; width: 80px;">Foto</th>
+                            <th style="padding: 16px 20px;">Nombre</th>
+                            <th style="padding: 16px 20px;">Placa del Vehículo</th>
+                            <th style="padding: 16px 20px; text-align: center; width: 120px;">Vehículo</th>
+                            <th style="padding: 16px 20px; text-align: center;">Estado</th>
+                            <th style="padding: 16px 20px; text-align: center;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tecnicos-table-body">
+                        <!-- Carga dinámica -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         MODALES DE ACCIÓN
+         ========================================================================= -->
+    
+    <!-- MODAL USUARIOS (CREAR/EDITAR) -->
+    <div id="modalCRUDUsuario" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+        <div style="background-color: #ffffff; color: #0f172a; border-radius: 20px; width: 100%; max-width: 500px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.25); animation: scaleIn 0.3s ease;">
+            <div style="padding: 20px 25px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background-color: #f8fafc; border-radius: 20px 20px 0 0;">
+                <h5 id="usuario-modal-title" style="margin: 0; color: var(--primary); font-size: 1.25rem; font-weight: 800;"><i class="fa-solid fa-user-gear"></i> Crear Nuevo Usuario</h5>
+                <button type="button" onclick="cerrarModalUsuario()" style="background: none; border: none; color: #64748b; font-size: 1.8rem; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
+            </div>
+            <form id="form-crud-usuario" onsubmit="guardarUsuario(event)" style="margin: 0;">
+                <input type="hidden" id="usuario-id-field">
+                <div style="padding: 25px; display: flex; flex-direction: column; gap: 15px; max-height: 60vh; overflow-y: auto;">
+                    <div>
+                        <label for="usuario-nombre" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Nombre Completo</label>
+                        <input type="text" id="usuario-nombre" required class="form-control" placeholder="Ej. Juan Pérez" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit;">
+                    </div>
+                    <div>
+                        <label for="usuario-email" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Correo Electrónico Corporativo</label>
+                        <input type="email" id="usuario-email" required class="form-control" placeholder="Ej. jperez@futurity.com.ec" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit;">
+                    </div>
+                    <div>
+                        <label for="usuario-password" id="usuario-password-label" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Contraseña</label>
+                        <input type="password" id="usuario-password" class="form-control" placeholder="Mínimo 6 caracteres" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit;">
+                        <small id="usuario-password-hint" style="color:#94a3b8; font-size:0.75rem; margin-top:4px; display:none;">Dejar en blanco para mantener la contraseña actual.</small>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <label for="usuario-rol" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Rol de Acceso</label>
+                            <select id="usuario-rol" required class="form-control" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit; background-color:#ffffff;">
+                                <option value="ASESOR">ASESOR</option>
+                                <option value="ADMIN">ADMIN</option>
+                                <option value="BODEGA">BODEGA</option>
+                                <option value="TECNICO">TECNICO</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="usuario-activo" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Estado Inicial</label>
+                            <select id="usuario-activo" required class="form-control" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit; background-color:#ffffff;">
+                                <option value="1">ACTIVO</option>
+                                <option value="0">INACTIVO</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div style="padding: 15px 25px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; border-radius: 0 0 20px 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-secondary" onclick="cerrarModalUsuario()" style="padding: 10px 20px; border-radius: 10px; border: 1px solid #cbd5e1; background:white; font-weight: 600; cursor: pointer;">Cancelar</button>
+                    <button type="submit" class="btn" style="padding: 10px 25px; border-radius: 10px; background-color: var(--primary); color: white; border: none; font-weight: 700; cursor: pointer;">Guardar Usuario</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL TÉCNICOS (CREAR/EDITAR) -->
+    <div id="modalCRUDTecnico" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+        <div style="background-color: #ffffff; color: #0f172a; border-radius: 20px; width: 100%; max-width: 500px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.25); animation: scaleIn 0.3s ease;">
+            <div style="padding: 20px 25px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background-color: #f8fafc; border-radius: 20px 20px 0 0;">
+                <h5 id="tecnico-modal-title" style="margin: 0; color: var(--primary); font-size: 1.25rem; font-weight: 800;"><i class="fa-solid fa-helmet-safety"></i> Registrar Técnico de Campo</h5>
+                <button type="button" onclick="cerrarModalTecnico()" style="background: none; border: none; color: #64748b; font-size: 1.8rem; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
+            </div>
+            <form id="form-crud-tecnico" onsubmit="guardarTecnico(event)" style="margin: 0;" enctype="multipart/form-data">
+                <input type="hidden" id="tecnico-id-field">
+                <div style="padding: 25px; display: flex; flex-direction: column; gap: 15px; max-height: 60vh; overflow-y: auto;">
+                    <div>
+                        <label for="tecnico-nombre" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Nombre del Técnico</label>
+                        <input type="text" id="tecnico-nombre" required class="form-control" placeholder="Ej. BRYAN G" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit;">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <label for="tecnico-placa" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Placa del Vehículo</label>
+                            <input type="text" id="tecnico-placa" required class="form-control" placeholder="Ej. ABE-9377" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit;">
+                        </div>
+                        <div>
+                            <label for="tecnico-activo" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Estado de Asignación</label>
+                            <select id="tecnico-activo" required class="form-control" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit; background-color:#ffffff;">
+                                <option value="1">DISPONIBLE / ACTIVO</option>
+                                <option value="0">INACTIVO</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="tecnico-foto-perfil" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Foto de Perfil del Técnico</label>
+                        <input type="file" id="tecnico-foto-perfil" name="foto_perfil" accept="image/*" class="form-control" style="width:100%; padding:8px; border-radius:10px; border:1px solid #cbd5e1; font-family:inherit;" onchange="previewImage(this, 'preview-perfil')">
+                        <div id="preview-perfil-wrapper" style="margin-top: 10px; display: none; text-align: center;">
+                            <img id="preview-perfil" src="" alt="Previsualización Perfil" style="max-height: 100px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary); width: 100px; height: 100px;">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="tecnico-foto-vehiculo" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Foto de la Furgoneta/Vehículo</label>
+                        <input type="file" id="tecnico-foto-vehiculo" name="foto_vehiculo" accept="image/*" class="form-control" style="width:100%; padding:8px; border-radius:10px; border:1px solid #cbd5e1; font-family:inherit;" onchange="previewImage(this, 'preview-vehiculo')">
+                        <div id="preview-vehiculo-wrapper" style="margin-top: 10px; display: none; text-align: center;">
+                            <img id="preview-vehiculo" src="" alt="Previsualización Vehículo" style="max-height: 100px; border-radius: 12px; object-fit: cover; width: 180px; height: 100px;">
+                        </div>
+                    </div>
+                </div>
+                <div style="padding: 15px 25px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; border-radius: 0 0 20px 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-secondary" onclick="cerrarModalTecnico()" style="padding: 10px 20px; border-radius: 10px; border: 1px solid #cbd5e1; background:white; font-weight: 600; cursor: pointer;">Cancelar</button>
+                    <button type="submit" class="btn" style="padding: 10px 25px; border-radius: 10px; background-color: var(--primary); color: white; border: none; font-weight: 700; cursor: pointer;">Guardar Técnico</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="usuarios-toast" style="display: none; position: fixed; bottom: 30px; right: 30px; z-index: 99999; min-width: 280px; border-left: 4px solid #10b981; background: white; border-radius: 8px; padding: 15px 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); display: flex; justify-content: space-between; align-items: center; gap: 15px; animation: slideInRight 0.3s ease;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <i id="usuarios-toast-icon" class="fa-solid fa-circle-check" style="color: #10b981; font-size: 1.2rem;"></i>
+            <span id="usuarios-toast-msg" style="font-weight: 600; font-size: 0.9rem; color: #1e293b;">Operación realizada</span>
+        </div>
+        <button onclick="this.parentElement.style.display='none'" style="background:none; border:none; color:#94a3b8; font-size:1.1rem; cursor:pointer;">&times;</button>
+    </div>
+</div>
+
+<style>
+    /* CSS Helpers y Animaciones para el Panel de Usuarios */
+    @keyframes scaleIn {
+        from { transform: scale(0.95); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+    @keyframes slideInRight {
+        from { transform: translateX(120%); }
+        to { transform: translateX(0); }
+    }
+    .badge-role {
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        display: inline-block;
+    }
+    .badge-role.admin { background-color: #fee2e2; color: #b91c1c; }
+    .badge-role.asesor { background-color: #e0f2fe; color: #0369a1; }
+    .badge-role.bodega { background-color: #fef3c7; color: #b45309; }
+    .badge-role.tecnico { background-color: #d1fae5; color: #047857; }
+
+    .badge-status {
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 0.75rem;
+        display: inline-block;
+    }
+    .badge-status.activo { background-color: #ecfdf5; color: #059669; }
+    .badge-status.inactivo { background-color: #f3f4f6; color: #6b7280; }
+
+    .usuarios-action-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-size: 1rem;
+        transition: all 0.2s;
+    }
+    .usuarios-action-btn.edit { color: #2563eb; }
+    .usuarios-action-btn.edit:hover { background-color: #eff6ff; }
+    .usuarios-action-btn.toggle-active { color: #eab308; }
+    .usuarios-action-btn.toggle-active:hover { background-color: #fef9c3; }
+    
+    body.dark-mode .usuarios-action-btn.edit:hover { background-color: #1e293b; }
+    body.dark-mode .usuarios-action-btn.toggle-active:hover { background-color: #1e293b; }
+
+    /* Estilos específicos para modo oscuro en la pestaña Usuarios */
+    body.dark-mode #tab-usuarios select,
+    body.dark-mode #tab-usuarios input {
+        background-color: #0f172a !important;
+        color: #f8fafc !important;
+        border-color: #334155 !important;
+    }
+    body.dark-mode #tab-usuarios table thead tr {
+        background-color: #0f172a !important;
+        color: #94a3b8 !important;
+        border-bottom-color: #334155 !important;
+    }
+    body.dark-mode #tab-usuarios table tbody tr {
+        border-bottom: 1px solid #334155;
+    }
+    body.dark-mode #tab-usuarios table tbody tr:hover {
+        background-color: #1e293b;
+    }
+    body.dark-mode #modalCRUDUsuario > div,
+    body.dark-mode #modalCRUDTecnico > div {
+        background-color: #1e293b !important;
+        color: #f8fafc !important;
+    }
+    body.dark-mode #modalCRUDUsuario > div > div:first-child,
+    body.dark-mode #modalCRUDTecnico > div > div:first-child {
+        background-color: #0f172a !important;
+        border-bottom-color: #334155 !important;
+    }
+    body.dark-mode #modalCRUDUsuario form > div:last-child,
+    body.dark-mode #modalCRUDTecnico form > div:last-child {
+        background-color: #0f172a !important;
+        border-top-color: #334155 !important;
+    }
+    body.dark-mode #usuarios-toast {
+        background-color: #1e293b !important;
+        border-left-color: #10b981 !important;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;
+    }
+    body.dark-mode #usuarios-toast-msg {
+        color: #f8fafc !important;
+    }
+</style>
+
+<script>
+    // CACHES LOCALES PARA CRUD
+    let localUsuarios = [];
+    let localTecnicos = [];
+
+    // Cambiar entre sub-pestañas internas
+    function switchUsuariosSubTab(target) {
+        const btnUsr = document.getElementById('btn-subtab-usuarios');
+        const btnTec = document.getElementById('btn-subtab-tecnicos');
+        const contentUsr = document.getElementById('subtab-content-usuarios');
+        const contentTec = document.getElementById('subtab-content-tecnicos');
+
+        if (target === 'usuarios') {
+            btnUsr.style.color = 'var(--primary)';
+            btnUsr.style.borderBottom = '3px solid var(--primary)';
+            btnUsr.style.fontWeight = '800';
+
+            btnTec.style.color = '#64748b';
+            btnTec.style.borderBottom = 'none';
+            btnTec.style.fontWeight = '700';
+
+            contentUsr.style.display = 'block';
+            contentTec.style.display = 'none';
+            cargarListaUsuarios();
+        } else {
+            btnTec.style.color = 'var(--primary)';
+            btnTec.style.borderBottom = '3px solid var(--primary)';
+            btnTec.style.fontWeight = '800';
+
+            btnUsr.style.color = '#64748b';
+            btnUsr.style.borderBottom = 'none';
+            btnUsr.style.fontWeight = '700';
+
+            contentUsr.style.display = 'none';
+            contentTec.style.display = 'block';
+            cargarListaTecnicos();
+        }
+    }
+
+    // Mostrar Toast dinámico
+    function showUsuariosToast(msg, isError = false) {
+        const toast = document.getElementById('usuarios-toast');
+        const toastIcon = document.getElementById('usuarios-toast-icon');
+        const toastMsg = document.getElementById('usuarios-toast-msg');
+
+        if (!toast || !toastIcon || !toastMsg) return;
+
+        toastMsg.innerText = msg;
+        if (isError) {
+            toast.style.borderLeftColor = '#ef4444';
+            toastIcon.className = 'fa-solid fa-circle-xmark';
+            toastIcon.style.color = '#ef4444';
+        } else {
+            toast.style.borderLeftColor = '#10b981';
+            toastIcon.className = 'fa-solid fa-circle-check';
+            toastIcon.style.color = '#10b981';
+        }
+
+        toast.style.display = 'flex';
+
+        // Auto ocultar después de 4 segundos
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 4000);
+    }
+
+    // Escuchar la activación de la pestaña
+    document.addEventListener("DOMContentLoaded", function() {
+        const tabUsuarios = document.getElementById('tab-usuarios');
+        if (tabUsuarios && tabUsuarios.classList.contains('active')) {
+            cargarListaUsuarios();
+        }
+
+        const navUsuarios = document.querySelector('.nav-item[data-tab="tab-usuarios"]');
+        if (navUsuarios) {
+            navUsuarios.addEventListener('click', function() {
+                cargarListaUsuarios();
+            });
+        }
+    });
+
+    // ==========================================
+    // SECCIÓN USUARIOS - LÓGICA CRUD
+    // ==========================================
+
+    function cargarListaUsuarios() {
+        const loader = document.getElementById('usuarios-loader');
+        if (loader) loader.style.display = 'flex';
+
+        fetch('/api/admin/usuarios')
+            .then(res => res.json())
+            .then(data => {
+                if (loader) loader.style.display = 'none';
+                if (data.status === 'ok') {
+                    localUsuarios = data.usuarios;
+                    renderTablaUsuarios(localUsuarios);
+                } else {
+                    showUsuariosToast(data.message || 'Error cargando usuarios', true);
+                }
+            })
+            .catch(err => {
+                if (loader) loader.style.display = 'none';
+                console.error(err);
+                showUsuariosToast('Error de red al conectar al servidor.', true);
+            });
+    }
+
+    function renderTablaUsuarios(lista) {
+        const tbody = document.getElementById('usuarios-table-body');
+        if (!tbody) return;
+
+        if (lista.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 30px; color: #64748b; font-weight: 500;">
+                        No se encontraron usuarios en el sistema.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = lista.map(usr => {
+            const roleClass = usr.rol.toLowerCase();
+            const statusClass = usr.activo ? 'activo' : 'inactivo';
+            const statusTxt = usr.activo ? 'ACTIVO' : 'INACTIVO';
+            const toggleIcon = usr.activo ? 'fa-user-slash' : 'fa-user-check';
+            const toggleTitle = usr.activo ? 'Desactivar Cuenta' : 'Activar Cuenta';
+
+            return `
+                <tr style="border-bottom: 1px solid #e2e8f0; transition: background-color 0.2s;">
+                    <td style="padding: 14px 20px; font-weight: 700; color: #64748b;">#${usr.id_usuario}</td>
+                    <td style="padding: 14px 20px; font-weight: 700; color: #0f172a;">${usr.nombre}</td>
+                    <td style="padding: 14px 20px; color: #475569;">${usr.email}</td>
+                    <td style="padding: 14px 20px;">
+                        <span class="badge-role ${roleClass}">${usr.rol}</span>
+                    </td>
+                    <td style="padding: 14px 20px; text-align: center;">
+                        <span class="badge-status ${statusClass}">${statusTxt}</span>
+                    </td>
+                    <td style="padding: 14px 20px; text-align: center;">
+                        <button class="usuarios-action-btn edit" onclick="abrirModalUsuario(true, ${usr.id_usuario})" title="Editar Datos">
+                            <i class="fa-solid fa-edit"></i>
+                        </button>
+                        <button class="usuarios-action-btn toggle-active" onclick="toggleEstadoUsuario(${usr.id_usuario})" title="${toggleTitle}">
+                            <i class="fa-solid ${toggleIcon}"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function filtrarTablaUsuarios() {
+        const q = document.getElementById('buscar-usuario-input').value.toLowerCase().trim();
+        if (!q) {
+            renderTablaUsuarios(localUsuarios);
+            return;
+        }
+        const filtrada = localUsuarios.filter(u => 
+            u.nombre.toLowerCase().includes(q) || 
+            u.email.toLowerCase().includes(q) || 
+            u.rol.toLowerCase().includes(q)
+        );
+        renderTablaUsuarios(filtrada);
+    }
+
+    function abrirModalUsuario(editMode = false, idUsuario = null) {
+        const modal = document.getElementById('modalCRUDUsuario');
+        const title = document.getElementById('usuario-modal-title');
+        const passLabel = document.getElementById('usuario-password-label');
+        const passHint = document.getElementById('usuario-password-hint');
+        const passInput = document.getElementById('usuario-password');
+        const idField = document.getElementById('usuario-id-field');
+        const form = document.getElementById('form-crud-usuario');
+
+        form.reset();
+        passInput.required = !editMode;
+
+        if (editMode && idUsuario) {
+            title.innerHTML = '<i class="fa-solid fa-user-gear"></i> Editar Datos de Usuario';
+            passLabel.innerText = "Nueva Contraseña (opcional)";
+            passHint.style.display = 'block';
+            idField.value = idUsuario;
+
+            const usr = localUsuarios.find(u => u.id_usuario === idUsuario);
+            if (usr) {
+                document.getElementById('usuario-nombre').value = usr.nombre;
+                document.getElementById('usuario-email').value = usr.email;
+                document.getElementById('usuario-rol').value = usr.rol;
+                document.getElementById('usuario-activo').value = usr.activo ? "1" : "0";
+            }
+        } else {
+            title.innerHTML = '<i class="fa-solid fa-user-plus"></i> Crear Nuevo Usuario';
+            passLabel.innerText = "Contraseña";
+            passHint.style.display = 'none';
+            idField.value = "";
+        }
+
+        modal.style.display = 'flex';
+    }
+
+    function cerrarModalUsuario() {
+        document.getElementById('modalCRUDUsuario').style.display = 'none';
+    }
+
+    function guardarUsuario(e) {
+        e.preventDefault();
+
+        const idUsuario = document.getElementById('usuario-id-field').value;
+        const nombre = document.getElementById('usuario-nombre').value.trim();
+        const email = document.getElementById('usuario-email').value.trim();
+        const password = document.getElementById('usuario-password').value.strip ? document.getElementById('usuario-password').value.strip() : document.getElementById('usuario-password').value;
+        const rol = document.getElementById('usuario-rol').value;
+        const activo = document.getElementById('usuario-activo').value;
+
+        const bodyData = { nombre, email, password, rol, activo };
+        const url = idUsuario ? `/api/admin/usuarios/${idUsuario}` : '/api/admin/usuarios';
+        const method = idUsuario ? 'PUT' : 'POST';
+
+        fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyData)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                showUsuariosToast(data.message || 'Usuario guardado con éxito');
+                cerrarModalUsuario();
+                cargarListaUsuarios();
+            } else {
+                showUsuariosToast(data.message || 'Error al guardar el usuario', true);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showUsuariosToast('Error al intentar guardar el usuario.', true);
+        });
+    }
+
+    function toggleEstadoUsuario(idUsuario) {
+        if (!confirm('¿Está seguro de cambiar el estado de este usuario? Si es técnico, también afectará su disponibilidad de asignación.')) return;
+
+        fetch(`/api/admin/usuarios/${idUsuario}/toggle`, {
+            method: 'POST'
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                showUsuariosToast(data.message);
+                cargarListaUsuarios();
+            } else {
+                showUsuariosToast(data.message || 'Error al actualizar estado', true);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showUsuariosToast('Error al intentar actualizar el estado.', true);
+        });
+    }
+
+    // ==========================================
+    // SECCIÓN TÉCNICOS - LÓGICA CRUD
+    // ==========================================
+
+    function cargarListaTecnicos() {
+        const loader = document.getElementById('usuarios-loader');
+        if (loader) loader.style.display = 'flex';
+
+        fetch('/api/admin/tecnicos')
+            .then(res => res.json())
+            .then(data => {
+                if (loader) loader.style.display = 'none';
+                if (data.status === 'ok') {
+                    localTecnicos = data.tecnicos;
+                    renderTablaTecnicos(localTecnicos);
+                } else {
+                    showUsuariosToast(data.message || 'Error cargando técnicos', true);
+                }
+            })
+            .catch(err => {
+                if (loader) loader.style.display = 'none';
+                console.error(err);
+                showUsuariosToast('Error de red al conectar al servidor.', true);
+            });
+    }
+
+    function renderTablaTecnicos(lista) {
+        const tbody = document.getElementById('tecnicos-table-body');
+        if (!tbody) return;
+
+        if (lista.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 30px; color: #64748b; font-weight: 500;">
+                        No se encontraron técnicos de campo en el sistema.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = lista.map(tec => {
+            const statusClass = tec.activo ? 'activo' : 'inactivo';
+            const statusTxt = tec.activo ? 'DISPONIBLE' : 'INACTIVO';
+            const toggleIcon = tec.activo ? 'fa-toggle-on' : 'fa-toggle-off';
+            const toggleTitle = tec.activo ? 'Desactivar Técnico' : 'Activar Técnico';
+
+            const perfilUrl = `/static/uploads/${tec.foto_perfil || 'default_avatar.png'}`;
+            const vehiculoUrl = `/static/uploads/${tec.foto_vehiculo || 'furgoneta_milton.jpeg'}`;
+
+            return `
+                <tr style="border-bottom: 1px solid #e2e8f0; transition: background-color 0.2s;">
+                    <td style="padding: 10px 20px; text-align: center;">
+                        <img src="${perfilUrl}" alt="${tec.nombre}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 1.5px solid var(--border-color); background: #f1f5f9;">
+                    </td>
+                    <td style="padding: 14px 20px; font-weight: 700; color: #0f172a;">${tec.nombre}</td>
+                    <td style="padding: 14px 20px; color: #475569; font-weight: 600;">${tec.placa_vehiculo || 'S/P'}</td>
+                    <td style="padding: 10px 20px; text-align: center;">
+                        <img src="${vehiculoUrl}" alt="Vehículo ${tec.nombre}" style="width: 80px; height: 45px; border-radius: 8px; object-fit: cover; border: 1.5px solid var(--border-color); background: #f1f5f9;">
+                    </td>
+                    <td style="padding: 14px 20px; text-align: center;">
+                        <span class="badge-status ${statusClass}">${statusTxt}</span>
+                    </td>
+                    <td style="padding: 14px 20px; text-align: center;">
+                        <button class="usuarios-action-btn edit" onclick="abrirModalTecnico(true, ${tec.id_tecnico})" title="Editar Datos Técnico">
+                            <i class="fa-solid fa-edit"></i>
+                        </button>
+                        <button class="usuarios-action-btn toggle-active" style="color: ${tec.activo ? '#10b981' : '#64748b'};" onclick="toggleEstadoTecnico(${tec.id_tecnico})" title="${toggleTitle}">
+                            <i class="fa-solid ${toggleIcon}"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function filtrarTablaTecnicos() {
+        const q = document.getElementById('buscar-tecnico-input').value.toLowerCase().trim();
+        if (!q) {
+            renderTablaTecnicos(localTecnicos);
+            return;
+        }
+        const filtrada = localTecnicos.filter(t => 
+            t.nombre.toLowerCase().includes(q) || 
+            (t.placa_vehiculo && t.placa_vehiculo.toLowerCase().includes(q))
+        );
+        renderTablaTecnicos(filtrada);
+    }
+
+    // Previsualización de imágenes en el formulario
+    function previewImage(input, previewId) {
+        const preview = document.getElementById(previewId);
+        const wrapper = document.getElementById(previewId + '-wrapper');
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                wrapper.style.display = 'block';
+            }
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function abrirModalTecnico(editMode = false, idTecnico = null) {
+        const modal = document.getElementById('modalCRUDTecnico');
+        const title = document.getElementById('tecnico-modal-title');
+        const idField = document.getElementById('tecnico-id-field');
+        const form = document.getElementById('form-crud-tecnico');
+
+        form.reset();
+        document.getElementById('preview-perfil-wrapper').style.display = 'none';
+        document.getElementById('preview-vehiculo-wrapper').style.display = 'none';
+
+        if (editMode && idTecnico) {
+            title.innerHTML = '<i class="fa-solid fa-edit"></i> Editar Datos de Técnico';
+            idField.value = idTecnico;
+
+            const tec = localTecnicos.find(t => t.id_tecnico === idTecnico);
+            if (tec) {
+                document.getElementById('tecnico-nombre').value = tec.nombre;
+                document.getElementById('tecnico-placa').value = tec.placa_vehiculo || 'S/P';
+                document.getElementById('tecnico-activo').value = tec.activo ? "1" : "0";
+
+                if (tec.foto_perfil) {
+                    const imgPerfil = document.getElementById('preview-perfil');
+                    imgPerfil.src = `/static/uploads/${tec.foto_perfil}`;
+                    document.getElementById('preview-perfil-wrapper').style.display = 'block';
+                }
+
+                if (tec.foto_vehiculo) {
+                    const imgVehiculo = document.getElementById('preview-vehiculo');
+                    imgVehiculo.src = `/static/uploads/${tec.foto_vehiculo}`;
+                    document.getElementById('preview-vehiculo-wrapper').style.display = 'block';
+                }
+            }
+        } else {
+            title.innerHTML = '<i class="fa-solid fa-plus"></i> Registrar Técnico de Campo';
+            idField.value = "";
+        }
+
+        modal.style.display = 'flex';
+    }
+
+    function cerrarModalTecnico() {
+        document.getElementById('modalCRUDTecnico').style.display = 'none';
+    }
+
+    function guardarTecnico(e) {
+        e.preventDefault();
+
+        const idTecnico = document.getElementById('tecnico-id-field').value;
+        const form = document.getElementById('form-crud-tecnico');
+        const formData = new FormData(form);
+
+        // Si es edición, el endpoint soporta POST multipart mandándole el ID en la ruta
+        const url = idTecnico ? `/api/admin/tecnicos/${idTecnico}` : '/api/admin/tecnicos';
+
+        // Mapear campos de texto al FormData por si cambiaron de nombre
+        formData.set('nombre', document.getElementById('tecnico-nombre').value.trim());
+        formData.set('placa_vehiculo', document.getElementById('tecnico-placa').value.trim());
+        formData.set('activo', document.getElementById('tecnico-activo').value);
+
+        fetch(url, {
+            method: 'POST', // Siempre POST para enviar ficheros (multipart)
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                showUsuariosToast(data.message || 'Técnico guardado con éxito');
+                cerrarModalTecnico();
+                cargarListaTecnicos();
+            } else {
+                showUsuariosToast(data.message || 'Error al guardar el técnico', true);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showUsuariosToast('Error al intentar guardar el técnico.', true);
+        });
+    }
+
+    function toggleEstadoTecnico(idTecnico) {
+        if (!confirm('¿Está seguro de cambiar el estado de este técnico? Esto también desactivará su cuenta de usuario vinculada si existe.')) return;
+
+        fetch(`/api/admin/tecnicos/${idTecnico}/toggle`, {
+            method: 'POST'
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                showUsuariosToast(data.message);
+                cargarListaTecnicos();
+            } else {
+                showUsuariosToast(data.message || 'Error al actualizar estado', true);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showUsuariosToast('Error al intentar actualizar el estado.', true);
+        });
+    }
+</script>

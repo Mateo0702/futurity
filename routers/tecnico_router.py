@@ -1,5 +1,5 @@
 import secrets # IMPORTANTE: Añade esto arriba para generar el token seguro
-from flask import Blueprint, request, redirect, url_for, render_template, jsonify
+from flask import Blueprint, request, redirect, url_for, render_template, jsonify, session
 from db_config import get_db_connection
 from datetime import date
 import re
@@ -26,7 +26,22 @@ def interpretar_preferencia_horaria(texto):
 
 @tecnico_bp.route('/tecnico/<nombre_tecnico>')
 def panel_tecnico(nombre_tecnico):
+    # Validar que esté logueado
+    if 'user_id' not in session:
+        from flask import redirect, url_for
+        return redirect(url_for('login'))
+        
+    rol = session.get('user_role')
+    nombre_usuario = session.get('user_name', '')
+    
     nombre_real = nombre_tecnico.replace('_', ' ')
+    
+    # Si es rol TECNICO, solo puede ver su propio panel
+    if rol == 'TECNICO' and nombre_usuario != nombre_real:
+        from flask import flash
+        flash('No tienes permiso para acceder al panel de otro técnico.', 'danger')
+        nombre_propio_url = nombre_usuario.replace(' ', '_')
+        return redirect(url_for('tecnico.panel_tecnico', nombre_tecnico=nombre_propio_url))
     
     conexion = get_db_connection()
     cursor = conexion.cursor(dictionary=True)
@@ -82,6 +97,11 @@ def panel_tecnico(nombre_tecnico):
     
     cursor.execute("SELECT nombre FROM catalogo_modelos_router WHERE activo = 1 ORDER BY nombre ASC")
     catalogo_router = cursor.fetchall()
+
+    # Obtener estado de actividad del técnico
+    cursor.execute("SELECT estado_actividad FROM tecnicos WHERE nombre = %s", (nombre_real,))
+    tec_estado_row = cursor.fetchone()
+    estado_actividad = tec_estado_row['estado_actividad'] if tec_estado_row else 'Disponible'
     
     cursor.close()
     conexion.close()
@@ -93,6 +113,7 @@ def panel_tecnico(nombre_tecnico):
     return render_template('tecnico_panel.html', 
                            visitas=visitas_del_tecnico, 
                            tecnico=nombre_real,
+                           estado_actividad=estado_actividad,
                            soluciones=soluciones,
                            catalogo=catalogo_materiales,
                            catalogo_ont=catalogo_ont,           
@@ -132,6 +153,20 @@ def en_camino_visita(id_visita):
         """
         cursor.execute(query, (token_seguro, id_visita))
         conexion.commit()
+
+        # Actualizar estado de actividad global del técnico
+        cursor.execute("SELECT cliente FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        cliente_row = cursor.fetchone()
+        cliente = cliente_row[0] if cliente_row else "Cliente"
+        
+        tecnico_nombre = session.get('user_name')
+        if tecnico_nombre:
+            cursor.execute("""
+                UPDATE tecnicos 
+                SET estado_actividad = %s, ultima_conexion = NOW() 
+                WHERE nombre = %s
+            """, (f"En camino a: {cliente}", tecnico_nombre))
+            conexion.commit()
     except Exception as e:
         print(f"Error al poner en ruta: {e}")
     finally:
@@ -152,6 +187,20 @@ def iniciar_visita(id_visita):
         query = "UPDATE visitas_tecnicas SET estado = 'EN_PROGRESO', hora_inicio_visita = NOW() WHERE id_visita = %s"
         cursor.execute(query, (id_visita,))
         conexion.commit()
+
+        # Actualizar estado de actividad global del técnico
+        cursor.execute("SELECT cliente FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        cliente_row = cursor.fetchone()
+        cliente = cliente_row[0] if cliente_row else "Cliente"
+        
+        tecnico_nombre = session.get('user_name')
+        if tecnico_nombre:
+            cursor.execute("""
+                UPDATE tecnicos 
+                SET estado_actividad = %s, ultima_conexion = NOW() 
+                WHERE nombre = %s
+            """, (f"Trabajando con: {cliente}", tecnico_nombre))
+            conexion.commit()
     except Exception as e:
         print(f"Error al iniciar visita: {e}")
     finally:
@@ -200,6 +249,12 @@ def finalizar_visita(id_visita):
             tec_row = cursor.fetchone()
             tecnico_nombre = tec_row[0] if tec_row else None
             
+            placa_vehiculo = 'S/P'
+            if tecnico_nombre:
+                cursor.execute("SELECT placa_vehiculo FROM tecnicos WHERE nombre = %s", (tecnico_nombre,))
+                placa_row = cursor.fetchone()
+                placa_vehiculo = placa_row[0] if (placa_row and placa_row[0]) else 'S/P'
+            
             query_materiales = """
                 INSERT INTO visitas_materiales (id_visita, id_material, cantidad_usada)
                 VALUES (%s, %s, %s)
@@ -208,7 +263,7 @@ def finalizar_visita(id_visita):
             query_update_custodia = """
                 UPDATE inventario_tecnicos 
                 SET cantidad_disponible = cantidad_disponible - %s 
-                WHERE tecnico_nombre = %s AND id_material = %s
+                WHERE placa_vehiculo = %s AND id_material = %s
             """
             
             for i in range(len(materiales_ids)):
@@ -219,16 +274,25 @@ def finalizar_visita(id_visita):
                 if id_mat and cant and int(cant) > 0:
                     cursor.execute(query_materiales, (id_visita, int(id_mat), int(cant)))
                     
-                    if tecnico_nombre:
+                    if placa_vehiculo:
                         # Asegurar que exista el registro en inventario_tecnicos (por si no estaba inicializado)
                         cursor.execute("""
-                            INSERT IGNORE INTO inventario_tecnicos (tecnico_nombre, id_material, cantidad_disponible)
+                            INSERT IGNORE INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible)
                             VALUES (%s, %s, 0)
-                        """, (tecnico_nombre, int(id_mat)))
+                        """, (placa_vehiculo, int(id_mat)))
                         
-                        # Descontar del inventario del técnico
-                        cursor.execute(query_update_custodia, (int(cant), tecnico_nombre, int(id_mat)))
+                        # Descontar del inventario del vehículo
+                        cursor.execute(query_update_custodia, (int(cant), placa_vehiculo, int(id_mat)))
                         
+        # Actualizar estado global del técnico
+        tecnico_nombre = session.get('user_name')
+        if tecnico_nombre:
+            cursor.execute("""
+                UPDATE tecnicos 
+                SET estado_actividad = %s, ultima_conexion = NOW() 
+                WHERE nombre = %s
+            """, ("Disponible", tecnico_nombre))
+            
         conexion.commit()
         print(f"✅ Visita #{id_visita} finalizada e insumos actualizados.")
     except Exception as e:
@@ -250,7 +314,7 @@ def rastreo_vivo(id_visita):
     
     # Manejo ultra flexible por si viene como JSON o Formulario clásico
     if request.is_json:
-        datos = request.get_json()
+        datos = request.get_json() or {}
     else:
         datos = request.form
         
@@ -263,8 +327,7 @@ def rastreo_vivo(id_visita):
         conexion = get_db_connection()
         cursor = conexion.cursor()
         try:
-            # Quitamos el filtro "AND estado = 'EN_RUTA'" solo para pruebas, 
-            # así nos aseguramos de que guarde pase lo que pase.
+            # Actualizar coordenadas para el rastreo del cliente
             query = """
                 UPDATE visitas_tecnicas 
                 SET latitud_gps_vivo = %s, 
@@ -273,6 +336,18 @@ def rastreo_vivo(id_visita):
                 WHERE id_visita = %s
             """
             cursor.execute(query, (lat, lon, id_visita))
+
+            # Actualizar coordenadas globales del técnico (para el administrador)
+            tecnico_nombre = session.get('user_name')
+            if tecnico_nombre:
+                cursor.execute("""
+                    UPDATE tecnicos 
+                    SET latitud_actual = %s, 
+                        longitud_actual = %s, 
+                        ultima_conexion = NOW()
+                    WHERE nombre = %s
+                """, (lat, lon, tecnico_nombre))
+
             conexion.commit()
             print("💾 ¡Ubicación guardada con éxito en MySQL!")
         except Exception as e:
@@ -323,6 +398,15 @@ def cerrar_visita_proceso(id_visita):
                 # Solo guardamos si seleccionó un material y puso una cantidad válida mayor a cero
                 if id_mat and cant and int(cant) > 0:
                     cursor.execute(query_materiales, (id_visita, int(id_mat), int(cant)))
+
+        # Actualizar estado global del técnico
+        tecnico_nombre = session.get('user_name')
+        if tecnico_nombre:
+            cursor.execute("""
+                UPDATE tecnicos 
+                SET estado_actividad = %s, ultima_conexion = NOW() 
+                WHERE nombre = %s
+            """, ("Disponible", tecnico_nombre))
                     
         conexion.commit()
         print(f"✅ Visita #{id_visita} cerrada y materiales registrados exitosamente.")
@@ -334,7 +418,8 @@ def cerrar_visita_proceso(id_visita):
         cursor.close()
         conexion.close()
         
-    return redirect(url_for('tecnico.panel', tecnico_name=session.get('tecnico_name')))
+    nombre_propio = session.get('user_name', '').replace(' ', '_')
+    return redirect(url_for('tecnico.panel_tecnico', nombre_tecnico=nombre_propio))
 
 from flask import jsonify
 
@@ -362,3 +447,76 @@ def obtener_historial_cliente(nombre_cliente):
     finally:
         cursor.close()
         conexion.close()
+
+
+@tecnico_bp.route('/api/tecnico/ping_global', methods=['POST'])
+def ping_global():
+    if 'user_id' not in session or session.get('user_role') != 'TECNICO':
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    if request.is_json:
+        datos = request.get_json() or {}
+    else:
+        datos = request.form
+        
+    lat = datos.get('latitud')
+    lon = datos.get('longitud')
+    tecnico_nombre = session.get('user_name')
+
+    if lat and lon and tecnico_nombre:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        try:
+            cursor.execute("""
+                UPDATE tecnicos 
+                SET latitud_actual = %s, 
+                    longitud_actual = %s, 
+                    ultima_conexion = NOW()
+                WHERE nombre = %s
+            """, (lat, lon, tecnico_nombre))
+            conexion.commit()
+        except Exception as e:
+            print(f"Error in ping_global: {e}")
+        finally:
+            cursor.close()
+            conexion.close()
+            
+    return jsonify({"status": "ok"})
+
+
+@tecnico_bp.route('/api/tecnico/descanso', methods=['POST'])
+def descanso_tecnico():
+    if 'user_id' not in session or session.get('user_role') != 'TECNICO':
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    if request.is_json:
+        datos = request.get_json() or {}
+    else:
+        datos = request.form
+        
+    accion = datos.get('accion')
+    tecnico_nombre = session.get('user_name')
+
+    if not accion and not request.is_json:
+        accion = request.form.get('accion')
+
+    if tecnico_nombre and accion:
+        nuevo_estado = 'En Descanso' if accion == 'iniciar' else 'Disponible'
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        try:
+            cursor.execute("""
+                UPDATE tecnicos 
+                SET estado_actividad = %s,
+                    ultima_conexion = NOW()
+                WHERE nombre = %s
+            """, (nuevo_estado, tecnico_nombre))
+            conexion.commit()
+            return jsonify({"status": "ok", "estado": nuevo_estado})
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+        finally:
+            cursor.close()
+            conexion.close()
+            
+    return jsonify({"status": "error", "message": "Faltan parámetros"}), 400

@@ -7,9 +7,12 @@ visitas_bp = Blueprint('visitas', __name__)
 
 @visitas_bp.route('/api/visitas', methods=['POST'])
 def registrar_visita():
-    # Protección de sesión
+    # Protección de sesión y rol
     if 'user_id' not in session:
         return redirect(url_for('login'))
+    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        flash('No tienes permiso para registrar visitas.', 'danger')
+        return redirect(url_for('dashboard'))
 
     try:
         creado_por = session['user_name']
@@ -195,6 +198,12 @@ def buscar_cliente(contrato):
 
 @visitas_bp.route('/api/visitas/reagendar/<int:id_visita>', methods=['POST'])
 def reagendar_visita(id_visita):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        flash('No tienes permiso para reagendar visitas.', 'danger')
+        return redirect(url_for('dashboard'))
+
     nueva_fecha = request.form.get('nueva_fecha', '').strip()
     
     # VALIDACIÓN: Formato de fecha y existencia real en el calendario
@@ -235,7 +244,11 @@ def reagendar_visita(id_visita):
 
 @visitas_bp.route('/api/visitas/<int:id_visita>/cancelar', methods=['POST'])
 def cancelar_visita(id_visita):
-    if 'user_id' not in session: return redirect(url_for('login'))
+    if 'user_id' not in session: 
+        return redirect(url_for('login'))
+    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        flash('No tienes permiso para cancelar visitas.', 'danger')
+        return redirect(url_for('dashboard'))
     
     estado_cancelacion = request.form.get('estado_cancelacion') # CANCELADA o SOLVENTADA_REMOTA
     motivo = request.form.get('motivo')
@@ -261,7 +274,11 @@ def cancelar_visita(id_visita):
 
 @visitas_bp.route('/api/visitas/<int:id_visita>/reasignar', methods=['POST'])
 def reasignar_tecnicos(id_visita):
-    if 'user_id' not in session: return redirect(url_for('login'))
+    if 'user_id' not in session: 
+        return redirect(url_for('login'))
+    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        flash('No tienes permiso para reasignar técnicos.', 'danger')
+        return redirect(url_for('dashboard'))
     
     nuevo_principal = request.form.get('tecnico_principal')
     nuevo_apoyo = request.form.get('tecnico_apoyo') or None # Puede ir vacío

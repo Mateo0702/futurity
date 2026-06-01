@@ -14,6 +14,18 @@ document.addEventListener('DOMContentLoaded', () => {
             item.classList.add('active');
             const targetTab = item.getAttribute('data-tab');
             document.getElementById(targetTab).classList.add('active');
+
+            // Inicializar y redimensionar el mapa si se activa la pestaña
+            if (targetTab === 'tab-mapa-tecnicos') {
+                if (typeof inicializarMapaTecnicos === 'function') {
+                    inicializarMapaTecnicos();
+                }
+                if (mapaTecnicos) {
+                    setTimeout(() => {
+                        mapaTecnicos.invalidateSize();
+                    }, 100);
+                }
+            }
         });
     });
 

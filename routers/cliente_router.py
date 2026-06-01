@@ -52,7 +52,7 @@ def api_rastreo_ubicacion(token):
     if visita:
         # Si las columnas de fotos vienen vacías (NULL), usamos las genéricas por defecto
         archivo_perfil_principal = visita['foto_perfil_principal'] if visita.get('foto_perfil_principal') else 'default_avatar.png'
-        archivo_vehiculo = visita['foto_vehiculo_principal'] if visita.get('foto_vehiculo_principal') else 'default_van.png'
+        archivo_vehiculo = visita['foto_vehiculo_principal'] if visita.get('foto_vehiculo_principal') else 'furgoneta_milton.jpeg'
         archivo_perfil_apoyo = visita['foto_perfil_apoyo'] if visita.get('foto_perfil_apoyo') else None
         
         return jsonify({

@@ -1,4 +1,4 @@
-<div id="tab-registro" class="tab-content">
+<div id="tab-registro" class="tab-content {% if active_tab == 'registro' %}active{% endif %}">
     <h2>Registrar Nueva Visita</h2>
     <div class="card">
         <form action="/api/visitas" method="POST">

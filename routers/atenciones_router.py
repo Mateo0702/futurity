@@ -6,6 +6,8 @@ atenciones_bp = Blueprint('atenciones', __name__)
 
 @atenciones_bp.route('/api/cliente/buscar_contrato_json', methods=['GET'])
 def buscar_contrato_json():
+    if 'user_id' not in session:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
     contrato = request.args.get('contrato', '').strip()
     if not contrato:
         return jsonify({"status": "error", "message": "Contrato vacío"}), 400
@@ -60,6 +62,8 @@ def buscar_contrato_json():
 def registrar_atencion():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para registrar atenciones."}), 403
         
     # Obtener parámetros del JSON o del formulario
     data = request.get_json() if request.is_json else request.form
@@ -150,6 +154,8 @@ def registrar_atencion():
 def atenciones_recientes():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para ver atenciones."}), 403
     
     conn = get_db_connection()
     if not conn:
@@ -191,6 +197,10 @@ def atenciones_recientes():
 
 @atenciones_bp.route('/api/admin/metricas_atenciones', methods=['GET'])
 def metricas_atenciones():
+    if 'user_id' not in session:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas de atenciones."}), 403
     conn = get_db_connection()
     if not conn:
         return jsonify({"status": "error", "message": "No se pudo conectar a la base de datos"}), 500
