@@ -3,6 +3,8 @@ from flask import Blueprint, request, redirect, url_for, render_template, jsonif
 from db_config import get_db_connection
 from datetime import date
 import re
+import os
+import base64
 from utils import parsear_informacion_tecnica
 
 tecnico_bp = Blueprint('tecnico', __name__)
@@ -230,6 +232,41 @@ def finalizar_visita(id_visita):
     router = request.form.get('modelo_router')
     coordenadas = request.form.get('coordenadas_tecnico')
     
+    # Captura de fotos y firma
+    equipos_juntos = request.form.get('equipos_juntos')  # '1' o '0'
+    equipos_juntos_val = 1 if equipos_juntos == '1' else 0
+    
+    foto_equipos_b64 = request.form.get('foto_equipos_base64')
+    foto_equipos_2_b64 = request.form.get('foto_equipos_2_base64')
+    firma_cliente_b64 = request.form.get('firma_cliente_base64')
+    
+    # Procesar archivos físicos
+    uploads_dir = os.path.join('static', 'uploads')
+    if not os.path.exists(uploads_dir):
+        os.makedirs(uploads_dir)
+        
+    def guardar_imagen_base64(b64_string, filename):
+        if not b64_string or not b64_string.strip():
+            return None
+        try:
+            if ',' in b64_string:
+                b64_string = b64_string.split(',')[1]
+            img_data = base64.b64decode(b64_string)
+            filepath = os.path.join(uploads_dir, filename)
+            with open(filepath, 'wb') as f:
+                f.write(img_data)
+            return filename
+        except Exception as e:
+            print(f"Error al guardar imagen {filename}: {e}")
+            return None
+
+    foto_equipos_filename = guardar_imagen_base64(foto_equipos_b64, f"equipos_{id_visita}_1.jpg")
+    foto_equipos_2_filename = None
+    if not equipos_juntos_val:
+        foto_equipos_2_filename = guardar_imagen_base64(foto_equipos_2_b64, f"equipos_{id_visita}_2.jpg")
+        
+    firma_cliente_filename = guardar_imagen_base64(firma_cliente_b64, f"firma_{id_visita}.png")
+
     # Capturamos las listas dinámicas de materiales enviados desde el HTML
     materiales_ids = request.form.getlist('materiales_seleccionados[]')
     cantidades = request.form.getlist('cantidades_materiales[]')
@@ -246,10 +283,18 @@ def finalizar_visita(id_visita):
                 observacion_tecnico = %s,
                 modelo_onu = %s,
                 modelo_router = %s,
-                coordenadas_tecnico = %s
+                coordenadas_tecnico = %s,
+                equipos_juntos = %s,
+                foto_equipos = %s,
+                foto_equipos_2 = %s,
+                firma_cliente = %s
             WHERE id_visita = %s
         """
-        cursor.execute(query, (solucion, observacion, onu, router, coordenadas, id_visita))
+        cursor.execute(query, (
+            solucion, observacion, onu, router, coordenadas,
+            equipos_juntos_val, foto_equipos_filename, foto_equipos_2_filename, firma_cliente_filename,
+            id_visita
+        ))
         
         # 2. Registrar materiales e inventario si existen
         if materiales_ids and cantidades:

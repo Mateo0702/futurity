@@ -60,12 +60,15 @@ def api_dashboard_calidad():
             base_where += " AND cliente LIKE %s"
             params.append(f"%{cliente_filtro}%")
         
-        # 1. Consulta para los KPIs Generales
+        # 1. Consulta para los KPIs Generales (incluye promedios de encuesta 1-10)
         cursor.execute(f"""
             SELECT 
-                ROUND(AVG(calificacion_estrellas), 2) AS promedio_global,
+                ROUND(AVG(COALESCE((encuesta_rapidez + encuesta_atencion + encuesta_explicacion) / 3.0, calificacion_estrellas * 2.0)), 2) AS promedio_global,
                 COUNT(calificacion_estrellas) AS total_calificadas,
-                SUM(CASE WHEN calificacion_estrellas <= 3 THEN 1 ELSE 0 END) AS alertas_criticas
+                SUM(CASE WHEN COALESCE((encuesta_rapidez + encuesta_atencion + encuesta_explicacion) / 3.0, calificacion_estrellas * 2.0) <= 6.0 THEN 1 ELSE 0 END) AS alertas_criticas,
+                ROUND(AVG(encuesta_rapidez), 2) AS promedio_rapidez,
+                ROUND(AVG(encuesta_atencion), 2) AS promedio_atencion,
+                ROUND(AVG(encuesta_explicacion), 2) AS promedio_explicacion
             FROM visitas_tecnicas
             {base_where}
         """, params)
@@ -76,17 +79,27 @@ def api_dashboard_calidad():
             if kpis['promedio_global'] is None: kpis['promedio_global'] = 0.0
             if kpis['total_calificadas'] is None: kpis['total_calificadas'] = 0
             if kpis['alertas_criticas'] is None: kpis['alertas_criticas'] = 0
+            if kpis['promedio_rapidez'] is None: kpis['promedio_rapidez'] = 0.0
+            if kpis['promedio_atencion'] is None: kpis['promedio_atencion'] = 0.0
+            if kpis['promedio_explicacion'] is None: kpis['promedio_explicacion'] = 0.0
         else:
-            kpis = {"promedio_global": 0.0, "total_calificadas": 0, "alertas_criticas": 0}
+            kpis = {
+                "promedio_global": 0.0, 
+                "total_calificadas": 0, 
+                "alertas_criticas": 0,
+                "promedio_rapidez": 0.0,
+                "promedio_atencion": 0.0,
+                "promedio_explicacion": 0.0
+            }
 
         # 2. Consulta para el Ranking de Técnicos (Alimentar Gráfico)
         cursor.execute(f"""
             SELECT 
                 tecnico_principal AS nombre,
-                ROUND(AVG(calificacion_estrellas), 2) AS promedio,
+                ROUND(AVG(COALESCE((encuesta_rapidez + encuesta_atencion + encuesta_explicacion) / 3.0, calificacion_estrellas * 2.0)), 2) AS promedio,
                 COUNT(calificacion_estrellas) AS total_visitas,
-                CAST(IFNULL(SUM(CASE WHEN calificacion_estrellas >= 4 THEN 1 ELSE 0 END), 0) AS UNSIGNED) AS buenas,
-                CAST(IFNULL(SUM(CASE WHEN calificacion_estrellas <= 3 THEN 1 ELSE 0 END), 0) AS UNSIGNED) AS malas
+                CAST(IFNULL(SUM(CASE WHEN COALESCE((encuesta_rapidez + encuesta_atencion + encuesta_explicacion) / 3.0, calificacion_estrellas * 2.0) >= 7.0 THEN 1 ELSE 0 END), 0) AS UNSIGNED) AS buenas,
+                CAST(IFNULL(SUM(CASE WHEN COALESCE((encuesta_rapidez + encuesta_atencion + encuesta_explicacion) / 3.0, calificacion_estrellas * 2.0) <= 6.0 THEN 1 ELSE 0 END), 0) AS UNSIGNED) AS malas
             FROM visitas_tecnicas
             {base_where}
             GROUP BY tecnico_principal
@@ -96,7 +109,9 @@ def api_dashboard_calidad():
 
         # 3. Consulta para la Tabla con Filtros Aplicados
         query_tabla = f"""
-            SELECT id_visita, cliente, sector, tecnico_principal, calificacion_estrellas, calificacion_comentario, hora_fin_visita
+            SELECT id_visita, cliente, sector, tecnico_principal, 
+                   calificacion_estrellas, calificacion_comentario, hora_fin_visita,
+                   encuesta_rapidez, encuesta_atencion, encuesta_explicacion
             FROM visitas_tecnicas
             {base_where}
             ORDER BY hora_fin_visita DESC LIMIT 100
@@ -284,7 +299,7 @@ def api_tecnicos_ubicaciones():
         
     cursor = conexion.cursor(dictionary=True)
     try:
-        # Consulta para traer la ubicación actual global de cada técnico activo
+        # Consulta para traer la ubicación actual global de cada técnico y su estado de conexión
         query = """
             SELECT id_tecnico,
                    nombre AS tecnico, 
@@ -296,13 +311,17 @@ def api_tecnicos_ubicaciones():
                    foto_vehiculo,
                    placa_vehiculo,
                    alerta_panico,
-                   mensaje_panico
+                   mensaje_panico,
+                   CASE WHEN latitud_actual IS NOT NULL 
+                         AND longitud_actual IS NOT NULL 
+                         AND (ultima_conexion >= DATE_SUB(NOW(), INTERVAL 10 MINUTE) OR alerta_panico = 1) 
+                        THEN 1 ELSE 0 END AS conectado
             FROM tecnicos
             WHERE activo = 1 
               AND area_trabajo = %s
-              AND latitud_actual IS NOT NULL 
-              AND longitud_actual IS NOT NULL
-              AND (ultima_conexion >= DATE_SUB(NOW(), INTERVAL 10 MINUTE) OR alerta_panico = 1)
+              AND UPPER(nombre) NOT LIKE '%NO TECNICO%'
+              AND UPPER(nombre) NOT LIKE '%TECNOLOGIA%'
+              AND UPPER(nombre) NOT LIKE '%TECNOLOGÍA%'
         """
         cursor.execute(query, (active_area,))
         ubicaciones = cursor.fetchall()

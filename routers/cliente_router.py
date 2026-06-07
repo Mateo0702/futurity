@@ -9,7 +9,7 @@ cliente_bp = Blueprint('cliente', __name__)
 
 @cliente_bp.route('/rastreo/<token>')
 def rastreo_cliente(token):
-    """Muestra la página del mapa al cliente."""
+    """Muestra la página del mapa al cliente o redirige a la encuesta si finalizó."""
     conexion = get_db_connection()
     cursor = conexion.cursor(dictionary=True)
     # Buscamos de quién es este código secreto
@@ -21,8 +21,28 @@ def rastreo_cliente(token):
     if not visita:
         return "Este enlace de rastreo no es válido o ya ha caducado.", 404
 
+    if visita['estado'] == 'FINALIZADA':
+        from flask import redirect
+        return redirect(url_for('cliente.encuesta_cliente', token=token))
+
     # Le enviamos los datos a la plantilla del mapa
     return render_template('mapa_cliente.html', visita=visita, token=token)
+
+
+@cliente_bp.route('/encuesta/<token>')
+def encuesta_cliente(token):
+    """Muestra la encuesta de satisfacción detallada al cliente."""
+    conexion = get_db_connection()
+    cursor = conexion.cursor(dictionary=True)
+    cursor.execute("SELECT tecnico_principal, tecnico_apoyo, estado, cliente FROM visitas_tecnicas WHERE token_rastreo = %s", (token,))
+    visita = cursor.fetchone()
+    cursor.close()
+    conexion.close()
+
+    if not visita:
+        return "Este enlace no es válido o ya ha caducado.", 404
+
+    return render_template('encuesta_cliente.html', visita=visita, token=token)
 
 
 @cliente_bp.route('/api/rastreo_ubicacion/<token>')
@@ -74,24 +94,48 @@ def api_rastreo_ubicacion(token):
 @cliente_bp.route('/api/cliente/calificar/<token>', methods=['POST'])
 def calificar_visita(token):
     """Permite al cliente calificar la visita una vez que ha finalizado."""
-    estrellas = request.form.get('estrellas')
+    rapidez = request.form.get('rapidez')
+    atencion = request.form.get('atencion')
+    explicacion = request.form.get('explicacion')
     comentario = request.form.get('comentario', '')
-    
-    if not estrellas:
-        return jsonify({"status": "error", "message": "Faltan las estrellas"}), 400
 
     conexion = get_db_connection()
     cursor = conexion.cursor()
     
     try:
-        # Actualizamos la visita con el token correspondiente
-        query = """
-            UPDATE visitas_tecnicas 
-            SET calificacion_estrellas = %s, 
-                calificacion_comentario = %s 
-            WHERE token_rastreo = %s AND estado = 'FINALIZADA'
-        """
-        cursor.execute(query, (int(estrellas), comentario, token))
+        if rapidez and atencion and explicacion:
+            # Calcular estrellas (1 a 5) en base al promedio de las puntuaciones 1 a 10
+            r_val = int(rapidez)
+            a_val = int(atencion)
+            e_val = int(explicacion)
+            promedio_10 = (r_val + a_val + e_val) / 3.0
+            estrellas = int(round(promedio_10 / 2.0))
+            estrellas = max(1, min(5, estrellas))
+
+            query = """
+                UPDATE visitas_tecnicas 
+                SET calificacion_estrellas = %s, 
+                    calificacion_comentario = %s,
+                    encuesta_rapidez = %s,
+                    encuesta_atencion = %s,
+                    encuesta_explicacion = %s
+                WHERE token_rastreo = %s AND estado = 'FINALIZADA'
+            """
+            cursor.execute(query, (estrellas, comentario, r_val, a_val, e_val, token))
+        else:
+            # Fallback antiguo de estrellas
+            estrellas = request.form.get('estrellas')
+            if not estrellas:
+                return jsonify({"status": "error", "message": "Faltan datos de calificación"}), 400
+            
+            query = """
+                UPDATE visitas_tecnicas 
+                SET calificacion_estrellas = %s, 
+                    calificacion_comentario = %s 
+                WHERE token_rastreo = %s AND estado = 'FINALIZADA'
+            """
+            cursor.execute(query, (int(estrellas), comentario, token))
+
         conexion.commit()
         
         # Validar si se afectó alguna fila (asegurarse de que existe y está finalizada)

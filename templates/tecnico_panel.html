@@ -151,6 +151,18 @@
 
                 <div class="dato-cliente" style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
                     <div>
+                        <strong>Teléfono(s)</strong>
+                        <span>{{ visita.telefonos or 'No registrado' }}</span>
+                    </div>
+                    {% if visita.telefonos %}
+                    <button type="button" onclick="abrirLlamada('{{ visita.telefonos }}')" class="btn-call">
+                        <i class="fa-solid fa-phone"></i> Llamar
+                    </button>
+                    {% endif %}
+                </div>
+
+                <div class="dato-cliente" style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                    <div>
                         <strong>Dirección / Ubicación</strong>
                         <span>{{ visita.direccion }} ({{ visita.sector }})</span>
                     </div>
@@ -296,6 +308,70 @@
                             </div>
                         </div>
 
+                        <!-- Toggle de Equipos Juntos/Separados -->
+                        <div style="margin-bottom: 16px; background-color: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+                            <label style="font-weight: 700; color: #1e3a8a; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" id="equipos-juntos-{{ visita.id_visita }}" checked onchange="toggleInputsFotos('{{ visita.id_visita }}')" style="width: auto; margin: 0; transform: scale(1.2);">
+                                <span>¿ONU y Router quedaron juntos?</span>
+                            </label>
+                            <input type="hidden" name="equipos_juntos" id="equipos-juntos-hidden-{{ visita.id_visita }}" value="1">
+                        </div>
+
+                        <!-- Sección de Foto(s) de Equipos -->
+                        <div style="margin-bottom: 16px; background-color: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+                            <label style="font-weight: 700; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">📷 Fotos de Equipos (Obligatorio):</label>
+                            
+                            <!-- Input para Foto Conjunta -->
+                            <div id="container-foto-conjunta-{{ visita.id_visita }}" style="display: block; margin-bottom: 10px;">
+                                <label style="font-size: 0.8rem; color: #64748b; display: block; margin-bottom: 4px;">Foto de ONU y Router juntos:</label>
+                                <input type="file" id="input-foto-conjunta-{{ visita.id_visita }}" accept="image/*" capture="environment" onchange="comprimirYConvertirFoto('{{ visita.id_visita }}', this, 'foto_equipos', 'preview-foto-conjunta-{{ visita.id_visita }}')" style="width: 100%; font-size: 0.85rem; padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-color);">
+                                <div style="margin-top: 8px; text-align: center;">
+                                    <img id="preview-foto-conjunta-{{ visita.id_visita }}" style="max-height: 120px; display: none; border-radius: 6px; border: 1px solid var(--border-color); margin: 0 auto;">
+                                </div>
+                            </div>
+                            
+                            <!-- Inputs para Fotos Separadas -->
+                            <div id="container-fotos-separadas-{{ visita.id_visita }}" style="display: none;">
+                                <div style="margin-bottom: 10px;">
+                                    <label style="font-size: 0.8rem; color: #64748b; display: block; margin-bottom: 4px;">Foto de ONU:</label>
+                                    <input type="file" id="input-foto-onu-{{ visita.id_visita }}" accept="image/*" capture="environment" onchange="comprimirYConvertirFoto('{{ visita.id_visita }}', this, 'foto_equipos', 'preview-foto-onu-{{ visita.id_visita }}')" style="width: 100%; font-size: 0.85rem; padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-color);">
+                                    <div style="margin-top: 8px; text-align: center;">
+                                        <img id="preview-foto-onu-{{ visita.id_visita }}" style="max-height: 120px; display: none; border-radius: 6px; border: 1px solid var(--border-color); margin: 0 auto;">
+                                    </div>
+                                </div>
+                                <div style="margin-bottom: 10px;">
+                                    <label style="font-size: 0.8rem; color: #64748b; display: block; margin-bottom: 4px;">Foto de Router:</label>
+                                    <input type="file" id="input-foto-router-{{ visita.id_visita }}" accept="image/*" capture="environment" onchange="comprimirYConvertirFoto('{{ visita.id_visita }}', this, 'foto_equipos_2', 'preview-foto-router-{{ visita.id_visita }}')" style="width: 100%; font-size: 0.85rem; padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-color);">
+                                    <div style="margin-top: 8px; text-align: center;">
+                                        <img id="preview-foto-router-{{ visita.id_visita }}" style="max-height: 120px; display: none; border-radius: 6px; border: 1px solid var(--border-color); margin: 0 auto;">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Campos hidden para guardar las imágenes Base64 comprimidas -->
+                            <input type="hidden" name="foto_equipos_base64" id="foto_equipos_base64_hidden-{{ visita.id_visita }}">
+                            <input type="hidden" name="foto_equipos_2_base64" id="foto_equipos_2_base64_hidden-{{ visita.id_visita }}">
+                        </div>
+
+                        <!-- Sección de Firma del Cliente -->
+                        <div style="margin-bottom: 16px; background-color: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+                            <label style="font-weight: 700; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">✍️ Firma del Cliente (Obligatorio):</label>
+                            
+                            <div class="firma-canvas-container" style="border: 2px dashed #94a3b8; border-radius: 8px; background-color: #ffffff; position: relative; height: 150px; overflow: hidden; touch-action: none;">
+                                <canvas id="canvas-firma-{{ visita.id_visita }}" style="width: 100%; height: 100%; display: block; cursor: crosshair;"></canvas>
+                            </div>
+                            
+                            <div style="display: flex; justify-content: space-between; margin-top: 8px; align-items: center;">
+                                <span style="font-size: 0.75rem; color: #64748b; font-style: italic;">Dibuje su firma en el recuadro blanco.</span>
+                                <button type="button" onclick="limpiarCanvasFirma('{{ visita.id_visita }}')" style="padding: 6px 12px; background-color: #ef4444; color: white; border: none; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: bold; display: flex; align-items: center; gap: 4px;">
+                                    <i class="fa-solid fa-eraser"></i> Limpiar Firma
+                                </button>
+                            </div>
+                            
+                            <!-- Campo hidden para la firma Base64 -->
+                            <input type="hidden" name="firma_cliente_base64" id="firma_cliente_base64_hidden-{{ visita.id_visita }}">
+                        </div>
+
                         <div style="margin-bottom: 16px;">
                             <label style="font-weight: 700; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 4px;">Coordenadas de Cierre:</label>
                             <input type="text" name="coordenadas_tecnico" id="coords-{{ visita.id_visita }}" required readonly placeholder="Presione el botón de abajo para capturar" style="background-color: #cbd5e1; font-weight: bold; text-align: center;">
@@ -415,6 +491,32 @@
         </div>
     </div>
 
+    <!-- Modal Selector de Contacto -->
+    <div id="modalSelectorContacto" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+        <div style="background-color: #1e1e2d; color: white; border-radius: 16px; border: 1px solid #334155; width: 100%; max-width: 420px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.5); overflow: hidden;">
+            <div style="padding: 18px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
+                <h5 id="modalContactoTitulo" style="margin: 0; color: white; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                    📞 Seleccionar Contacto
+                </h5>
+                <button type="button" onclick="cerrarModalContacto()" style="background: none; border: none; color: white; font-size: 1.8rem; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
+            </div>
+            
+            <div style="padding: 20px; display: flex; flex-direction: column; gap: 15px;">
+                <p id="modalContactoSubtitulo" style="margin: 0; color: #cbd5e1; font-size: 0.9rem; line-height: 1.4;">
+                    Se detectaron múltiples números de teléfono. Por favor, selecciona a cuál deseas contactar:
+                </p>
+                
+                <div id="lista-contactos" style="display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 4px;">
+                    <!-- Los botones se insertarán dinámicamente -->
+                </div>
+                
+                <button type="button" onclick="cerrarModalContacto()" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #334155; background: #2d3748; color: white; font-weight: 700; cursor: pointer; font-size: 0.9rem; margin-top: 5px;">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- FUNCIÓN PARA CERRAR EL MODAL ---
         function cerrarModalHistorial() {
@@ -470,39 +572,169 @@
                     document.getElementById('lista-historial').innerHTML = '<p style="color: #ef4444; text-align: center;">Error de conexión.</p>';
                 });
         }
-        // --- 1. LÓGICA DE WHATSAPP ---
-        function abrirWhatsApp(telefonos, tecnico, token) {
-            // Limpia el número. Si guardaron "0991234567 / 0987654321", toma el primero.
-            let tel = telefonos.split('/')[0].replace(/\D/g, '');
+        // --- 1. LÓGICA DE CONTACTO (LLAMADAS Y WHATSAPP) ---
+        function parsearTelefonos(telefonosStr) {
+            if (!telefonosStr) return [];
+            
+            // Separamos por /, , o ;
+            const partes = telefonosStr.split(/[/,;]/);
+            const resultados = [];
+            
+            partes.forEach(p => {
+                let texto = p.trim();
+                if (!texto) return;
+                
+                // Buscamos descripción entre paréntesis
+                let etiqueta = "";
+                const m = texto.match(/\(([^)]+)\)/);
+                if (m) {
+                    etiqueta = m[1].trim();
+                    texto = texto.replace(/\([^)]+\)/g, "").trim();
+                }
+                
+                // Extraemos dígitos numéricos
+                const digitos = texto.replace(/\D/g, '');
+                if (digitos.length >= 7) {
+                    resultados.push({
+                        numero: digitos,
+                        etiqueta: etiqueta || "Contacto"
+                    });
+                }
+            });
+            
+            return resultados;
+        }
 
-            // Reemplaza el '0' inicial de Ecuador por '593'
-            if (tel.startsWith('0')) {
-                tel = '593' + tel.substring(1);
+        function abrirLlamada(telefonos) {
+            const contactos = parsearTelefonos(telefonos);
+            if (contactos.length === 0) {
+                alert("No hay números de teléfono válidos registrados.");
+                return;
             }
+            if (contactos.length === 1) {
+                ejecutarLlamada(contactos[0].numero);
+            } else {
+                mostrarModalContacto("Llamar al Cliente", contactos, function(num) {
+                    ejecutarLlamada(num);
+                });
+            }
+        }
 
-            // Arma el link dinámico usando el dominio actual de tu servidor
+        function ejecutarLlamada(numero) {
+            window.location.href = `tel:${numero}`;
+        }
+
+        function abrirWhatsApp(telefonos, tecnico, token) {
+            const contactos = parsearTelefonos(telefonos);
+            if (contactos.length === 0) {
+                alert("No hay números de teléfono válidos registrados.");
+                return;
+            }
+            
             const dominio = window.location.origin;
             const linkRastreo = `${dominio}/rastreo/${token}`;
+            const mensaje = `¡Hola! Soy ${tecnico}, tu amigo de Futurity. Voy en camino a tu domicilio para conectar tu servicio, porque tú nos importas. \u{1F499} Sigue mi ubicación en tiempo real aquí: ${linkRastreo}`;
 
-            // El mensaje que se enviará con la esencia de la empresa
-            const mensaje = `¡Hola! Soy ${tecnico}, tu amigo de Futurity. Voy en camino a tu domicilio para conectar tu servicio, porque tú nos importas. 💙 Sigue mi ubicación en tiempo real aquí: ${linkRastreo}`;
-
-            // Abre WhatsApp en el celular
-            window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`, '_blank');
+            if (contactos.length === 1) {
+                ejecutarWhatsApp(contactos[0].numero, mensaje);
+            } else {
+                mostrarModalContacto("Avisar al Cliente (WhatsApp)", contactos, function(num) {
+                    ejecutarWhatsApp(num, mensaje);
+                });
+            }
         }
 
         function enviarEncuestaWhatsApp(telefonos, token) {
-            let tel = telefonos.split('/')[0].replace(/\D/g, '');
-            if (tel.startsWith('0')) {
-                tel = '593' + tel.substring(1);
+            const contactos = parsearTelefonos(telefonos);
+            if (contactos.length === 0) {
+                alert("No hay números de teléfono válidos registrados.");
+                return;
             }
 
             const dominio = window.location.origin;
-            const linkRastreo = `${dominio}/rastreo/${token}`;
+            const linkEncuesta = `${dominio}/encuesta/${token}`;
+            const mensaje = `¡Hola! Tu servicio de Futurity ya ha sido finalizado con éxito. Para nosotros, tú nos importas y queremos seguir siendo el amigo que te conecta. \u{1F499} Por favor, ayúdanos calificando nuestro servicio aquí: ${linkEncuesta}`;
 
-            const mensaje = `¡Hola! Tu servicio de Futurity ya ha sido finalizado con éxito. Para nosotros, tú nos importas y queremos seguir siendo el amigo que te conecta. 💙 Por favor, ayúdanos calificando nuestro servicio aquí: ${linkRastreo}`;
+            if (contactos.length === 1) {
+                ejecutarWhatsApp(contactos[0].numero, mensaje);
+            } else {
+                mostrarModalContacto("Enviar Encuesta (WhatsApp)", contactos, function(num) {
+                    ejecutarWhatsApp(num, mensaje);
+                });
+            }
+        }
 
+        function ejecutarWhatsApp(numero, mensaje) {
+            let tel = numero;
+            if (tel.startsWith('0')) {
+                tel = '593' + tel.substring(1);
+            } else if (tel.length === 9 && tel.startsWith('9')) {
+                tel = '593' + tel;
+            }
             window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`, '_blank');
+        }
+
+        function mostrarModalContacto(titulo, contactos, callbackSelect) {
+            document.getElementById('modalContactoTitulo').innerText = titulo;
+            const lista = document.getElementById('lista-contactos');
+            lista.innerHTML = '';
+            
+            contactos.forEach(c => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.style.width = '100%';
+                btn.style.padding = '14px 18px';
+                btn.style.borderRadius = '12px';
+                btn.style.border = '1px solid #334155';
+                btn.style.backgroundColor = '#0f172a';
+                btn.style.color = '#fff';
+                btn.style.fontSize = '0.95rem';
+                btn.style.fontWeight = '600';
+                btn.style.textAlign = 'left';
+                btn.style.cursor = 'pointer';
+                btn.style.display = 'flex';
+                btn.style.justifyContent = 'space-between';
+                btn.style.alignItems = 'center';
+                btn.style.transition = 'all 0.2s';
+                btn.style.marginBottom = '8px';
+                
+                btn.onmouseenter = () => {
+                    btn.style.backgroundColor = '#1e293b';
+                    btn.style.borderColor = '#475569';
+                };
+                btn.onmouseleave = () => {
+                    btn.style.backgroundColor = '#0f172a';
+                    btn.style.borderColor = '#334155';
+                };
+                
+                let iconHtml = '';
+                if (titulo.toLowerCase().includes("llam")) {
+                    iconHtml = '<i class="fa-solid fa-phone" style="color: #3b82f6; font-size: 1.1rem;"></i>';
+                } else {
+                    iconHtml = '<i class="fa-brands fa-whatsapp" style="color: #25d366; font-size: 1.25rem;"></i>';
+                }
+                
+                btn.innerHTML = `
+                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                        <span style="font-size: 0.8rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">${c.etiqueta}</span>
+                        <span style="font-size: 1.05rem; letter-spacing: 0.5px;">${c.numero}</span>
+                    </div>
+                    <div>${iconHtml}</div>
+                `;
+                
+                btn.onclick = () => {
+                    cerrarModalContacto();
+                    callbackSelect(c.numero);
+                };
+                
+                lista.appendChild(btn);
+            });
+            
+            document.getElementById('modalSelectorContacto').style.display = 'flex';
+        }
+
+        function cerrarModalContacto() {
+            document.getElementById('modalSelectorContacto').style.display = 'none';
         }
 
         // --- 1.4. RASTREO SATELITAL GLOBAL DE LA JORNADA ---
@@ -1041,6 +1273,40 @@
                     alert("Por favor, capture su ubicación GPS antes de finalizar.");
                     return;
                 }
+
+                // 1. Validar firma del cliente
+                const infoFirma = canvasesFirma[idVisita];
+                if (!infoFirma || !infoFirma.tieneTrazos) {
+                    alert("Por favor, solicite la firma del cliente antes de finalizar.");
+                    return;
+                }
+
+                // Guardar firma base64 en su hidden input correspondiente
+                const hiddenFirma = document.getElementById(`firma_cliente_base64_hidden-${idVisita}`);
+                if (hiddenFirma && infoFirma) {
+                    hiddenFirma.value = infoFirma.canvas.toDataURL('image/png');
+                }
+
+                // 2. Validar fotos de equipos
+                const checkJuntos = document.getElementById(`equipos-juntos-${idVisita}`);
+                const hiddenFoto1 = document.getElementById(`foto_equipos_base64_hidden-${idVisita}`);
+                const hiddenFoto2 = document.getElementById(`foto_equipos_2_base64_hidden-${idVisita}`);
+                
+                if (checkJuntos && checkJuntos.checked) {
+                    if (!hiddenFoto1 || !hiddenFoto1.value) {
+                        alert("Por favor, tome la foto de los equipos (ONU y Router) juntos antes de finalizar.");
+                        return;
+                    }
+                } else {
+                    if (!hiddenFoto1 || !hiddenFoto1.value) {
+                        alert("Por favor, tome la foto de la ONU antes de finalizar.");
+                        return;
+                    }
+                    if (!hiddenFoto2 || !hiddenFoto2.value) {
+                        alert("Por favor, tome la foto del Router antes de finalizar.");
+                        return;
+                    }
+                }
             }
             
             const data = serializeForm(form);
@@ -1065,6 +1331,174 @@
                     mostrarAccionEncoladaUI(form, submitBtn, tipo);
                     actualizarBannerOffline();
                 });
+        }
+
+        // --- FUNCIONES PARA CAPTURA DE FOTOS Y CANVAS DE FIRMA ---
+        const canvasesFirma = {};
+
+        function inicializarCanvasesFirma() {
+            const canvases = document.querySelectorAll('canvas[id^="canvas-firma-"]');
+            canvases.forEach(canvas => {
+                const idVisita = canvas.id.replace('canvas-firma-', '');
+                setupDrawingCanvas(canvas, idVisita);
+            });
+        }
+
+        function setupDrawingCanvas(canvas, idVisita) {
+            const ctx = canvas.getContext('2d');
+            let drawing = false;
+            
+            function resizeCanvas() {
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                
+                // Configurar trazo
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+            }
+            
+            resizeCanvas();
+            // Evitar problemas de recálculo si el contenedor cambia de tamaño al inicio
+            setTimeout(resizeCanvas, 200);
+            
+            canvasesFirma[idVisita] = {
+                canvas: canvas,
+                ctx: ctx,
+                tieneTrazos: false
+            };
+
+            function getMousePos(e) {
+                const rect = canvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: clientX - rect.left,
+                    y: clientY - rect.top
+                };
+            }
+
+            function startDrawing(e) {
+                drawing = true;
+                const pos = getMousePos(e);
+                ctx.beginPath();
+                ctx.moveTo(pos.x, pos.y);
+                if (e.cancelable) e.preventDefault();
+            }
+
+            function draw(e) {
+                if (!drawing) return;
+                const pos = getMousePos(e);
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+                canvasesFirma[idVisita].tieneTrazos = true;
+                if (e.cancelable) e.preventDefault();
+            }
+
+            function stopDrawing() {
+                drawing = false;
+            }
+
+            // Mouse Events
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseleave', stopDrawing);
+
+            // Touch Events
+            canvas.addEventListener('touchstart', startDrawing, { passive: false });
+            canvas.addEventListener('touchmove', draw, { passive: false });
+            canvas.addEventListener('touchend', stopDrawing);
+        }
+
+        function limpiarCanvasFirma(idVisita) {
+            const info = canvasesFirma[idVisita];
+            if (info) {
+                info.ctx.clearRect(0, 0, info.canvas.width, info.canvas.height);
+                info.tieneTrazos = false;
+                const hiddenInput = document.getElementById(`firma_cliente_base64_hidden-${idVisita}`);
+                if (hiddenInput) hiddenInput.value = '';
+            }
+        }
+
+        function toggleInputsFotos(idVisita) {
+            const check = document.getElementById(`equipos-juntos-${idVisita}`);
+            const hiddenCheck = document.getElementById(`equipos-juntos-hidden-${idVisita}`);
+            const containerConjunta = document.getElementById(`container-foto-conjunta-${idVisita}`);
+            const containerSeparadas = document.getElementById(`container-fotos-separadas-${idVisita}`);
+            
+            const hiddenFoto1 = document.getElementById(`foto_equipos_base64_hidden-${idVisita}`);
+            const hiddenFoto2 = document.getElementById(`foto_equipos_2_base64_hidden-${idVisita}`);
+            
+            if (check.checked) {
+                hiddenCheck.value = "1";
+                containerConjunta.style.display = "block";
+                containerSeparadas.style.display = "none";
+                
+                if (hiddenFoto2) hiddenFoto2.value = "";
+                const inputOnu = document.getElementById(`input-foto-onu-${idVisita}`);
+                const inputRouter = document.getElementById(`input-foto-router-${idVisita}`);
+                if (inputOnu) inputOnu.value = "";
+                if (inputRouter) inputRouter.value = "";
+                
+                document.getElementById(`preview-foto-onu-${idVisita}`).style.display = "none";
+                document.getElementById(`preview-foto-router-${idVisita}`).style.display = "none";
+            } else {
+                hiddenCheck.value = "0";
+                containerConjunta.style.display = "none";
+                containerSeparadas.style.display = "block";
+                
+                const inputConjunta = document.getElementById(`input-foto-conjunta-${idVisita}`);
+                if (inputConjunta) inputConjunta.value = "";
+                document.getElementById(`preview-foto-conjunta-${idVisita}`).style.display = "none";
+            }
+        }
+
+        function comprimirYConvertirFoto(idVisita, inputEl, hiddenInputIdName, previewImgId) {
+            const file = inputEl.files[0];
+            if (!file) return;
+            
+            const preview = document.getElementById(previewImgId);
+            const hiddenInput = document.getElementById(`${hiddenInputIdName}_base64_hidden-${idVisita}`);
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                preview.style.display = "block";
+                
+                const img = new Image();
+                img.onload = function() {
+                    const maxW = 1000;
+                    const maxH = 1000;
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > height) {
+                        if (width > maxW) {
+                            height = Math.round((height * maxW) / width);
+                            width = maxW;
+                        }
+                    } else {
+                        if (height > maxH) {
+                            width = Math.round((width * maxH) / height);
+                            height = maxH;
+                        }
+                    }
+                    
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    const base64Str = canvas.toDataURL('image/jpeg', 0.6);
+                    hiddenInput.value = base64Str;
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
         }
 
         function obtenerColaOffline() {
@@ -1365,6 +1799,7 @@
         setInterval(procesarColaSincronizacion, 15000);
 
         window.addEventListener('DOMContentLoaded', () => {
+            inicializarCanvasesFirma();
             inicializarFormulariosDesdeCola();
             procesarColaSincronizacion();
         });

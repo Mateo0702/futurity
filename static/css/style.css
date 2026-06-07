@@ -1032,6 +1032,33 @@ tr:hover {
   transform: translateY(1px);
 }
 
+.body-tecnico .btn-call {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: fit-content;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px rgba(37, 99, 235, 0.15);
+}
+
+.body-tecnico .btn-call:hover {
+  background: linear-gradient(135deg, #60a5fa, #3b82f6);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(37, 99, 235, 0.25);
+}
+
+.body-tecnico .btn-call:active {
+  transform: translateY(1px);
+}
+
 .body-tecnico .btn-historial {
   background-color: #f1f5f9;
   color: #475569;
@@ -1718,6 +1745,36 @@ body.dark-mode textarea:focus {
   border-color: var(--primary) !important;
 }
 
+/* Expanded details row styles */
+.visita-detalles-row {
+  background-color: #f8fafc !important;
+}
+.visita-detalles-row td {
+  background-color: #f8fafc !important;
+}
+.visita-detalles-row:hover,
+.visita-detalles-row:hover td {
+  background-color: #f8fafc !important;
+}
+.visita-detalles-container {
+  color: #334155 !important;
+}
+
+/* Dark mode overrides */
+body.dark-mode .visita-detalles-row {
+  background-color: #0f172a !important;
+}
+body.dark-mode .visita-detalles-row td {
+  background-color: #0f172a !important;
+}
+body.dark-mode .visita-detalles-row:hover,
+body.dark-mode .visita-detalles-row:hover td {
+  background-color: #0f172a !important;
+}
+body.dark-mode .visita-detalles-container {
+  color: #cbd5e1 !important;
+}
+
 body.dark-mode table {
   background: var(--card-bg) !important;
 }
@@ -2238,4 +2295,11 @@ body.dark-mode .fila-blanca {
 }
 .sidebar.collapsed .sidebar-area-selector {
   display: none !important;
+}
+
+/* Asegurar visibilidad de la firma y canvas en modo oscuro */
+body.dark-mode img.firma-exhibicion,
+body.dark-mode .firma-canvas-container {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
 }

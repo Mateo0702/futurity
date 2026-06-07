@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Futurity - Encuesta de Satisfacción</title>
+    <!-- Google Fonts for premium typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* Standalone Survey Styling - Warm Paper/Eye-Comfort theme (Anti-glare, high contrast) */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+        body {
+            background-color: #e8e2d5; /* Soft sand/warm linen background: absolute comfort at high brightness */
+            color: #2d2a26; /* Soft charcoal/espresso text for high legibility without eye strain */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px 15px;
+            box-sizing: border-box;
+        }
+        .encuesta-card {
+            background: #f7f4eb; /* Warm ivory/cream card (no white glare) */
+            padding: 30px 24px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(45, 42, 38, 0.06);
+            width: 100%;
+            max-width: 480px;
+            box-sizing: border-box;
+            text-align: center;
+            border: 1px solid #d6cfc2; /* Soft warm border */
+            margin: 20px auto; /* Safe centering layout that prevents vertical cutoff and allows natural scroll */
+        }
+        .encuesta-header {
+            margin-bottom: 25px;
+        }
+        .encuesta-header img {
+            height: 50px;
+            width: auto;
+            max-width: 150px;
+            margin-bottom: 12px;
+            object-fit: contain;
+        }
+        .encuesta-header h2 {
+            font-size: 1.6rem;
+            color: #dc2626; /* Futurity red brand color */
+            font-weight: 800;
+            margin: 0 0 8px 0;
+            letter-spacing: -0.025em;
+        }
+        .encuesta-header p {
+            color: #5c5346; /* Medium warm brown - readable and soft */
+            font-size: 0.95rem;
+            margin: 0;
+            line-height: 1.5;
+        }
+        .tech-info {
+            background-color: #e8e2d5;
+            padding: 10px 18px;
+            border-radius: 100px;
+            margin-bottom: 25px;
+            font-size: 0.9rem;
+            color: #2d2a26;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid #d6cfc2;
+        }
+        .rating-group {
+            margin-bottom: 24px;
+            text-align: left;
+        }
+        .rating-group p {
+            font-weight: 700;
+            color: #2d2a26;
+            margin: 0 0 4px 0;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .rating-group p span.desc {
+            font-weight: normal;
+            color: #5c5346;
+            display: block;
+            margin-top: 2px;
+            font-size: 0.82rem;
+            line-height: 1.4;
+        }
+        .rating-options {
+            display: flex;
+            justify-content: space-between;
+            gap: 4px;
+            margin-top: 12px;
+        }
+        .rating-btn {
+            flex: 1;
+            max-width: 36px;
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1.5px solid #c8bfae;
+            border-radius: 50%;
+            cursor: pointer;
+            font-weight: 700;
+            color: #5c5346;
+            font-size: 0.85rem;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+            background-color: #f7f4eb;
+            box-sizing: border-box;
+        }
+        .rating-btn input {
+            display: none;
+        }
+        .rating-btn:hover {
+            background-color: #e8e2d5;
+            border-color: #b0a695;
+            color: #2d2a26;
+        }
+        .rating-btn.selected {
+            background-color: #2563eb; /* Selection blue */
+            border-color: #2563eb;
+            color: white;
+            box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+            transform: scale(1.08);
+        }
+        .rating-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.72rem;
+            color: #8c806d;
+            margin-top: 6px;
+            font-weight: 600;
+        }
+        textarea.comment-box {
+            width: 100%;
+            padding: 12px;
+            border-radius: 12px;
+            border: 1.5px solid #c8bfae;
+            font-size: 0.95rem;
+            box-sizing: border-box;
+            font-family: inherit;
+            margin-top: 10px;
+            outline: none;
+            resize: none;
+            transition: all 0.2s ease;
+            background-color: #f7f4eb;
+            color: #2d2a26;
+        }
+        textarea.comment-box:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+        textarea.comment-box::placeholder {
+            color: #a09584;
+        }
+        .btn-submit {
+            width: 100%;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 1.05rem;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+        }
+        .btn-submit:hover {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+        }
+        .btn-submit:active {
+            transform: translateY(1px);
+        }
+        .thanks-panel {
+            text-align: center;
+            padding: 20px 0;
+        }
+        .thanks-panel h3 {
+            color: #2d2a26;
+            font-size: 1.5rem;
+            font-weight: 800;
+            margin-bottom: 10px;
+        }
+        .thanks-panel p {
+            color: #5c5346;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+        @media (max-width: 400px) {
+            .encuesta-card {
+                padding: 24px 16px;
+            }
+            .rating-options {
+                gap: 2px;
+            }
+            .rating-btn {
+                font-size: 0.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="encuesta-card">
+        <div id="survey-form-container">
+            <div class="encuesta-header">
+                <img src="{{ url_for('static', filename='img/logo_futurity.png') }}" alt="Futurity Logo">
+                <h2>¡Servicio Finalizado!</h2>
+                <p>En Futurity, nos importa ser el amigo que te conecta. &#x1F499;<br>Por favor, ayúdanos a evaluar nuestro servicio:</p>
+            </div>
+
+            <div class="tech-info">
+                <span>&#x1F527;</span>
+                <span>Técnico:</span>
+                <strong id="tech-name">
+                    {% if visita.tecnico_principal and visita.tecnico_apoyo %}
+                        {{ visita.tecnico_principal.split(' ')[0] }} y {{ visita.tecnico_apoyo.split(' ')[0] }}
+                    {% else %}
+                        {{ visita.tecnico_principal or 'Técnico Asignado' }}
+                    {% endif %}
+                </strong>
+            </div>
+
+            <form id="form-calificacion-detallada" onsubmit="enviarEncuesta(event)">
+                <!-- Pregunta 1: Rapidez -->
+                <div class="rating-group">
+                    <p>&#x26A1; Rapidez de solución</p>
+                    <span class="desc">¿Qué tan rápido solucionamos tu problema o realizamos tu instalación?</span>
+                    <div class="rating-options" data-name="rapidez">
+                        {% for i in range(1, 11) %}
+                        <label class="rating-btn">
+                            <input type="radio" name="rapidez" value="{{ i }}" required>
+                            <span>{{ i }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <div class="rating-labels">
+                        <span>Muy lento &#x1F422;</span>
+                        <span>Inmediato &#x1F680;</span>
+                    </div>
+                </div>
+
+                <!-- Pregunta 2: Atención -->
+                <div class="rating-group">
+                    <p>&#x1F60A; Atención del técnico</p>
+                    <span class="desc">¿Cómo calificarías el trato, respeto y amabilidad del personal?</span>
+                    <div class="rating-options" data-name="atencion">
+                        {% for i in range(1, 11) %}
+                        <label class="rating-btn">
+                            <input type="radio" name="atencion" value="{{ i }}" required>
+                            <span>{{ i }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <div class="rating-labels">
+                        <span>Deficiente &#x1F641;</span>
+                        <span>Excelente &#x1F31F;</span>
+                    </div>
+                </div>
+
+                <!-- Pregunta 3: Explicación -->
+                <div class="rating-group">
+                    <p>&#x1F4E2; Explicación del técnico</p>
+                    <span class="desc">¿Qué tan clara y detallada fue la explicación sobre el trabajo realizado?</span>
+                    <div class="rating-options" data-name="explicacion">
+                        {% for i in range(1, 11) %}
+                        <label class="rating-btn">
+                            <input type="radio" name="explicacion" value="{{ i }}" required>
+                            <span>{{ i }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <div class="rating-labels">
+                        <span>Confusa &#x2753;</span>
+                        <span>Muy clara &#x1F44D;</span>
+                    </div>
+                </div>
+
+                <!-- Comentario Opcional -->
+                <div class="rating-group">
+                    <p>&#x1F4AC; Comentarios adicionales (Opcional)</p>
+                    <textarea name="comentario" class="comment-box" rows="3" placeholder="Cuéntanos más sobre tu experiencia..."></textarea>
+                </div>
+
+                <button type="submit" class="btn-submit">
+                    Enviar Calificación
+                </button>
+            </form>
+        </div>
+
+        <!-- Mensaje de Agradecimiento -->
+        <div id="survey-thanks-container" class="thanks-panel" style="display: none;">
+            <div style="font-size: 3.5rem; margin-bottom: 15px;">&#x1F389;</div>
+            <h3>¡Muchas gracias!</h3>
+            <p>Tus respuestas han sido registradas. Nos ayudan enormemente a seguir mejorando y ser el amigo que te conecta. &#x1F499;</p>
+        </div>
+    </div>
+
+    <script>
+        const token = "{{ token }}";
+
+        // Feedback visual interactivo para los botones
+        document.querySelectorAll('.rating-options').forEach(group => {
+            const buttons = group.querySelectorAll('.rating-btn');
+            buttons.forEach(btn => {
+                const input = btn.querySelector('input');
+                input.addEventListener('change', function() {
+                    if (this.checked) {
+                        buttons.forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                    }
+                });
+            });
+        });
+
+        function enviarEncuesta(e) {
+            e.preventDefault();
+            const form = document.getElementById('form-calificacion-detallada');
+            const formData = new FormData(form);
+            
+            // Enviamos los datos al backend
+            fetch(`/api/cliente/calificar/${token}`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    document.getElementById('survey-form-container').style.display = 'none';
+                    document.getElementById('survey-thanks-container').style.display = 'block';
+                } else {
+                    alert('Error al guardar la encuesta: ' + data.message);
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert("Ocurrió un error al enviar las respuestas. Por favor, intenta de nuevo.");
+            });
+        }
+    </script>
+</body>
+</html>

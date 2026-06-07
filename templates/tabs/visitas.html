@@ -153,12 +153,12 @@
                                 onclick="toggleDetalles('detalles-{{ visita.id_visita }}')">Detalles</button>
                         </td>
                     </tr>
-                    <tr id="detalles-{{ visita.id_visita }}" style="display: none; background-color: #f8fafc;">
+                    <tr id="detalles-{{ visita.id_visita }}" class="visita-detalles-row" style="display: none;">
                         <td colspan="7" style="padding: 20px; text-align: left; border-bottom: 2px solid #e2e8f0;">
-                            <div
-                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 0.9rem; color: #334155;">
+                            <div class="visita-detalles-container"
+                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 0.9rem;">
                                 <div
-                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 0.9rem; color: #334155;">
+                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 0.9rem;">
                                     <div>
                                         <p style="margin: 0 0 8px 0;"><strong>👤 Creado por:</strong> <span
                                                 style="color: var(--primary);">{{ visita.creado_por }}</span></p>
@@ -371,6 +371,47 @@
                                                 <div style="grid-column: span 2;"><strong>📍 Coordenadas de Cierre:</strong> <span style="color: #475569;">{{ visita.coordenadas_tecnico or 'Sin GPS' }}</span></div>
                                             </div>
 
+                                            <!-- Fotos de Equipos y Firma de Cierre -->
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                                                <!-- Fotos de Equipos -->
+                                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                                    <span style="font-weight: bold; font-size: 0.8rem; color: #475569; margin-bottom: 8px; align-self: flex-start; display: flex; align-items: center; gap: 4px;"><i class="fa-solid fa-camera"></i> Evidencia de Equipos:</span>
+                                                    {% if visita.foto_equipos %}
+                                                        <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                                                            <div style="text-align: center;">
+                                                                <img src="{{ url_for('static', filename='uploads/' + visita.foto_equipos) }}" style="max-height: 120px; max-width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; transition: transform 0.2s;" onclick="window.open(this.src)" onmouseenter="this.style.transform='scale(1.05)'" onmouseleave="this.style.transform='scale(1)'">
+                                                                <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px;">
+                                                                    {% if visita.equipos_juntos %}
+                                                                        ONU / Router
+                                                                    {% else %}
+                                                                        ONU
+                                                                    {% endif %}
+                                                                </div>
+                                                            </div>
+                                                            {% if not visita.equipos_juntos and visita.foto_equipos_2 %}
+                                                            <div style="text-align: center;">
+                                                                <img src="{{ url_for('static', filename='uploads/' + visita.foto_equipos_2) }}" style="max-height: 120px; max-width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; transition: transform 0.2s;" onclick="window.open(this.src)" onmouseenter="this.style.transform='scale(1.05)'" onmouseleave="this.style.transform='scale(1)'">
+                                                                <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px;">Router</div>
+                                                            </div>
+                                                            {% endif %}
+                                                        </div>
+                                                    {% else %}
+                                                        <span style="font-size: 0.85rem; color: #94a3b8; font-style: italic;">Sin foto registrada</span>
+                                                    {% endif %}
+                                                </div>
+
+                                                <!-- Firma del Cliente -->
+                                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                                    <span style="font-weight: bold; font-size: 0.8rem; color: #475569; margin-bottom: 8px; align-self: flex-start; display: flex; align-items: center; gap: 4px;"><i class="fa-solid fa-signature"></i> Firma de Conformidad:</span>
+                                                    {% if visita.firma_cliente %}
+                                                        <img src="{{ url_for('static', filename='uploads/' + visita.firma_cliente) }}" class="firma-exhibicion" style="max-height: 90px; max-width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; background: white; padding: 5px; cursor: pointer;" onclick="window.open(this.src)">
+                                                        <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px;">Cliente Conforme</div>
+                                                    {% else %}
+                                                        <span style="font-size: 0.85rem; color: #94a3b8; font-style: italic;">Sin firma registrada</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+
                                         {% elif visita.resolucion_final %}
                                             <p style="margin: 0; color: #b91c1c;"><strong>🛑 Motivo de Cancelación:</strong> {{ visita.resolucion_final }}</p>
                                         {% else %}
@@ -536,9 +577,9 @@
             if (apoyo && apoyo.trim() !== '') {
                 cuadrilla += ` y ${apoyo}`;
             }
-            mensaje = `¡Hola! En Futurity queremos ser el amigo que te conecta, porque tú nos importas. 💙 Tu servicio de instalación ha sido programado con éxito:\n\n👤 Cliente: ${cliente}\n📅 Fecha: ${fecha}\n⏰ Horario: ${preferencia}\n🚗 Cuadrilla: ${cuadrilla} (Vehículo Placa: ${placa})\n\n¡Estamos listos para atenderte!`;
+            mensaje = `¡Hola! En Futurity queremos ser el amigo que te conecta, porque tú nos importas. \u{1F499} Tu servicio de instalación ha sido programado con éxito:\n\n\u{1F464} Cliente: ${cliente}\n\u{1F4C5} Fecha: ${fecha}\n\u{23F0} Horario: ${preferencia}\n\u{1F697} Cuadrilla: ${cuadrilla} (Vehículo Placa: ${placa})\n\n¡Estamos listos para atenderte!`;
         } else {
-            mensaje = `¡Hola! En Futurity queremos ser el amigo que te conecta, porque tú nos importas. 💙 Tu visita técnica de soporte ha sido programada con éxito:\n\n👤 Cliente: ${cliente}\n📅 Fecha: ${fecha}\n⏰ Horario: ${preferencia}\n\n¡Estamos listos para atenderte!`;
+            mensaje = `¡Hola! En Futurity queremos ser el amigo que te conecta, porque tú nos importas. \u{1F499} Tu visita técnica de soporte ha sido programada con éxito:\n\n\u{1F464} Cliente: ${cliente}\n\u{1F4C5} Fecha: ${fecha}\n\u{23F0} Horario: ${preferencia}\n\n¡Estamos listos para atenderte!`;
         }
 
         window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`, '_blank');

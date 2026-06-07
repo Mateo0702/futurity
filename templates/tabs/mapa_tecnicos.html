@@ -18,7 +18,7 @@
         <!-- Panel Izquierdo: Lista de Técnicos -->
         <div class="card" style="padding: 20px; margin-bottom: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border-color);">
             <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 1.1rem; color: var(--text-main); display: flex; justify-content: space-between; align-items: center;">
-                <span>Técnicos Activos</span>
+                <span>Equipo Técnico</span>
                 <span id="contador-tecnicos" style="background-color: #e2e8f0; color: #475569; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">0</span>
             </h3>
             
@@ -32,6 +32,25 @@
 
         <!-- Panel Derecho: El Mapa -->
         <div class="card" style="padding: 0; margin-bottom: 0; position: relative; overflow: hidden; border: 1px solid var(--border-color);">
+            <!-- Indicadores KPI flotantes sobre el mapa -->
+            <div class="kpis-flotantes-container" style="position: absolute; top: 15px; left: 15px; z-index: 1000; display: flex; gap: 10px; flex-wrap: wrap; pointer-events: none;">
+                <div class="kpi-flotante-card" style="background: white; border: 1px solid #cbd5e1; border-radius: 12px; padding: 8px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 8px; font-family: 'Inter', sans-serif; pointer-events: auto; transition: all 0.2s;">
+                    <div style="width: 8px; height: 8px; border-radius: 50%; background-color: #10b981;"></div>
+                    <span style="font-size: 0.75rem; color: #475569; font-weight: 600;">Activos: <strong id="kpi-tec-activos" style="color: #0f172a; font-size: 0.85rem;">0</strong></span>
+                </div>
+                <div class="kpi-flotante-card" style="background: white; border: 1px solid #cbd5e1; border-radius: 12px; padding: 8px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 8px; font-family: 'Inter', sans-serif; pointer-events: auto; transition: all 0.2s;">
+                    <div style="width: 8px; height: 8px; border-radius: 50%; background-color: #94a3b8;"></div>
+                    <span style="font-size: 0.75rem; color: #475569; font-weight: 600;">Inactivos: <strong id="kpi-tec-inactivos" style="color: #0f172a; font-size: 0.85rem;">0</strong></span>
+                </div>
+                <div class="kpi-flotante-card" style="background: white; border: 1px solid #cbd5e1; border-radius: 12px; padding: 8px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 8px; font-family: 'Inter', sans-serif; pointer-events: auto; transition: all 0.2s;">
+                    <div style="width: 8px; height: 8px; border-radius: 50%; background-color: #3b82f6;"></div>
+                    <span style="font-size: 0.75rem; color: #475569; font-weight: 600;">Libres: <strong id="kpi-tec-libres" style="color: #0f172a; font-size: 0.85rem;">0</strong></span>
+                </div>
+                <div class="kpi-flotante-card" style="background: white; border: 1px solid #cbd5e1; border-radius: 12px; padding: 8px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 8px; font-family: 'Inter', sans-serif; pointer-events: auto; transition: all 0.2s;">
+                    <div style="width: 8px; height: 8px; border-radius: 50%; background-color: #ef4444;"></div>
+                    <span style="font-size: 0.75rem; color: #475569; font-weight: 600;">Ocupados: <strong id="kpi-tec-ocupados" style="color: #0f172a; font-size: 0.85rem;">0</strong></span>
+                </div>
+            </div>
             <div id="mapa-tecnicos-live" style="width: 100%; height: 100%; z-index: 1;"></div>
         </div>
 
@@ -64,6 +83,30 @@
     }
     body.dark-mode .item-tecnico-lista:hover {
         background-color: #334155 !important;
+    }
+
+    /* Estilos flotantes de KPI */
+    body.dark-mode .kpi-flotante-card {
+        background-color: #1e293b !important;
+        border-color: #334155 !important;
+        box-shadow: none !important;
+    }
+    body.dark-mode .kpi-flotante-card span {
+        color: #94a3b8 !important;
+    }
+    body.dark-mode .kpi-flotante-card strong {
+        color: #f8fafc !important;
+    }
+
+    /* Estilo para técnicos desconectados */
+    .item-tecnico-lista.desconectado {
+        background-color: #f1f5f9 !important;
+        border-color: #e2e8f0 !important;
+        opacity: 0.6;
+    }
+    body.dark-mode .item-tecnico-lista.desconectado {
+        background-color: #0f172a !important;
+        border-color: #1e293b !important;
     }
     body.dark-mode .tooltip-tecnico {
         background-color: #dc2626 !important;
@@ -245,40 +288,45 @@
             const crew1Techs = ['HENRY CUENCA', 'EDUARDO CRUZ'];
             const crew2Techs = ['JOOEL ARROYO', 'OSWALDO BERMEO'];
 
-            let crew1Data = null;
-            let crew2Data = null;
-            const otherTechs = [];
+            let crew1Candidates = ubicaciones.filter(u => crew1Techs.includes(u.tecnico.toUpperCase()));
+            let crew2Candidates = ubicaciones.filter(u => crew2Techs.includes(u.tecnico.toUpperCase()));
 
-            ubicaciones.forEach(u => {
-                const nameUpper = u.tecnico.toUpperCase();
-                if (crew1Techs.includes(nameUpper)) {
-                    if (!crew1Data || new Date(u.ultima_actualizacion) > new Date(crew1Data.ultima_actualizacion)) {
-                        crew1Data = u;
-                    }
-                } else if (crew2Techs.includes(nameUpper)) {
-                    if (!crew2Data || new Date(u.ultima_actualizacion) > new Date(crew2Data.ultima_actualizacion)) {
-                        crew2Data = u;
-                    }
+            let crew1Data = null;
+            if (crew1Candidates.length > 0) {
+                let conectados = crew1Candidates.filter(c => c.conectado === 1);
+                if (conectados.length > 0) {
+                    conectados.sort((a, b) => new Date(b.ultima_actualizacion) - new Date(a.ultima_actualizacion));
+                    crew1Data = { ...conectados[0] };
                 } else {
-                    otherTechs.push(u);
+                    crew1Candidates.sort((a, b) => new Date(b.ultima_actualizacion || 0) - new Date(a.ultima_actualizacion || 0));
+                    crew1Data = { ...crew1Candidates[0] };
                 }
-            });
+                crew1Data.tecnico = "CUADRILLA 1 (Henry C. / Eduardo C.)";
+                crew1Data.foto_perfil = "default_avatar.png";
+            }
+
+            let crew2Data = null;
+            if (crew2Candidates.length > 0) {
+                let conectados = crew2Candidates.filter(c => c.conectado === 1);
+                if (conectados.length > 0) {
+                    conectados.sort((a, b) => new Date(b.ultima_actualizacion) - new Date(a.ultima_actualizacion));
+                    crew2Data = { ...conectados[0] };
+                } else {
+                    crew2Candidates.sort((a, b) => new Date(b.ultima_actualizacion || 0) - new Date(a.ultima_actualizacion || 0));
+                    crew2Data = { ...crew2Candidates[0] };
+                }
+                crew2Data.tecnico = "CUADRILLA 2 (Jooel A. / Oswaldo B.)";
+                crew2Data.foto_perfil = "default_avatar.png";
+            }
+
+            const otherTechs = ubicaciones.filter(u => 
+                !crew1Techs.includes(u.tecnico.toUpperCase()) && 
+                !crew2Techs.includes(u.tecnico.toUpperCase())
+            );
 
             const groupedUbicaciones = [];
-            if (crew1Data) {
-                groupedUbicaciones.push({
-                    ...crew1Data,
-                    tecnico: "CUADRILLA 1 (Henry C. / Eduardo C.)",
-                    foto_perfil: "default_avatar.png"
-                });
-            }
-            if (crew2Data) {
-                groupedUbicaciones.push({
-                    ...crew2Data,
-                    tecnico: "CUADRILLA 2 (Jooel A. / Oswaldo B.)",
-                    foto_perfil: "default_avatar.png"
-                });
-            }
+            if (crew1Data) groupedUbicaciones.push(crew1Data);
+            if (crew2Data) groupedUbicaciones.push(crew2Data);
             otherTechs.forEach(o => groupedUbicaciones.push(o));
             ubicaciones = groupedUbicaciones;
         }
@@ -286,13 +334,38 @@
         const listaContainer = document.getElementById('lista-tecnicos-mapa');
         const contadorEl = document.getElementById('contador-tecnicos');
 
+        // Calcular conteos de KPI
+        let conectadosCount = 0;
+        let desconectadosCount = 0;
+        let libresCount = 0;
+        let ocupadosCount = 0;
+
+        ubicaciones.forEach(u => {
+            if (u.conectado === 1) {
+                conectadosCount++;
+                if (u.estado.includes('Trabajando') || u.estado.includes('En camino')) {
+                    ocupadosCount++;
+                } else if (u.estado === 'Disponible' || u.estado === 'Sesión Iniciada') {
+                    libresCount++;
+                }
+            } else {
+                desconectadosCount++;
+            }
+        });
+
+        // Actualizar tarjetas de KPI
+        document.getElementById('kpi-tec-activos').innerText = conectadosCount;
+        document.getElementById('kpi-tec-inactivos').innerText = desconectadosCount;
+        document.getElementById('kpi-tec-libres').innerText = libresCount;
+        document.getElementById('kpi-tec-ocupados').innerText = ocupadosCount;
+
         listaContainer.innerHTML = '';
         contadorEl.innerText = ubicaciones.length;
 
         if (ubicaciones.length === 0) {
             listaContainer.innerHTML = `
                 <div style="text-align: center; color: #64748b; margin-top: 50px;">
-                    <p style="font-size: 0.9rem; font-style: italic;">No hay técnicos activos reportando GPS en este momento.</p>
+                    <p style="font-size: 0.9rem; font-style: italic;">No hay técnicos registrados en este área.</p>
                 </div>
             `;
             // Limpiar todos los marcadores y círculos del mapa
@@ -338,62 +411,15 @@
 
         ubicaciones.forEach(u => {
             const key = u.tecnico;
-            nombresActivos.push(key);
-            const latLng = [u.lat, u.lon];
+            const perfilUrl = `/static/uploads/${u.foto_perfil || 'default_avatar.png'}`;
+            const vehiculoUrl = `/static/uploads/${u.foto_vehiculo || 'furgoneta_milton.jpeg'}`;
+            const placa = u.placa_vehiculo || 'S/P';
 
-            // Seleccionar icono y badges
-            let icono = iconoOffline;
-            let estadoClaseColor = '#64748b'; // gris por defecto
-            let estadoTexto = u.estado || 'INACTIVO';
-
-            if (u.alerta_panico) {
-                icono = iconoPanico;
-                estadoClaseColor = '#ef4444';
-                estadoTexto = '🚨 EMERGENCIA: ' + (u.mensaje_panico || 'Auxilio');
-                
-                nombresPanicoActuales.push(key);
-                if (!tecnicosEnPanico.has(key)) {
-                    tecnicosEnPanico.add(key);
-                    reproducirSonidoAlerta();
-                    mostrarToastAlerta(key, u.mensaje_panico || 'Auxilio solicitado');
-                }
-            } else if (u.estado.includes('En camino')) {
-                icono = iconoEnRuta;
-                estadoClaseColor = '#f59e0b'; // naranja/amarillo
-            } else if (u.estado.includes('Trabajando')) {
-                icono = iconoEnProgreso;
-                estadoClaseColor = '#ef4444'; // rojo
-            } else if (u.estado === 'En Descanso') {
-                icono = iconoOffline;
-                estadoClaseColor = '#ea580c'; // naranja oscuro
-            } else if (u.estado === 'Sesión Iniciada' || u.estado === 'Disponible') {
-                icono = iconoOffline;
-                estadoClaseColor = '#10b981'; // verde
-            }
-
-            // Manejar círculo de pánico
-            if (u.alerta_panico) {
-                if (circulosEmergencia[key]) {
-                    circulosEmergencia[key].setLatLng(latLng);
-                } else {
-                    const circle = L.circle(latLng, {
-                        color: '#ef4444',
-                        fillColor: '#ef4444',
-                        fillOpacity: 0.4,
-                        radius: 80,
-                        className: 'pulso-emergencia-mapa'
-                    }).addTo(mapaTecnicos);
-                    circulosEmergencia[key] = circle;
-                }
-            } else {
-                if (circulosEmergencia[key]) {
-                    mapaTecnicos.removeLayer(circulosEmergencia[key]);
-                    delete circulosEmergencia[key];
-                }
-            }
-
-            // Calcular diferencia de tiempo de actualización
-            let tiempoTexto = 'Hace un momento';
+            // Configurar variables de visualización
+            let estadoClaseColor = '#94a3b8'; // gris (desconectado)
+            let estadoTexto = 'DESCONECTADO';
+            let tiempoTexto = 'Desconectado';
+            
             if (u.ultima_actualizacion) {
                 const fechaAct = new Date(u.ultima_actualizacion);
                 const difSegs = Math.floor((new Date() - fechaAct) / 1000);
@@ -406,63 +432,125 @@
                 }
             }
 
-            // Crear o mover marcador en el mapa
-            if (marcadoresTecnicos[key]) {
-                marcadoresTecnicos[key].setLatLng(latLng);
-                marcadoresTecnicos[key].setIcon(icono);
-            } else {
-                const marker = L.marker(latLng, { icon: icono }).addTo(mapaTecnicos);
-                marker.bindTooltip(key, { permanent: true, direction: 'top', className: 'tooltip-tecnico' });
-                marcadoresTecnicos[key] = marker;
-            }
+            // Si está conectado, renderizar marcador en el mapa
+            if (u.conectado === 1) {
+                nombresActivos.push(key);
+                const latLng = [u.lat, u.lon];
+                let icono = iconoOffline;
 
-            const perfilUrl = `/static/uploads/${u.foto_perfil || 'default_avatar.png'}`;
-            const vehiculoUrl = `/static/uploads/${u.foto_vehiculo || 'furgoneta_milton.jpeg'}`;
-            const placa = u.placa_vehiculo || 'S/P';
+                if (u.alerta_panico) {
+                    icono = iconoPanico;
+                    estadoClaseColor = '#ef4444';
+                    estadoTexto = '🚨 EMERGENCIA: ' + (u.mensaje_panico || 'Auxilio');
+                    
+                    nombresPanicoActuales.push(key);
+                    if (!tecnicosEnPanico.has(key)) {
+                        tecnicosEnPanico.add(key);
+                        reproducirSonidoAlerta();
+                        mostrarToastAlerta(key, u.mensaje_panico || 'Auxilio solicitado');
+                    }
+                } else if (u.estado.includes('En camino')) {
+                    icono = iconoEnRuta;
+                    estadoClaseColor = '#f59e0b';
+                    estadoTexto = u.estado;
+                } else if (u.estado.includes('Trabajando')) {
+                    icono = iconoEnProgreso;
+                    estadoClaseColor = '#ef4444';
+                    estadoTexto = u.estado;
+                } else if (u.estado === 'En Descanso') {
+                    icono = iconoOffline;
+                    estadoClaseColor = '#ea580c';
+                    estadoTexto = u.estado;
+                } else if (u.estado === 'Sesión Iniciada' || u.estado === 'Disponible') {
+                    icono = iconoOffline;
+                    estadoClaseColor = '#10b981';
+                    estadoTexto = u.estado;
+                } else {
+                    estadoTexto = u.estado;
+                }
 
-            // Popup para clic en el marcador
-            let popupAlertaPanico = '';
-            if (u.alerta_panico) {
-                popupAlertaPanico = `
-                    <div style="background-color: #fee2e2; border: 1px solid #fca5a5; padding: 8px; border-radius: 8px; margin-bottom: 8px; color: #b91c1c; font-weight: bold; text-align: center; font-size: 0.8rem; line-height: 1.3;">
-                        🚨 EMERGENCIA EN RUTA:<br>
-                        "${u.mensaje_panico || 'Auxilio solicitado'}"
+                // Círculo de pánico
+                if (u.alerta_panico) {
+                    if (circulosEmergencia[key]) {
+                        circulosEmergencia[key].setLatLng(latLng);
+                    } else {
+                        const circle = L.circle(latLng, {
+                            color: '#ef4444',
+                            fillColor: '#ef4444',
+                            fillOpacity: 0.4,
+                            radius: 80,
+                            className: 'pulso-emergencia-mapa'
+                        }).addTo(mapaTecnicos);
+                        circulosEmergencia[key] = circle;
+                    }
+                } else {
+                    if (circulosEmergencia[key]) {
+                        mapaTecnicos.removeLayer(circulosEmergencia[key]);
+                        delete circulosEmergencia[key];
+                    }
+                }
+
+                // Crear o mover marcador en el mapa
+                if (marcadoresTecnicos[key]) {
+                    marcadoresTecnicos[key].setLatLng(latLng);
+                    marcadoresTecnicos[key].setIcon(icono);
+                } else {
+                    const marker = L.marker(latLng, { icon: icono }).addTo(mapaTecnicos);
+                    marker.bindTooltip(key, { permanent: true, direction: 'top', className: 'tooltip-tecnico' });
+                    marcadoresTecnicos[key] = marker;
+                }
+
+                let popupAlertaPanico = '';
+                if (u.alerta_panico) {
+                    popupAlertaPanico = `
+                        <div style="background-color: #fee2e2; border: 1px solid #fca5a5; padding: 8px; border-radius: 8px; margin-bottom: 8px; color: #b91c1c; font-weight: bold; text-align: center; font-size: 0.8rem; line-height: 1.3;">
+                            🚨 EMERGENCIA EN RUTA:<br>
+                            "${u.mensaje_panico || 'Auxilio solicitado'}"
+                        </div>
+                    `;
+                }
+
+                const popupHtml = `
+                    <div style="font-family: 'Inter', sans-serif; padding: 5px; width: 220px; display: flex; flex-direction: column; gap: 8px;">
+                        ${popupAlertaPanico}
+                        <div style="display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                            <img src="${perfilUrl}" alt="${key}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1.5px solid #cbd5e1;">
+                            <div>
+                                <h4 style="margin: 0; color: #0f172a; font-size: 0.95rem; font-weight: 800;">${key}</h4>
+                                <span style="background-color: ${estadoClaseColor}; color: white; padding: 2px 6px; font-size: 0.65rem; font-weight: bold; border-radius: 4px; text-transform: uppercase; display: inline-block; margin-top: 2px;">
+                                    ${estadoTexto}
+                                </span>
+                            </div>
+                        </div>
+                        <div style="font-size: 0.8rem; color: #475569; display: flex; flex-direction: column; gap: 3px;">
+                            <div><i class="fa-solid fa-truck" style="color: #94a3b8; width: 16px;"></i> Placa: <strong>${placa}</strong></div>
+                            <div style="text-align: center; margin: 5px 0;">
+                                <img src="${vehiculoUrl}" alt="Furgoneta" style="width: 100%; height: 80px; border-radius: 6px; object-fit: cover; border: 1px solid #e2e8f0;">
+                            </div>
+                            <div style="font-size: 0.7rem; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 4px; display: flex; justify-content: space-between; align-items: center;">
+                                <span>Actualizado:</span>
+                                <strong>${tiempoTexto}</strong>
+                            </div>
+                        </div>
                     </div>
                 `;
+                marcadoresTecnicos[key].bindPopup(popupHtml);
             }
 
-            const popupHtml = `
-                <div style="font-family: 'Inter', sans-serif; padding: 5px; width: 220px; display: flex; flex-direction: column; gap: 8px;">
-                    ${popupAlertaPanico}
-                    <div style="display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
-                        <img src="${perfilUrl}" alt="${key}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1.5px solid #cbd5e1;">
-                        <div>
-                            <h4 style="margin: 0; color: #0f172a; font-size: 0.95rem; font-weight: 800;">${key}</h4>
-                            <span style="background-color: ${estadoClaseColor}; color: white; padding: 2px 6px; font-size: 0.65rem; font-weight: bold; border-radius: 4px; text-transform: uppercase; display: inline-block; margin-top: 2px;">
-                                ${estadoTexto}
-                            </span>
-                        </div>
-                    </div>
-                    <div style="font-size: 0.8rem; color: #475569; display: flex; flex-direction: column; gap: 3px;">
-                        <div><i class="fa-solid fa-truck" style="color: #94a3b8; width: 16px;"></i> Placa: <strong>${placa}</strong></div>
-                        <div style="text-align: center; margin: 5px 0;">
-                            <img src="${vehiculoUrl}" alt="Furgoneta" style="width: 100%; height: 80px; border-radius: 6px; object-fit: cover; border: 1px solid #e2e8f0;">
-                        </div>
-                        <div style="font-size: 0.7rem; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 4px; display: flex; justify-content: space-between; align-items: center;">
-                            <span>Actualizado:</span>
-                            <strong>${tiempoTexto}</strong>
-                        </div>
-                    </div>
-                </div>
-            `;
-            marcadoresTecnicos[key].bindPopup(popupHtml);
-
+            // HTML de listado
             const itemClasePanico = u.alerta_panico ? 'panico' : '';
+            const itemClaseConexion = u.conectado === 0 ? 'desconectado' : '';
+            let clickHandlerHtml = `onclick="enfocarTecnico('${key}', ${u.lat}, ${u.lon})"`;
+            let centrarBtnHtml = `<span style="color: #2563eb; font-weight: 700; font-size: 0.7rem;"><i class="fa-solid fa-location-crosshairs"></i> Centrar</span>`;
+            
+            if (u.conectado === 0) {
+                clickHandlerHtml = '';
+                centrarBtnHtml = `<span style="color: #94a3b8; font-weight: 700; font-size: 0.7rem;"><i class="fa-solid fa-circle-notch"></i> Offline</span>`;
+            }
 
-            // HTML del ítem de la lista izquierda
             const itemHtml = `
-                <div onclick="enfocarTecnico('${key}', ${u.lat}, ${u.lon})" class="item-tecnico-lista ${itemClasePanico}" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 12px;">
-                    <img src="${perfilUrl}" alt="${key}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1.5px solid #e2e8f0; flex-shrink: 0;">
+                <div ${clickHandlerHtml} class="item-tecnico-lista ${itemClasePanico} ${itemClaseConexion}" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; cursor: ${u.conectado === 0 ? 'not-allowed' : 'pointer'}; transition: all 0.2s ease; display: flex; align-items: center; gap: 12px; ${u.conectado === 0 ? 'opacity: 0.55;' : ''}">
+                    <img src="${perfilUrl}" alt="${key}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1.5px solid #e2e8f0; flex-shrink: 0; ${u.conectado === 0 ? 'filter: grayscale(1);' : ''}">
                     <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 5px;">
                             <strong style="color: var(--text-main); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;">${key}</strong>
@@ -470,7 +558,7 @@
                         </div>
                         <div style="font-size: 0.75rem; color: #64748b; display: flex; justify-content: space-between; align-items: center;">
                             <span><i class="fa-regular fa-clock" style="width: 13px; color: #94a3b8;"></i> ${tiempoTexto}</span>
-                            <span style="color: #2563eb; font-weight: 700; font-size: 0.7rem;"><i class="fa-solid fa-location-crosshairs"></i> Centrar</span>
+                            ${centrarBtnHtml}
                         </div>
                     </div>
                 </div>

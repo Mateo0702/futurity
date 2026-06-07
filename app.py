@@ -21,7 +21,7 @@ OFICINA_LON = -78.975419
 app = Flask(__name__)
 # Pega aquí el código que generaste en la terminal:
 app.secret_key = '8b093e226bd1155f8527a13430d48a4048023c69e7cde5dcc37224407f0ac1c2' 
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 app.register_blueprint(visitas_bp)
 app.register_blueprint(tecnico_bp)
@@ -128,8 +128,8 @@ def login():
             cursor.close()
             conexion.close()
 
-            # Creamos la sesión y la marcamos como no permanente si cerramos el navegador
-            session.permanent = False
+            # Creamos la sesión y la marcamos como permanente (duración de 30 días)
+            session.permanent = True
             session['user_id'] = usuario['id_usuario']
             session['user_name'] = usuario['nombre']
             session['user_role'] = usuario['rol']
