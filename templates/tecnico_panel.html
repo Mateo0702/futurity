@@ -80,6 +80,37 @@
                 </div>
             </div>
 
+            <!-- Panel de Asistencia en Ruta (Pánico) -->
+            <div id="card-panico" class="panic-card {% if alerta_panico %}activo{% endif %}">
+                <div style="flex-grow: 1;">
+                    <h3 class="panic-card-title">
+                        <i class="fa-solid fa-triangle-exclamation {% if alerta_panico %}fa-fade{% endif %}" style="color: {% if alerta_panico %}#ffffff{% else %}#ef4444{% endif %};"></i>
+                        Asistencia en Ruta
+                    </h3>
+                    <p class="panic-card-status">
+                        {% if alerta_panico %}
+                            🚨 Alerta activa: <strong style="color: white;">{{ mensaje_panico }}</strong>
+                        {% else %}
+                            En caso de quedar varado, sin gasolina o emergencia.
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="actions-panico-container" style="display: flex; gap: 10px; align-items: center;">
+                    {% if alerta_panico %}
+                        <a href="tel:{{ numero_grua }}" class="btn-grua-call">
+                            <i class="fa-solid fa-phone"></i> Llamar Grúa
+                        </a>
+                        <button id="btn-toggle-panico" onclick="desactivarPanico()" class="btn-panic-turnoff">
+                            Apagar Alerta
+                        </button>
+                    {% else %}
+                        <button id="btn-toggle-panico" onclick="abrirModalPanico()" class="btn-panic-toggle">
+                            🚨 Botón de Pánico
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+
             {% for visita in visitas %}
             <div class="visita-card 
             {% if visita.estado == 'EN_RUTA' %}visita-en-ruta
@@ -88,7 +119,13 @@
 
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
                     <div>
-                        <div class="visita-title">📍 Parada #{{ visita.numero_parada }}</div>
+                        <div class="visita-title">
+                            {% if visita.es_instalacion == 1 %}
+                                🔌 Instalación #{{ visita.numero_parada }}
+                            {% else %}
+                                📍 Parada #{{ visita.numero_parada }}
+                            {% endif %}
+                        </div>
                         <div class="visita-ref">Ref. Sist: #VT-{{ visita.id_visita }}</div>
                     </div>
 
@@ -123,8 +160,18 @@
                 </div>
 
                 <div class="dato-cliente" style="border-bottom: none; padding-bottom: 0; margin-bottom: 15px;">
-                    <strong>Problema Reportado</strong>
-                    <span style="color: #b91c1c; font-weight: 700;">{{ visita.problema }}</span>
+                    {% if visita.es_instalacion == 1 %}
+                        <strong>Servicio a Realizar</strong>
+                        <span style="color: #3b82f6; font-weight: 700;">🔌 {{ visita.servicio }}</span>
+                        <div style="margin-top: 8px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 0.85rem; background: rgba(0,0,0,0.03); padding: 10px; border-radius: 8px; border: 1px solid var(--border-color);">
+                            <div><strong style="color: #64748b;">Producto:</strong> <span style="font-weight: 600;">{{ visita.producto }}</span></div>
+                            <div><strong style="color: #64748b;">Tipo:</strong> <span style="font-weight: 600;">{{ visita.tipo_instalacion }}</span></div>
+                            <div style="grid-column: span 2;"><strong style="color: #64748b;">Vendedor:</strong> <span style="font-weight: 600;">{{ visita.vendedor or 'N/A' }}</span></div>
+                        </div>
+                    {% else %}
+                        <strong>Problema Reportado</strong>
+                        <span style="color: #b91c1c; font-weight: 700;">{{ visita.problema }}</span>
+                    {% endif %}
                     {% if visita.observacion_callcenter %}
                     <p style="margin: 6px 0 0 0; font-size: 0.9rem; color: #64748b; font-style: italic; line-height: 1.4;">
                         "{{ visita.observacion_callcenter }}"
@@ -188,7 +235,13 @@
 
                 {% elif visita.estado == 'EN_PROGRESO' %}
                 <div style="background-color: #eff6ff; padding: 18px; border-radius: 12px; margin-top: 15px; border: 1px solid #bfdbfe;">
-                    <h3 style="margin-top: 0; color: #1e3a8a; font-size: 1.1rem; font-weight: 800; margin-bottom: 12px;">Cierre de Visita</h3>
+                    <h3 style="margin-top: 0; color: #1e3a8a; font-size: 1.1rem; font-weight: 800; margin-bottom: 12px;">
+                        {% if visita.es_instalacion == 1 %}
+                            Cierre de Instalación
+                        {% else %}
+                            Cierre de Visita
+                        {% endif %}
+                    </h3>
 
                     <form onsubmit="procesarAccionFormulario(event, {{ visita.id_visita }}, '/api/tecnico/finalizar/{{ visita.id_visita }}', 'finalizar')">
                         <div style="margin-bottom: 12px;">
@@ -259,8 +312,18 @@
 
                 {% elif visita.estado == 'FINALIZADA' %}
                 <div style="background-color: #dcfce7; padding: 12px; text-align: center; border-radius: 12px; color: #166534; font-weight: bold; margin-top: 15px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                    <i class="fa-solid fa-circle-check"></i> Visita Completada
+                    <i class="fa-solid fa-circle-check"></i> 
+                    {% if visita.es_instalacion == 1 %}
+                        Instalación Completada
+                    {% else %}
+                        Visita Completada
+                    {% endif %}
                 </div>
+                {% if visita.token_rastreo %}
+                <button type="button" class="btn-wa" style="margin-top: 10px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); width: 100%; border: none; padding: 10px; border-radius: 8px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; color: white;" onclick="enviarEncuestaWhatsApp('{{ visita.telefonos }}', '{{ visita.token_rastreo }}')">
+                    <i class="fa-brands fa-whatsapp" style="font-size: 1.25rem;"></i> Enviar Encuesta de Satisfacción
+                </button>
+                {% endif %}
                 {% endif %}
 
             </div>
@@ -269,8 +332,20 @@
                 <div class="empty-state-icon">
                     <i class="fa-solid fa-calendar-check"></i>
                 </div>
-                <h3 class="empty-state-title">No hay visitas</h3>
-                <p class="empty-state-subtitle">No tienes visitas pendientes asignadas para el día de hoy. ¡Buen trabajo!</p>
+                <h3 class="empty-state-title">
+                    {% if area_trabajo == 'INSTALACIONES' %}
+                        No hay instalaciones
+                    {% else %}
+                        No hay visitas
+                    {% endif %}
+                </h3>
+                <p class="empty-state-subtitle">
+                    {% if area_trabajo == 'INSTALACIONES' %}
+                        No tienes instalaciones pendientes asignadas para el día de hoy. ¡Buen trabajo!
+                    {% else %}
+                        No tienes visitas pendientes asignadas para el día de hoy. ¡Buen trabajo!
+                    {% endif %}
+                </p>
             </div>
             {% endfor %}
         </div>
@@ -293,6 +368,53 @@
 
         </div>
     </div>
+        </div>
+    </div>
+
+    <!-- Modal de Activación de Pánico -->
+    <div id="modalPanico" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+        <div style="background-color: #1e1e2d; color: white; border-radius: 16px; border: 1px solid #334155; width: 100%; max-width: 420px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.5); overflow: hidden;">
+            <div style="padding: 18px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);">
+                <h5 style="margin: 0; color: white; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-triangle-exclamation fa-beat"></i> Declarar Emergencia
+                </h5>
+                <button type="button" onclick="cerrarModalPanico()" style="background: none; border: none; color: white; font-size: 1.8rem; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
+            </div>
+            
+            <div style="padding: 20px; display: flex; flex-direction: column; gap: 15px;">
+                <p style="margin: 0; color: #cbd5e1; font-size: 0.9rem; line-height: 1.4;">
+                    Selecciona el motivo de la emergencia. Esta alerta se notificará inmediatamente en el mapa de la oficina.
+                </p>
+                
+                <div>
+                    <label style="font-weight: 700; color: #94a3b8; font-size: 0.8rem; display: block; margin-bottom: 8px; text-transform: uppercase;">Motivo de Asistencia:</label>
+                    <select id="select-motivo-panico" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #334155; background-color: #0f172a; color: white; font-size: 0.9rem; outline: none; appearance: auto;">
+                        <option value="Vehículo Varado (Falla Mecánica)">🚗 Vehículo Varado (Falla Mecánica)</option>
+                        <option value="Sin Gasolina / Combustible">⛽ Sin Gasolina / Combustible</option>
+                        <option value="Llanta pinchada / Neumático">🔧 Llanta pinchada / Neumático</option>
+                        <option value="Accidente de Tránsito">⚠️ Accidente de Tránsito</option>
+                        <option value="Problema / Incidente con Cliente">👤 Incidente con Cliente</option>
+                        <option value="Otro motivo de emergencia">🚨 Otro motivo de emergencia</option>
+                    </select>
+                </div>
+
+                <div id="otro-motivo-container" style="display: none;">
+                    <label style="font-weight: 700; color: #94a3b8; font-size: 0.8rem; display: block; margin-bottom: 8px; text-transform: uppercase;">Especifique el motivo:</label>
+                    <input type="text" id="input-motivo-otro" placeholder="Ej. Pérdida de herramientas, robo, etc..." style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #334155; background-color: #0f172a; color: white; font-size: 0.9rem; outline: none;">
+                </div>
+                
+                <div style="display: flex; gap: 12px; margin-top: 10px;">
+                    <button type="button" onclick="cerrarModalPanico()" style="flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #334155; background: #2d3748; color: white; font-weight: 700; cursor: pointer; font-size: 0.9rem;">
+                        Cancelar
+                    </button>
+                    <button type="button" onclick="confirmarActivacionPanico()" style="flex: 1; padding: 12px; border-radius: 10px; border: none; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; font-weight: 700; cursor: pointer; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);">
+                        <i class="fa-solid fa-bell"></i> Activar Alerta
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- FUNCIÓN PARA CERRAR EL MODAL ---
         function cerrarModalHistorial() {
@@ -362,10 +484,24 @@
             const dominio = window.location.origin;
             const linkRastreo = `${dominio}/rastreo/${token}`;
 
-            // El mensaje que se enviará
-            const mensaje = `¡Hola! Soy ${tecnico}, técnico de Futurity. Voy en camino a tu domicilio. Puedes ver mi ubicación en tiempo real aquí: ${linkRastreo}`;
+            // El mensaje que se enviará con la esencia de la empresa
+            const mensaje = `¡Hola! Soy ${tecnico}, tu amigo de Futurity. Voy en camino a tu domicilio para conectar tu servicio, porque tú nos importas. 💙 Sigue mi ubicación en tiempo real aquí: ${linkRastreo}`;
 
             // Abre WhatsApp en el celular
+            window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`, '_blank');
+        }
+
+        function enviarEncuestaWhatsApp(telefonos, token) {
+            let tel = telefonos.split('/')[0].replace(/\D/g, '');
+            if (tel.startsWith('0')) {
+                tel = '593' + tel.substring(1);
+            }
+
+            const dominio = window.location.origin;
+            const linkRastreo = `${dominio}/rastreo/${token}`;
+
+            const mensaje = `¡Hola! Tu servicio de Futurity ya ha sido finalizado con éxito. Para nosotros, tú nos importas y queremos seguir siendo el amigo que te conecta. 💙 Por favor, ayúdanos calificando nuestro servicio aquí: ${linkRastreo}`;
+
             window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`, '_blank');
         }
 
@@ -462,6 +598,140 @@
                 btn.style.color = '#fff';
                 btn.innerHTML = estaEnDescanso ? '<i class="fa-solid fa-wifi-slash"></i> Pendiente Terminar (Offline)' : '<i class="fa-solid fa-wifi-slash"></i> Pendiente Iniciar (Offline)';
                 
+                actualizarBannerOffline();
+            });
+        }
+
+        // --- 1.4.6. GESTIÓN DE ALERTAS DE PÁNICO ---
+        function abrirModalPanico() {
+            document.getElementById('modalPanico').style.display = 'flex';
+            document.getElementById('select-motivo-panico').value = 'Vehículo Varado (Falla Mecánica)';
+            document.getElementById('otro-motivo-container').style.display = 'none';
+            document.getElementById('input-motivo-otro').value = '';
+        }
+
+        function cerrarModalPanico() {
+            document.getElementById('modalPanico').style.display = 'none';
+        }
+
+        // Event listener para mostrar input de otro motivo
+        window.addEventListener('DOMContentLoaded', () => {
+            const selectMotivo = document.getElementById('select-motivo-panico');
+            if (selectMotivo) {
+                selectMotivo.addEventListener('change', function() {
+                    const otroContainer = document.getElementById('otro-motivo-container');
+                    if (otroContainer) {
+                        otroContainer.style.display = this.value === 'Otro motivo de emergencia' ? 'block' : 'none';
+                    }
+                });
+            }
+        });
+
+        function confirmarActivacionPanico() {
+            const select = document.getElementById('select-motivo-panico');
+            let motivo = select.value;
+            if (motivo === 'Otro motivo de emergencia') {
+                const otroInput = document.getElementById('input-motivo-otro');
+                motivo = otroInput.value.trim() || 'Otro motivo de emergencia';
+            }
+
+            cerrarModalPanico();
+            activarPanico(motivo);
+        }
+
+        function activarPanico(motivo) {
+            const card = document.getElementById('card-panico');
+            const btn = document.getElementById('btn-toggle-panico');
+            
+            if (btn) btn.disabled = true;
+
+            sendFormRequest('/api/tecnico/panico/activar', { mensaje: motivo })
+            .then(res => {
+                if (res.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Error al activar alerta de pánico');
+                    if (btn) btn.disabled = false;
+                }
+            })
+            .catch(err => {
+                console.log('Error de conexión al activar pánico, encolando en local:', err);
+                encolarAccionOffline(0, '/api/tecnico/panico/activar', { mensaje: motivo }, 'panico_activar');
+                
+                // Actualizar UI indicando pánico offline
+                if (card) {
+                    card.className = 'panic-card activo';
+                    card.style.background = 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)';
+                    card.style.borderColor = '#dc2626';
+                    card.style.color = 'white';
+                    
+                    const title = card.querySelector('.panic-card-title');
+                    if (title) title.innerHTML = '<i class="fa-solid fa-triangle-exclamation fa-fade" style="color: white;"></i> Asistencia en Ruta';
+                    
+                    const status = card.querySelector('.panic-card-status');
+                    if (status) status.innerHTML = `🚨 Alerta encolada (Offline): <strong style="color: white;">${motivo}</strong><br><span style="font-size: 0.8rem; opacity: 0.9;">Llama directamente a la grúa al: <strong>{{ numero_grua }}</strong></span>`;
+                }
+                
+                // Mostrar controles de pánico activo en modo offline
+                const actionsContainer = card ? card.querySelector('.actions-panico-container') : null;
+                if (actionsContainer) {
+                    actionsContainer.innerHTML = `
+                        <a href="tel:{{ numero_grua }}" class="btn-grua-call">
+                            <i class="fa-solid fa-phone"></i> Llamar Grúa
+                        </a>
+                        <button onclick="desactivarPanico()" class="btn-panic-turnoff">
+                            Cancelar
+                        </button>
+                    `;
+                }
+                
+                alert('Sin conexión. Alerta guardada localmente. Por favor realiza una llamada tradicional a la grúa al número en pantalla.');
+                actualizarBannerOffline();
+            });
+        }
+
+        function desactivarPanico() {
+            const btn = document.getElementById('btn-toggle-panico');
+            if (btn) btn.disabled = true;
+
+            sendFormRequest('/api/tecnico/panico/desactivar', {})
+            .then(res => {
+                if (res.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Error al desactivar alerta de pánico');
+                    if (btn) btn.disabled = false;
+                }
+            })
+            .catch(err => {
+                console.log('Error de conexión al desactivar pánico, encolando en local:', err);
+                encolarAccionOffline(0, '/api/tecnico/panico/desactivar', {}, 'panico_desactivar');
+                
+                // Restaurar UI a normal
+                const card = document.getElementById('card-panico');
+                if (card) {
+                    card.className = 'panic-card';
+                    card.style.background = '';
+                    card.style.borderColor = '';
+                    card.style.color = '';
+                    
+                    const title = card.querySelector('.panic-card-title');
+                    if (title) title.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Asistencia en Ruta';
+                    
+                    const status = card.querySelector('.panic-card-status');
+                    if (status) status.innerText = 'En caso de quedar varado, sin gasolina o emergencia.';
+                }
+                
+                const actionsContainer = card ? card.querySelector('.actions-panico-container') : null;
+                if (actionsContainer) {
+                    actionsContainer.innerHTML = `
+                        <button id="btn-toggle-panico" onclick="abrirModalPanico()" class="btn-panic-toggle">
+                            🚨 Botón de Pánico
+                        </button>
+                    `;
+                }
+                
+                alert('Sin conexión. Desactivación guardada localmente.');
                 actualizarBannerOffline();
             });
         }
@@ -1026,6 +1296,57 @@
                     select.disabled = true;
                     select.style.borderColor = '#d97706';
                     select.style.color = '#f59e0b';
+                }
+            }
+
+            // Sincronizar estado del botón de pánico si está encolado
+            const queuedPanicActivar = queue.find(item => item.endpoint === '/api/tecnico/panico/activar');
+            const queuedPanicDesactivar = queue.find(item => item.endpoint === '/api/tecnico/panico/desactivar');
+            const cardPanico = document.getElementById('card-panico');
+            
+            if (queuedPanicActivar && cardPanico) {
+                cardPanico.className = 'panic-card activo';
+                cardPanico.style.background = 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)';
+                cardPanico.style.borderColor = '#dc2626';
+                cardPanico.style.color = 'white';
+                
+                const title = cardPanico.querySelector('.panic-card-title');
+                if (title) title.innerHTML = '<i class="fa-solid fa-triangle-exclamation fa-fade" style="color: white;"></i> Asistencia en Ruta';
+                
+                const status = cardPanico.querySelector('.panic-card-status');
+                const motivo = queuedPanicActivar.data.mensaje || 'Emergencia';
+                if (status) status.innerHTML = `🚨 Alerta encolada (Offline): <strong style="color: white;">${motivo}</strong><br><span style="font-size: 0.8rem; opacity: 0.9;">Llama directamente a la grúa al: <strong>{{ numero_grua }}</strong></span>`;
+                
+                const actionsContainer = cardPanico.querySelector('.actions-panico-container');
+                if (actionsContainer) {
+                    actionsContainer.innerHTML = `
+                        <a href="tel:{{ numero_grua }}" class="btn-grua-call">
+                            <i class="fa-solid fa-phone"></i> Llamar Grúa
+                        </a>
+                        <button onclick="desactivarPanico()" class="btn-panic-turnoff">
+                            Cancelar
+                        </button>
+                    `;
+                }
+            } else if (queuedPanicDesactivar && cardPanico) {
+                cardPanico.className = 'panic-card';
+                cardPanico.style.background = '';
+                cardPanico.style.borderColor = '';
+                cardPanico.style.color = '';
+                
+                const title = cardPanico.querySelector('.panic-card-title');
+                if (title) title.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Asistencia en Ruta';
+                
+                const status = cardPanico.querySelector('.panic-card-status');
+                if (status) status.innerText = 'En caso de quedar varado, sin gasolina o emergencia.';
+                
+                const actionsContainer = cardPanico.querySelector('.actions-panico-container');
+                if (actionsContainer) {
+                    actionsContainer.innerHTML = `
+                        <button id="btn-toggle-panico" onclick="abrirModalPanico()" class="btn-panic-toggle">
+                            🚨 Botón de Pánico
+                        </button>
+                    `;
                 }
             }
         }

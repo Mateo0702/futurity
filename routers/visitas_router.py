@@ -10,7 +10,7 @@ def registrar_visita():
     # Protección de sesión y rol
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         flash('No tienes permiso para registrar visitas.', 'danger')
         return redirect(url_for('dashboard'))
 
@@ -54,6 +54,15 @@ def registrar_visita():
         velocidad_mbps = int(velocidad_mbps) if velocidad_mbps and velocidad_mbps.isdigit() else None
         problema = request.form.get('problema')
         observacion_callcenter = request.form.get('observacion_callcenter')
+        
+        # Nuevos campos de instalación
+        es_instalacion = int(request.form.get('es_instalacion', 0))
+        producto = request.form.get('producto') or None
+        tipo_instalacion = request.form.get('tipo_instalacion') or None
+        vendedor = request.form.get('vendedor') or None
+        recibido_coordinacion = request.form.get('recibido_coordinacion') or None
+        if recibido_coordinacion == '':
+            recibido_coordinacion = None
         
         # Recopilar la información técnica por partes (Opcional)
         info_parts = []
@@ -115,14 +124,16 @@ def registrar_visita():
             (creado_por, tecnico_principal, tecnico_apoyo, fecha_programada, preferencia_horaria, 
             empresa, contrato, cliente, telefonos, sector, direccion, 
             servicio, velocidad_mbps, problema, observacion_callcenter, informacion_tecnico, 
-            ventana_inicio_min, ventana_fin_min, estado, prioridad)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE', %s)
+            ventana_inicio_min, ventana_fin_min, estado, prioridad,
+            es_instalacion, producto, tipo_instalacion, vendedor, recibido_coordinacion)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE', %s, %s, %s, %s, %s, %s)
         """ 
         valores = (
             creado_por, tecnico_principal, tecnico_apoyo, fecha_programada, preferencia,
             empresa, contrato, cliente, telefonos, sector, direccion_completa,
             servicio, velocidad_mbps, problema, observacion_callcenter, informacion_tecnico,
-            ventana_inicio, ventana_fin, prioridad
+            ventana_inicio, ventana_fin, prioridad,
+            es_instalacion, producto, tipo_instalacion, vendedor, recibido_coordinacion
         )
         
         cursor.execute(query, valores)
@@ -200,7 +211,7 @@ def buscar_cliente(contrato):
 def reagendar_visita(id_visita):
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         flash('No tienes permiso para reagendar visitas.', 'danger')
         return redirect(url_for('dashboard'))
 
@@ -246,7 +257,7 @@ def reagendar_visita(id_visita):
 def cancelar_visita(id_visita):
     if 'user_id' not in session: 
         return redirect(url_for('login'))
-    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         flash('No tienes permiso para cancelar visitas.', 'danger')
         return redirect(url_for('dashboard'))
     
@@ -276,7 +287,7 @@ def cancelar_visita(id_visita):
 def reasignar_tecnicos(id_visita):
     if 'user_id' not in session: 
         return redirect(url_for('login'))
-    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         flash('No tienes permiso para reasignar técnicos.', 'danger')
         return redirect(url_for('dashboard'))
     

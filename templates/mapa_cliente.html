@@ -22,6 +22,7 @@
 
     <div id="panel-calificacion" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100vh; background: white; z-index: 9999; padding: 20px; text-align: center; justify-content: center; align-items: center; flex-direction: column; box-sizing: border-box;">
         <h2 style="color: #d32f2f; font-weight: bold; margin-bottom: 5px;">¡Visita Finalizada!</h2>
+        <p style="color: #64748b; margin-bottom: 10px;">En Futurity, nos importa ser el amigo que te conecta. 💙</p>
         <p style="color: #64748b; margin-bottom: 25px;">¿Qué tal te pareció el servicio de <strong id="calif-nombre-tecnico" style="color: #1e293b;">tu técnico</strong>?</p>
         
         <form id="form-calificacion" onsubmit="enviarCalificacion(event)" style="width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 15px;">
@@ -54,6 +55,7 @@
                 <h1 style="margin: 0;">Futurity</h1>
             </div>
             <p>Hola, {{ visita.cliente }}</p>
+            <p style="font-size: 0.8rem; margin: 5px 0 0 0; opacity: 0.85; font-style: italic;">"El amigo que te conecta, porque tú nos importas" 💙</p>
         </div>
 
         <div id="mapa" style="height: 55vh; width: 100%; min-height: 350px; z-index: 1;"></div>

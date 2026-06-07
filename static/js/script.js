@@ -53,6 +53,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const selectEmpresa = document.querySelector('select[name="empresa"]');
             const empresaVal = selectEmpresa ? selectEmpresa.value : '';
 
+            // Omitir autocompletado si es una instalación nueva
+            const selectServicio = document.querySelector('select[name="servicio"]');
+            const servicioVal = selectServicio ? selectServicio.value : '';
+            const esInstalacionInput = document.querySelector('input[name="es_instalacion"]');
+            const esInstalacionVal = esInstalacionInput ? esInstalacionInput.value === '1' : false;
+
+            if (esInstalacionVal && servicioVal === 'INSTALACIÓN NUEVA') {
+                console.log("Autocompletado omitido: es una instalación nueva.");
+                return;
+            }
+
             if (numeroContrato !== "") {
                 fetch(`/api/cliente/${numeroContrato}?empresa=${encodeURIComponent(empresaVal)}`)
                     .then(response => {

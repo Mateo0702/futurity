@@ -199,7 +199,7 @@ def atenciones_recientes():
 def metricas_atenciones():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas de atenciones."}), 403
     conn = get_db_connection()
     if not conn:

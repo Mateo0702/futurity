@@ -7,6 +7,8 @@ from utils import parsear_informacion_tecnica
 
 tecnico_bp = Blueprint('tecnico', __name__)
 
+NUMERO_GRUA = "0958672088"
+
 def interpretar_preferencia_horaria(texto):
     if not texto:
         return 9999 # Sin hora va al final
@@ -98,11 +100,13 @@ def panel_tecnico(nombre_tecnico):
     cursor.execute("SELECT nombre FROM catalogo_modelos_router WHERE activo = 1 ORDER BY nombre ASC")
     catalogo_router = cursor.fetchall()
 
-    # Obtener estado de actividad y área de trabajo del técnico
-    cursor.execute("SELECT estado_actividad, area_trabajo FROM tecnicos WHERE nombre = %s", (nombre_real,))
+    # Obtener estado de actividad, área de trabajo y pánico del técnico
+    cursor.execute("SELECT estado_actividad, area_trabajo, alerta_panico, mensaje_panico FROM tecnicos WHERE nombre = %s", (nombre_real,))
     tec_estado_row = cursor.fetchone()
     estado_actividad = tec_estado_row['estado_actividad'] if tec_estado_row else 'Disponible'
     area_trabajo = tec_estado_row['area_trabajo'] if (tec_estado_row and tec_estado_row['area_trabajo']) else 'SOPORTE'
+    alerta_panico = tec_estado_row['alerta_panico'] if tec_estado_row else 0
+    mensaje_panico = tec_estado_row['mensaje_panico'] if tec_estado_row else None
     
     cursor.close()
     conexion.close()
@@ -116,6 +120,9 @@ def panel_tecnico(nombre_tecnico):
                            tecnico=nombre_real,
                            estado_actividad=estado_actividad,
                            area_trabajo=area_trabajo,
+                           alerta_panico=alerta_panico,
+                           mensaje_panico=mensaje_panico,
+                           numero_grua=NUMERO_GRUA,
                            soluciones=soluciones,
                            catalogo=catalogo_materiales,
                            catalogo_ont=catalogo_ont,           
@@ -556,6 +563,80 @@ def cambiar_area_trabajo():
             """, (area, tecnico_nombre))
             conexion.commit()
             return jsonify({"status": "ok", "area_trabajo": area})
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+        finally:
+            cursor.close()
+            conexion.close()
+            
+    return jsonify({"status": "error", "message": "Faltan parámetros"}), 400
+
+
+@tecnico_bp.route('/api/tecnico/panico/activar', methods=['POST'])
+def activar_panico():
+    if 'user_id' not in session or session.get('user_role') != 'TECNICO':
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    if request.is_json:
+        datos = request.get_json() or {}
+    else:
+        datos = request.form
+        
+    mensaje = datos.get('mensaje')
+    tecnico_nombre = session.get('user_name')
+
+    if not mensaje and not request.is_json:
+        mensaje = request.form.get('mensaje')
+
+    if not mensaje:
+        mensaje = "Varado / Auxilio solicitado"
+
+    if tecnico_nombre:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        try:
+            # Activar pánico y guardar mensaje
+            cursor.execute("""
+                UPDATE tecnicos 
+                SET alerta_panico = 1,
+                    mensaje_panico = %s,
+                    estado_actividad = %s,
+                    ultima_conexion = NOW()
+                WHERE nombre = %s
+            """, (mensaje, f"🚨 PÁNICO: {mensaje}", tecnico_nombre))
+            conexion.commit()
+            return jsonify({"status": "ok", "mensaje": mensaje})
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+        finally:
+            cursor.close()
+            conexion.close()
+            
+    return jsonify({"status": "error", "message": "Faltan parámetros"}), 400
+
+
+@tecnico_bp.route('/api/tecnico/panico/desactivar', methods=['POST'])
+def desactivar_panico():
+    if 'user_id' not in session or session.get('user_role') != 'TECNICO':
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    tecnico_nombre = session.get('user_name')
+
+    if tecnico_nombre:
+        conexion = get_db_connection()
+        cursor = conexion.cursor()
+        try:
+            # Desactivar pánico
+            cursor.execute("""
+                UPDATE tecnicos 
+                SET alerta_panico = 0,
+                    mensaje_panico = NULL,
+                    estado_actividad = 'Disponible',
+                    ultima_conexion = NOW()
+                WHERE nombre = %s
+            """, (tecnico_nombre,))
+            conexion.commit()
+            return jsonify({"status": "ok"})
         except Exception as e:
             return jsonify({"status": "error", "message": str(e)}), 500
         finally:

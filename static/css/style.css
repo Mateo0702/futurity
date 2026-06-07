@@ -748,6 +748,114 @@ tr:hover {
   gap: 6px;
 }
 
+/* Panic Card & Button Styles */
+.body-tecnico .panic-card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  transition: all 0.3s ease;
+}
+
+.body-tecnico .panic-card.activo {
+  background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+  border-color: #dc2626;
+  color: white !important;
+}
+
+.body-tecnico .panic-card.activo .panic-card-title {
+  color: white !important;
+}
+
+.body-tecnico .panic-card.activo .panic-card-status {
+  color: #fee2e2 !important;
+}
+
+.body-tecnico .panic-card-title {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #0f172a;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.body-tecnico .panic-card-status {
+  margin: 4px 0 0 0;
+  color: #64748b;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.body-tecnico .btn-panic-toggle {
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  padding: 12px 20px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);
+}
+
+.body-tecnico .btn-panic-toggle:hover {
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(239, 68, 68, 0.3);
+}
+
+.body-tecnico .btn-panic-turnoff {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 12px;
+  font-weight: 700;
+  padding: 12px 18px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.body-tecnico .btn-panic-turnoff:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.body-tecnico .btn-grua-call {
+  background: white;
+  color: #dc2626;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  padding: 12px 18px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  transition: all 0.2s ease;
+}
+
+.body-tecnico .btn-grua-call:hover {
+  background: #f8fafc;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(0,0,0,0.2);
+}
+
 .body-tecnico .break-status-badge {
   display: inline-flex;
   align-items: center;
@@ -1736,6 +1844,27 @@ body.dark-mode .break-card-status {
   color: #94a3b8 !important;
 }
 
+body.dark-mode .panic-card {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
+  color: #f8fafc !important;
+}
+
+body.dark-mode .panic-card.activo {
+  background: linear-gradient(135deg, #ef4444 0%, #7f1d1d 100%) !important;
+  border-color: #b91c1c !important;
+  color: white !important;
+}
+
+body.dark-mode .panic-card-title {
+  color: #f8fafc !important;
+}
+
+body.dark-mode .panic-card-status {
+  color: #94a3b8 !important;
+}
+
 body.dark-mode .break-status-badge.disponible {
   background-color: rgba(16, 185, 129, 0.15) !important;
   color: #34d399 !important;
@@ -2101,4 +2230,12 @@ body.dark-mode .fila-blanca {
   .login-header {
     margin-bottom: 25px;
   }
+}
+
+/* Selector de Área Operativa */
+.sidebar-area-selector {
+  transition: opacity 0.2s ease, max-width 0.2s ease;
+}
+.sidebar.collapsed .sidebar-area-selector {
+  display: none !important;
 }

@@ -80,7 +80,7 @@ def create_usuario():
     if not nombre or not email or not password:
         return jsonify({"status": "error", "message": "Todos los campos (nombre, email y contraseña) son obligatorios."}), 400
 
-    if rol not in ['ADMIN', 'ASESOR', 'BODEGA', 'TECNICO']:
+    if rol not in ['ADMIN', 'ASESOR', 'BODEGA', 'TECNICO', 'CALIDAD']:
         return jsonify({"status": "error", "message": "Rol inválido."}), 400
 
     conn = get_db_connection()
@@ -136,7 +136,7 @@ def update_usuario(id_usuario):
     if not nombre or not email or not rol:
         return jsonify({"status": "error", "message": "Nombre, email y rol son campos obligatorios."}), 400
 
-    if rol not in ['ADMIN', 'ASESOR', 'BODEGA', 'TECNICO']:
+    if rol not in ['ADMIN', 'ASESOR', 'BODEGA', 'TECNICO', 'CALIDAD']:
         return jsonify({"status": "error", "message": "Rol inválido."}), 400
 
     conn = get_db_connection()

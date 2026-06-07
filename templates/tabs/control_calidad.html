@@ -12,6 +12,7 @@
             border-radius: 16px;
             box-shadow: var(--shadow-sm);
             border-left: 5px solid var(--primary);
+            transition: background-color 0.2s, border-color 0.2s;
         }
         .kpi-card-calidad h6 {
             color: #64748b;
@@ -29,6 +30,17 @@
         .kpi-card-calidad.success { border-left-color: #10b981; }
         .kpi-card-calidad.danger { border-left-color: #ef4444; }
 
+        body.dark-mode .kpi-card-calidad {
+            background: #1e293b;
+            box-shadow: none;
+        }
+        body.dark-mode .kpi-card-calidad h6 {
+            color: #94a3b8;
+        }
+        body.dark-mode .kpi-card-calidad h3 {
+            color: #f8fafc;
+        }
+
         .charts-grid-calidad {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -42,7 +54,29 @@
             border-radius: 8px;
             margin-bottom: 12px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            transition: transform 0.2s ease;
+            transition: transform 0.2s ease, background-color 0.2s;
+        }
+        body.dark-mode .review-item-calidad {
+            background: #1e293b;
+            box-shadow: none;
+        }
+        body.dark-mode .review-header-calidad h6 {
+            color: #f8fafc;
+        }
+        body.dark-mode .review-comment-calidad {
+            color: #cbd5e1;
+        }
+        body.dark-mode .review-meta-calidad {
+            color: #94a3b8;
+        }
+        .card-resenas-container {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        body.dark-mode .card-resenas-container {
+            background-color: #0f172a;
+            border-color: #334155 !important;
         }
         .review-item-calidad:hover {
             transform: translateX(4px);
@@ -127,7 +161,7 @@
             </div>
         </div>
 
-        <div class="card" style="background-color: #f8fafc; border: 1px solid #e2e8f0;">
+        <div class="card card-resenas-container">
             <h3 style="font-size: 1.2rem; color: #1e293b; margin-top: 0; margin-bottom: 20px;"><i class="fa-solid fa-comments" style="color: var(--primary); margin-right: 6px;"></i> Últimas Reseñas de Clientes</h3>
             <div class="list-container-calidad" id="calidad-resenas-list">
                 <!-- Se cargan dinámicamente -->
@@ -246,7 +280,8 @@
                         }
                     }
 
-                    // 3. Dibujar Gráfico
+                    // 3. Guardar en caché y Dibujar Gráfico
+                    cacheRankingCalidad = data.ranking;
                     dibujarGraficoCalidad(data.ranking);
                 } else {
                     console.error("Error cargando control calidad:", data.message);
@@ -258,6 +293,24 @@
                     listContainer.innerHTML = `<div style="text-align: center; color: #dc2626; padding: 20px;">Error de conexión con el servidor.</div>`;
                 }
             });
+    }
+
+    let cacheRankingCalidad = null;
+
+    function reRenderizarGraficosCalidad() {
+        if (cacheRankingCalidad) {
+            dibujarGraficoCalidad(cacheRankingCalidad);
+        }
+    }
+
+    // Escuchar el cambio de tema para actualizar el gráfico automáticamente
+    const toggleThemeBtn = document.getElementById('theme-toggle');
+    if (toggleThemeBtn) {
+        toggleThemeBtn.addEventListener('click', function() {
+            setTimeout(() => {
+                reRenderizarGraficosCalidad();
+            }, 50);
+        });
     }
 
     function dibujarGraficoCalidad(ranking) {
@@ -272,6 +325,10 @@
         const nombres = ranking.map(t => t.nombre);
         const buenas = ranking.map(t => t.buenas);
         const malas = ranking.map(t => t.malas);
+
+        const isDarkTheme = document.body.classList.contains('dark-mode');
+        const textColor = isDarkTheme ? '#f8fafc' : '#64748b';
+        const gridColor = isDarkTheme ? '#334155' : '#e2e8f0';
 
         chartCalidadInstance = new Chart(ctx.getContext('2d'), {
             type: 'bar',
@@ -301,11 +358,24 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    x: { stacked: true, beginAtZero: true },
-                    y: { stacked: true }
+                    x: { 
+                        stacked: true, 
+                        beginAtZero: true,
+                        grid: { color: gridColor },
+                        ticks: { color: textColor, font: { family: 'Inter', size: 9 } }
+                    },
+                    y: { 
+                        stacked: true,
+                        grid: { display: false },
+                        ticks: { color: textColor, font: { family: 'Inter', size: 9, weight: 600 } }
+                    }
                 },
                 plugins: {
-                    legend: { display: true, position: 'top' }
+                    legend: { 
+                        display: true, 
+                        position: 'top',
+                        labels: { color: textColor, font: { family: 'Inter', weight: 600, size: 10 } }
+                    }
                 }
             }
         });

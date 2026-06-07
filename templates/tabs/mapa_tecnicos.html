@@ -68,11 +68,141 @@
     body.dark-mode .tooltip-tecnico {
         background-color: #dc2626 !important;
     }
+    @keyframes pulse-red {
+        0% {
+            stroke-width: 2;
+            fill-opacity: 0.4;
+            stroke-opacity: 0.8;
+        }
+        50% {
+            stroke-width: 8;
+            fill-opacity: 0.15;
+            stroke-opacity: 0.3;
+        }
+        100% {
+            stroke-width: 2;
+            fill-opacity: 0.4;
+            stroke-opacity: 0.8;
+        }
+    }
+    @keyframes sidebar-panic-pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+            border-color: #ef4444;
+        }
+        50% {
+            box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+            border-color: #fca5a5;
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+            border-color: #ef4444;
+        }
+    }
+    @keyframes fadeInRight {
+        from {
+            opacity: 0;
+            transform: translateX(100px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+    .pulso-emergencia-mapa {
+        animation: pulse-red 2s infinite ease-in-out;
+    }
+    .item-tecnico-lista.panico {
+        animation: sidebar-panic-pulse 2s infinite;
+        background-color: #fef2f2 !important;
+        border-color: #fca5a5 !important;
+    }
+    body.dark-mode .item-tecnico-lista.panico {
+        background-color: #7f1d1d !important;
+        border-color: #b91c1c !important;
+    }
 </style>
 
 <script>
     let mapaTecnicos;
     let marcadoresTecnicos = {};
+    let circulosEmergencia = {};
+    let tecnicosEnPanico = new Set();
+
+    function reproducirSonidoAlerta() {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+            
+            osc.frequency.linearRampToValueAtTime(1200, audioCtx.currentTime + 0.3);
+            osc.frequency.linearRampToValueAtTime(880, audioCtx.currentTime + 0.6);
+            osc.frequency.linearRampToValueAtTime(1200, audioCtx.currentTime + 0.9);
+            osc.frequency.linearRampToValueAtTime(880, audioCtx.currentTime + 1.2);
+            
+            gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+            
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 1.5);
+        } catch (e) {
+            console.warn("No se pudo reproducir el sonido de alerta (requiere interacción previa):", e);
+        }
+    }
+
+    function mostrarToastAlerta(tecnico, motivo) {
+        let container = document.getElementById('toast-emergency-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-emergency-container';
+            container.style.position = 'fixed';
+            container.style.top = '20px';
+            container.style.right = '20px';
+            container.style.zIndex = '99999';
+            container.style.display = 'flex';
+            container.style.flexDirection = 'column';
+            container.style.gap = '10px';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        toast.className = 'toast-emergencia-premium';
+        toast.style.background = 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)';
+        toast.style.color = 'white';
+        toast.style.padding = '16px 24px';
+        toast.style.borderRadius = '16px';
+        toast.style.boxShadow = '0 10px 25px rgba(220, 38, 38, 0.4)';
+        toast.style.border = '1px solid #ef4444';
+        toast.style.display = 'flex';
+        toast.style.alignItems = 'center';
+        toast.style.gap = '15px';
+        toast.style.minWidth = '300px';
+        toast.style.maxWidth = '400px';
+        toast.style.animation = 'fadeInRight 0.3s ease';
+        
+        toast.innerHTML = `
+            <div style="font-size: 1.8rem; flex-shrink: 0;"><i class="fa-solid fa-triangle-exclamation fa-beat"></i></div>
+            <div style="flex-grow: 1;">
+                <h4 style="margin: 0; font-size: 1rem; font-weight: 800; letter-spacing: -0.02em;">¡ALERTA DE EMERGENCIA!</h4>
+                <p style="margin: 3px 0 0 0; font-size: 0.85rem; opacity: 0.9;"><strong>${tecnico}</strong> solicita apoyo:<br><em>"${motivo}"</em></p>
+            </div>
+            <button onclick="this.parentElement.remove()" style="background: none; border: none; color: white; opacity: 0.7; font-size: 1.2rem; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
+        `;
+
+        container.appendChild(toast);
+        
+        setTimeout(() => {
+            if (toast && toast.parentElement) {
+                toast.remove();
+            }
+        }, 10000);
+    }
 
     function inicializarMapaTecnicos() {
         if (mapaTecnicos) return; // Si ya fue inicializado, salir
@@ -110,6 +240,49 @@
     }
 
     function actualizarMapaYLista(ubicaciones) {
+        const activeArea = "{{ session.get('active_area', 'SOPORTE') }}";
+        if (activeArea === 'INSTALACIONES') {
+            const crew1Techs = ['HENRY CUENCA', 'EDUARDO CRUZ'];
+            const crew2Techs = ['JOOEL ARROYO', 'OSWALDO BERMEO'];
+
+            let crew1Data = null;
+            let crew2Data = null;
+            const otherTechs = [];
+
+            ubicaciones.forEach(u => {
+                const nameUpper = u.tecnico.toUpperCase();
+                if (crew1Techs.includes(nameUpper)) {
+                    if (!crew1Data || new Date(u.ultima_actualizacion) > new Date(crew1Data.ultima_actualizacion)) {
+                        crew1Data = u;
+                    }
+                } else if (crew2Techs.includes(nameUpper)) {
+                    if (!crew2Data || new Date(u.ultima_actualizacion) > new Date(crew2Data.ultima_actualizacion)) {
+                        crew2Data = u;
+                    }
+                } else {
+                    otherTechs.push(u);
+                }
+            });
+
+            const groupedUbicaciones = [];
+            if (crew1Data) {
+                groupedUbicaciones.push({
+                    ...crew1Data,
+                    tecnico: "CUADRILLA 1 (Henry C. / Eduardo C.)",
+                    foto_perfil: "default_avatar.png"
+                });
+            }
+            if (crew2Data) {
+                groupedUbicaciones.push({
+                    ...crew2Data,
+                    tecnico: "CUADRILLA 2 (Jooel A. / Oswaldo B.)",
+                    foto_perfil: "default_avatar.png"
+                });
+            }
+            otherTechs.forEach(o => groupedUbicaciones.push(o));
+            ubicaciones = groupedUbicaciones;
+        }
+
         const listaContainer = document.getElementById('lista-tecnicos-mapa');
         const contadorEl = document.getElementById('contador-tecnicos');
 
@@ -122,6 +295,16 @@
                     <p style="font-size: 0.9rem; font-style: italic;">No hay técnicos activos reportando GPS en este momento.</p>
                 </div>
             `;
+            // Limpiar todos los marcadores y círculos del mapa
+            for (const key in marcadoresTecnicos) {
+                mapaTecnicos.removeLayer(marcadoresTecnicos[key]);
+                delete marcadoresTecnicos[key];
+            }
+            for (const key in circulosEmergencia) {
+                mapaTecnicos.removeLayer(circulosEmergencia[key]);
+                delete circulosEmergencia[key];
+            }
+            tecnicosEnPanico.clear();
             return;
         }
 
@@ -144,7 +327,14 @@
             iconAnchor: [18, 18]
         });
 
+        const iconoPanico = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/564/564619.png', // Sirena
+            iconSize: [40, 40],
+            iconAnchor: [20, 20]
+        });
+
         const nombresActivos = [];
+        const nombresPanicoActuales = [];
 
         ubicaciones.forEach(u => {
             const key = u.tecnico;
@@ -156,7 +346,18 @@
             let estadoClaseColor = '#64748b'; // gris por defecto
             let estadoTexto = u.estado || 'INACTIVO';
 
-            if (u.estado.includes('En camino')) {
+            if (u.alerta_panico) {
+                icono = iconoPanico;
+                estadoClaseColor = '#ef4444';
+                estadoTexto = '🚨 EMERGENCIA: ' + (u.mensaje_panico || 'Auxilio');
+                
+                nombresPanicoActuales.push(key);
+                if (!tecnicosEnPanico.has(key)) {
+                    tecnicosEnPanico.add(key);
+                    reproducirSonidoAlerta();
+                    mostrarToastAlerta(key, u.mensaje_panico || 'Auxilio solicitado');
+                }
+            } else if (u.estado.includes('En camino')) {
                 icono = iconoEnRuta;
                 estadoClaseColor = '#f59e0b'; // naranja/amarillo
             } else if (u.estado.includes('Trabajando')) {
@@ -168,6 +369,27 @@
             } else if (u.estado === 'Sesión Iniciada' || u.estado === 'Disponible') {
                 icono = iconoOffline;
                 estadoClaseColor = '#10b981'; // verde
+            }
+
+            // Manejar círculo de pánico
+            if (u.alerta_panico) {
+                if (circulosEmergencia[key]) {
+                    circulosEmergencia[key].setLatLng(latLng);
+                } else {
+                    const circle = L.circle(latLng, {
+                        color: '#ef4444',
+                        fillColor: '#ef4444',
+                        fillOpacity: 0.4,
+                        radius: 80,
+                        className: 'pulso-emergencia-mapa'
+                    }).addTo(mapaTecnicos);
+                    circulosEmergencia[key] = circle;
+                }
+            } else {
+                if (circulosEmergencia[key]) {
+                    mapaTecnicos.removeLayer(circulosEmergencia[key]);
+                    delete circulosEmergencia[key];
+                }
             }
 
             // Calcular diferencia de tiempo de actualización
@@ -199,8 +421,19 @@
             const placa = u.placa_vehiculo || 'S/P';
 
             // Popup para clic en el marcador
+            let popupAlertaPanico = '';
+            if (u.alerta_panico) {
+                popupAlertaPanico = `
+                    <div style="background-color: #fee2e2; border: 1px solid #fca5a5; padding: 8px; border-radius: 8px; margin-bottom: 8px; color: #b91c1c; font-weight: bold; text-align: center; font-size: 0.8rem; line-height: 1.3;">
+                        🚨 EMERGENCIA EN RUTA:<br>
+                        "${u.mensaje_panico || 'Auxilio solicitado'}"
+                    </div>
+                `;
+            }
+
             const popupHtml = `
                 <div style="font-family: 'Inter', sans-serif; padding: 5px; width: 220px; display: flex; flex-direction: column; gap: 8px;">
+                    ${popupAlertaPanico}
                     <div style="display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
                         <img src="${perfilUrl}" alt="${key}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1.5px solid #cbd5e1;">
                         <div>
@@ -224,9 +457,11 @@
             `;
             marcadoresTecnicos[key].bindPopup(popupHtml);
 
+            const itemClasePanico = u.alerta_panico ? 'panico' : '';
+
             // HTML del ítem de la lista izquierda
             const itemHtml = `
-                <div onclick="enfocarTecnico('${key}', ${u.lat}, ${u.lon})" class="item-tecnico-lista" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 12px;">
+                <div onclick="enfocarTecnico('${key}', ${u.lat}, ${u.lon})" class="item-tecnico-lista ${itemClasePanico}" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 12px;">
                     <img src="${perfilUrl}" alt="${key}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1.5px solid #e2e8f0; flex-shrink: 0;">
                     <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 5px;">
@@ -248,8 +483,20 @@
             if (!nombresActivos.includes(key)) {
                 mapaTecnicos.removeLayer(marcadoresTecnicos[key]);
                 delete marcadoresTecnicos[key];
+                
+                if (circulosEmergencia[key]) {
+                    mapaTecnicos.removeLayer(circulosEmergencia[key]);
+                    delete circulosEmergencia[key];
+                }
             }
         }
+
+        // Limpiar técnicos que ya no tienen alerta de pánico
+        tecnicosEnPanico.forEach(key => {
+            if (!nombresPanicoActuales.includes(key)) {
+                tecnicosEnPanico.delete(key);
+            }
+        });
     }
 
     function enfocarTecnico(key, lat, lon) {

@@ -65,6 +65,34 @@ def check_single_session():
                 return redirect(url_for('login'))
 
 
+@app.before_request
+def check_user_active_area():
+    if 'user_id' in session:
+        rol = session.get('user_role')
+        if rol == 'CALIDAD':
+            session['active_area'] = 'INSTALACIONES'
+        elif rol in ['ASESOR', 'ADMIN']:
+            session['active_area'] = 'SOPORTE'
+
+
+@app.route('/api/admin/cambiar_area_vista', methods=['POST'])
+def cambiar_area_vista():
+    if 'user_id' not in session or session.get('user_role') != 'ADMIN':
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    if request.is_json:
+        datos = request.get_json() or {}
+    else:
+        datos = request.form
+        
+    nueva_area = datos.get('active_area')
+    if nueva_area in ['SOPORTE', 'INSTALACIONES']:
+        session['active_area'] = nueva_area
+        return jsonify({"status": "ok", "active_area": nueva_area})
+    return jsonify({"status": "error", "message": "Área no válida"}), 400
+
+
+
 # --- RUTAS DE AUTENTICACIÓN (LOGIN / LOGOUT) ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -210,6 +238,9 @@ def dashboard():
             fecha_busqueda = date.today().isoformat()
     texto_busqueda = request.args.get('buscar_cliente', '').strip()
 
+    active_area = session.get('active_area', 'SOPORTE')
+    es_instalacion_val = 1 if active_area == 'INSTALACIONES' else 0
+
     conexion = get_db_connection()
     cursor = conexion.cursor(dictionary=True)
 
@@ -219,27 +250,36 @@ def dashboard():
         if is_fibracom:
             contrato_base = texto_busqueda[:-1]
             query = """
-                SELECT * FROM visitas_tecnicas 
-                WHERE fecha_programada = %s 
-                AND estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA')
-                AND (cliente LIKE %s OR (contrato = %s AND empresa = 'FIBRACOM'))
+                SELECT v.*, t.placa_vehiculo AS placa_vehiculo_principal 
+                FROM visitas_tecnicas v
+                LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
+                WHERE v.fecha_programada = %s 
+                AND v.es_instalacion = %s
+                AND v.estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA')
+                AND (v.cliente LIKE %s OR (v.contrato = %s AND v.empresa = 'FIBRACOM'))
             """
         else:
             contrato_base = texto_busqueda
             query = """
-                SELECT * FROM visitas_tecnicas 
-                WHERE fecha_programada = %s 
-                AND estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA')
-                AND (cliente LIKE %s OR (contrato = %s AND (empresa != 'FIBRACOM' OR empresa IS NULL)))
+                SELECT v.*, t.placa_vehiculo AS placa_vehiculo_principal 
+                FROM visitas_tecnicas v
+                LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
+                WHERE v.fecha_programada = %s 
+                AND v.es_instalacion = %s
+                AND v.estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA')
+                AND (v.cliente LIKE %s OR (v.contrato = %s AND (v.empresa != 'FIBRACOM' OR v.empresa IS NULL)))
             """
-        params = (fecha_busqueda, f"%{texto_busqueda}%", contrato_base)
+        params = (fecha_busqueda, es_instalacion_val, f"%{texto_busqueda}%", contrato_base)
     else:
         query = """
-            SELECT * FROM visitas_tecnicas 
-            WHERE fecha_programada = %s 
-            AND estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA')
+            SELECT v.*, t.placa_vehiculo AS placa_vehiculo_principal 
+            FROM visitas_tecnicas v
+            LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
+            WHERE v.fecha_programada = %s 
+            AND v.es_instalacion = %s
+            AND v.estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA')
         """
-        params = (fecha_busqueda,)
+        params = (fecha_busqueda, es_instalacion_val)
 
     cursor.execute(query, params)
     visitas = cursor.fetchall()
@@ -269,7 +309,13 @@ def dashboard():
         v['numero_parada'] = indice
 
     # --- 5. ESTADÍSTICAS DEL DÍA SELECCIONADO ---
-    cursor.execute("SELECT estado, COUNT(*) as total FROM visitas_tecnicas WHERE fecha_programada = %s GROUP BY estado", (fecha_busqueda,))
+    cursor.execute("""
+        SELECT estado, COUNT(*) as total 
+        FROM visitas_tecnicas 
+        WHERE fecha_programada = %s 
+          AND es_instalacion = %s
+        GROUP BY estado
+    """, (fecha_busqueda, es_instalacion_val))
     res_stats = cursor.fetchall()
     
     stats = {'pendientes': 0, 'finalizadas': 0, 'reagendadas': 0, 'canceladas': 0}
@@ -288,25 +334,37 @@ def dashboard():
         SELECT DATE_FORMAT(fecha_programada, '%m-%d') as dia, COUNT(*) as total 
         FROM visitas_tecnicas 
         WHERE estado IN ('FINALIZADA', 'SOLVENTADA_REMOTA')
+        AND es_instalacion = %s
         AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
         GROUP BY fecha_programada 
         ORDER BY fecha_programada ASC
     """
-    cursor.execute(query_barras)
+    cursor.execute(query_barras, (es_instalacion_val,))
     datos_barras = cursor.fetchall()
     
     # Convertimos a listas separadas para Chart.js
     labels_barras = [d['dia'] for d in datos_barras]
     valores_barras = [d['total'] for d in datos_barras]
 
-    # B. Gráfico de Anillo: Distribución por Problema/Servicio
-    query_problemas = """
-        SELECT problema, COUNT(*) as total 
-        FROM visitas_tecnicas 
-        WHERE fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-        GROUP BY problema 
-        ORDER BY total DESC LIMIT 5
-    """
+    # B. Gráfico de Anillo: Distribución por Problema/Servicio o Producto/Servicio
+    if es_instalacion_val == 1:
+        query_problemas = """
+            SELECT producto as problema, COUNT(*) as total 
+            FROM visitas_tecnicas 
+            WHERE es_instalacion = 1
+            AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            GROUP BY producto 
+            ORDER BY total DESC LIMIT 5
+        """
+    else:
+        query_problemas = """
+            SELECT problema, COUNT(*) as total 
+            FROM visitas_tecnicas 
+            WHERE es_instalacion = 0
+            AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            GROUP BY problema 
+            ORDER BY total DESC LIMIT 5
+        """
     cursor.execute(query_problemas)
     datos_anillo_prob = cursor.fetchall()
     labels_prob = [d['problema'] for d in datos_anillo_prob]
@@ -316,11 +374,12 @@ def dashboard():
     query_sectores = """
         SELECT sector, COUNT(*) as total 
         FROM visitas_tecnicas 
-        WHERE fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+        WHERE es_instalacion = %s
+        AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
         GROUP BY sector 
         ORDER BY total DESC LIMIT 5
     """
-    cursor.execute(query_sectores)
+    cursor.execute(query_sectores, (es_instalacion_val,))
     datos_anillo_sec = cursor.fetchall()
     labels_sec = [d['sector'] for d in datos_anillo_sec]
     valores_sec = [d['total'] for d in datos_anillo_sec]
@@ -330,12 +389,13 @@ def dashboard():
                AVG(TIMESTAMPDIFF(MINUTE, hora_inicio_visita, hora_fin_visita)) as tiempo_promedio
         FROM visitas_tecnicas 
         WHERE estado = 'FINALIZADA' 
+        AND es_instalacion = %s
         AND hora_inicio_visita IS NOT NULL 
         AND hora_fin_visita IS NOT NULL
         AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
         GROUP BY solucion_tecnico
     """
-    cursor.execute(query_tiempos)
+    cursor.execute(query_tiempos, (es_instalacion_val,))
     datos_tiempos = cursor.fetchall()
     
     # Procesar listas para JS
@@ -349,7 +409,7 @@ def dashboard():
                            fecha_actual=fecha_busqueda,
                            active_tab=active_tab,
                            sectores=obtener_sectores_activos(), 
-                           tecnicos=obtener_tecnicos_activos(),
+                           tecnicos=obtener_tecnicos_activos(session.get('active_area')),
                            problemas=obtener_problemas_activos(),
                            asesor=session.get('user_name', 'Asesor'),
                            # Variables para gráficos:
@@ -360,110 +420,6 @@ def dashboard():
                            valores_tiempos=valores_tiempos)
 
 
-
-
-# --- 3. RUTA PARA GUARDAR NUEVAS VISITAS ---
-@app.route('/api/visitas', methods=['POST'])
-def registrar_visita():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-
-    try:
-        # Quién está creando esta visita (se extrae de la sesión)
-        creado_por = session['user_name']
-
-        # Extraemos los datos del formulario HTML
-        prioridad = request.form.get('prioridad', 'MEDIA')
-        fecha_programada = request.form.get('fecha_programada')
-        preferencia = request.form.get('preferencia_horaria')
-        
-        tecnico_principal = request.form.get('tecnico_asignado') or None
-        tecnico_apoyo = request.form.get('tecnico_apoyo') or None
-        
-        empresa = request.form.get('empresa')
-        contrato = request.form.get('contrato')
-        cliente = request.form.get('cliente')
-        telefonos = request.form.get('telefonos')
-        sector = request.form.get('sector')
-        
-        # Combinamos la dirección si envían lat/lon para que calce en el campo 'direccion'
-        dir_texto = request.form.get('direccion', '')
-        lat = request.form.get('latitud', '')
-        lon = request.form.get('longitud', '')
-        direccion_completa = f"{dir_texto} ({lat}, {lon})" if lat and lon else dir_texto
-        
-        servicio = request.form.get('servicio')
-        velocidad_mbps = request.form.get('velocidad_mbps')
-        # Si la velocidad está vacía, evitamos error de base de datos
-        velocidad_mbps = int(velocidad_mbps) if velocidad_mbps and velocidad_mbps.isdigit() else None
-        
-        problema = request.form.get('problema')
-        observacion_callcenter = request.form.get('observacion_callcenter')
-        informacion_tecnico = request.form.get('informacion_tecnico')
-        
-        # Opcional: si en el futuro quieres guardar también las ventanas en min en otra tabla
-        # ventana_inicio, ventana_fin = normalizar_horario_texto(preferencia)
-
-        # 1. Consultar el turno o restricción del técnico
-        if tecnico_principal and preferencia:
-            preferencia_horaria = preferencia.lower()
-            conexion_val = get_db_connection()
-            if conexion_val:
-                cursor_val = conexion_val.cursor(dictionary=True)
-                cursor_val.execute("SELECT turno FROM tecnicos WHERE nombre = %s", (tecnico_principal,))
-                tecnico_info = cursor_val.fetchone()
-                
-                if tecnico_info and tecnico_info.get('turno'):
-                    turno_tecnico = tecnico_info['turno'] # 'MAÑANA' o 'TARDE'
-                    
-                    # 2. VALIDACIÓN CRÍTICA: Detectar el choque de horarios
-                    if turno_tecnico == 'TARDE' and ('mañana' in preferencia_horaria or 'manana' in preferencia_horaria):
-                        cursor_val.close()
-                        conexion_val.close()
-                        return jsonify({
-                            "status": "error", 
-                            "message": f"❌ Error: {tecnico_principal} trabaja en la TARDE. No puedes asignarle una visita de la MAÑANA."
-                        }), 400
-                        
-                    if turno_tecnico == 'MAÑANA' and 'tarde' in preferencia_horaria:
-                        cursor_val.close()
-                        conexion_val.close()
-                        return jsonify({
-                            "status": "error", 
-                            "message": f"❌ Error: {tecnico_principal} trabaja en la MAÑANA. No puedes asignarle una visita de la TARDE."
-                        }), 400
-                
-                cursor_val.close()
-                conexion_val.close()
-
-        conexion = get_db_connection()
-        cursor = conexion.cursor()
-
-        # Armamos el INSERT alineado a la nueva tabla visitas_tecnicas
-        query = """
-            INSERT INTO visitas_tecnicas 
-            (creado_por, tecnico_principal, tecnico_apoyo, fecha_programada, preferencia_horaria, 
-            empresa, contrato, cliente, telefonos, sector, direccion, 
-            servicio, velocidad_mbps, problema, observacion_callcenter, informacion_tecnico, estado, prioridad)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE', %s)
-        """
-        valores = (
-            creado_por, tecnico_principal, tecnico_apoyo, fecha_programada, preferencia,
-            empresa, contrato, cliente, telefonos, sector, direccion_completa,
-            servicio, velocidad_mbps, problema, observacion_callcenter, informacion_tecnico, prioridad
-        )
-        
-        cursor.execute(query, valores)
-        conexion.commit() 
-        
-        return redirect(url_for('dashboard'))
-
-    except Exception as e:
-        return f"Error al guardar en BD: {e}"
-    finally:
-        if 'conexion' in locals() and conexion.is_connected():
-            cursor.close()
-            conexion.close()
 
 
 # --- FUNCIONES AUXILIARES ---
@@ -482,13 +438,16 @@ def obtener_sectores_activos():
             cursor.close()
             conexion.close()
 
-def obtener_tecnicos_activos():
-    """Consulta la tabla tecnicos y devuelve la lista completa."""
+def obtener_tecnicos_activos(area=None):
+    """Consulta la tabla tecnicos y devuelve la lista completa, opcionalmente filtrada por area_trabajo."""
     conexion = get_db_connection()
     if not conexion: return []
     try:
         cursor = conexion.cursor(dictionary=True)
-        cursor.execute("SELECT nombre FROM tecnicos WHERE activo = TRUE ORDER BY nombre ASC")
+        if area:
+            cursor.execute("SELECT nombre FROM tecnicos WHERE activo = TRUE AND area_trabajo = %s ORDER BY nombre ASC", (area,))
+        else:
+            cursor.execute("SELECT nombre FROM tecnicos WHERE activo = TRUE ORDER BY nombre ASC")
         return cursor.fetchall()
     except Exception as e:
         print(f"Error al obtener tecnicos: {e}")

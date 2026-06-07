@@ -1,7 +1,14 @@
 <div id="tab-registro" class="tab-content {% if active_tab == 'registro' %}active{% endif %}">
-    <h2>Registrar Nueva Visita</h2>
+    <h2>
+        {% if session.get('active_area') == 'INSTALACIONES' %}
+            Registrar Nueva Instalación
+        {% else %}
+            Registrar Nueva Visita
+        {% endif %}
+    </h2>
     <div class="card">
         <form action="/api/visitas" method="POST">
+            <input type="hidden" name="es_instalacion" value="{% if session.get('active_area') == 'INSTALACIONES' %}1{% else %}0{% endif %}">
 
             <h3 style="margin-bottom: 15px; color: var(--primary); font-size: 1.1rem;">Datos de Asignación</h3>
             <div class="form-grid">
@@ -24,6 +31,39 @@
                     </script>
                 </div>
 
+            {% if session.get('active_area') == 'INSTALACIONES' %}
+                <!-- No priority field for installations, we default it to MEDIA internally via a hidden input -->
+                <input type="hidden" name="prioridad" value="MEDIA">
+
+                <!-- Crew selection instead of individual technicians -->
+                <div class="form-group" style="grid-column: span 2;">
+                    <label style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Cuadrilla Asignada:</label>
+                    <select id="registro-cuadrilla" class="form-control" required onchange="actualizarTecnicosCuadrilla(this.value)">
+                        <option value="">-- Seleccione la Cuadrilla Responsable --</option>
+                        <option value="CUADRILLA_1">CUADRILLA 1 (Henry Cuenca / Eduardo Cruz)</option>
+                        <option value="CUADRILLA_2">CUADRILLA 2 (Jooel Arroyo / Oswaldo Bermeo)</option>
+                    </select>
+                    <!-- Hidden inputs to submit expected technician names to backend -->
+                    <input type="hidden" name="tecnico_asignado" id="registro-tecnico-asignado" value="">
+                    <input type="hidden" name="tecnico_apoyo" id="registro-tecnico-apoyo" value="">
+                </div>
+                <script>
+                    function actualizarTecnicosCuadrilla(val) {
+                        const principalInput = document.getElementById('registro-tecnico-asignado');
+                        const apoyoInput = document.getElementById('registro-tecnico-apoyo');
+                        if (val === 'CUADRILLA_1') {
+                            principalInput.value = 'HENRY CUENCA';
+                            apoyoInput.value = 'EDUARDO CRUZ';
+                        } else if (val === 'CUADRILLA_2') {
+                            principalInput.value = 'JOOEL ARROYO';
+                            apoyoInput.value = 'OSWALDO BERMEO';
+                        } else {
+                            principalInput.value = '';
+                            apoyoInput.value = '';
+                        }
+                    }
+                </script>
+            {% else %}
                 <div class="form-group">
                     <label>Prioridad de Atención:</label>
                     <select name="prioridad" class="form-control" required>
@@ -49,7 +89,7 @@
                     </select>
                     <!-- Contenedor dinámico de recomendaciones de técnicos cercanos -->
                     <div id="contenedor-recomendaciones-tecnicos" style="display: none; margin-top: 8px; padding: 10px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; font-size: 0.85rem; color: #166534; box-shadow: var(--shadow-sm);">
-                        <strong>📍 Recomendaciones de Soporte Cercano:</strong>
+                        <strong>📍 Recomendaciones de Técnicos Cercanos ({% if session.get('active_area') == 'INSTALACIONES' %}Instalaciones{% else %}Soporte{% endif %}):</strong>
                         <ul id="lista-recomendaciones-tecnicos" style="margin: 5px 0 0 0; padding-left: 20px; list-style-type: disc; display: flex; flex-direction: column; gap: 4px;">
                             <!-- Dinámico -->
                         </ul>
@@ -65,6 +105,7 @@
                         {% endfor %}
                     </select>
                 </div>
+            {% endif %}
             </div>
 
             <h3 style="margin-top: 25px; margin-bottom: 15px; color: var(--primary); font-size: 1.1rem;">Datos del
@@ -84,8 +125,8 @@
                 <div class="form-group">
                     <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px;">
                         <label style="margin: 0;">Nombre del Cliente:</label>
-                        <button type="button" onclick="cargarHistorial(document.getElementById('input-cliente-registro').value)" 
-                            style="background-color: #f8fafc; border: 1px solid #cbd5e1; color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                        <button type="button" id="btn-ver-historial-registro" onclick="cargarHistorial(document.getElementById('input-cliente-registro').value)" 
+                            style="background-color: #f8fafc; border: 1px solid #cbd5e1; color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px; {% if session.get('active_area') == 'INSTALACIONES' %}display: none;{% endif %}">
                             <i class="fa-solid fa-clock-rotate-left"></i> Ver Historial
                         </button>
                     </div>
@@ -129,8 +170,42 @@
                 </div>
             </div>
 
-            <h3 style="margin-top: 25px; margin-bottom: 15px; color: var(--primary); font-size: 1.1rem;">Detalles
-                Técnicos</h3>
+            {% if session.get('active_area') == 'INSTALACIONES' %}
+            <h3 style="margin-top: 25px; margin-bottom: 15px; color: var(--primary); font-size: 1.1rem;">Detalles de la Instalación</h3>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Servicio a Realizar:</label>
+                    <select name="servicio" required class="form-control" onchange="actualizarServicioInstalacion(this.value)">
+                        <option value="INSTALACIÓN NUEVA">INSTALACIÓN NUEVA</option>
+                        <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
+                    </select>
+                    <input type="hidden" name="problema" id="hidden_problema" value="INSTALACIÓN NUEVA">
+                </div>
+                <div class="form-group">
+                    <label>Producto:</label>
+                    <select name="producto" required class="form-control">
+                        <option value="INTERNET">INTERNET</option>
+                        <option value="CABLE">CABLE</option>
+                        <option value="COMBO">COMBO</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tipo de Instalación:</label>
+                    <select name="tipo_instalacion" required class="form-control">
+                        <option value="NORMAL">NORMAL</option>
+                        <option value="DUCTOS">DUCTOS</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Vendedor:</label>
+                    <input type="text" name="vendedor" placeholder="Nombre del vendedor" class="form-control">
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>Recibido en Coordinación (Fecha):</label>
+                    <input type="date" name="recibido_coordinacion" class="form-control">
+                </div>
+            {% else %}
+            <h3 style="margin-top: 25px; margin-bottom: 15px; color: var(--primary); font-size: 1.1rem;">Detalles Técnicos</h3>
             <div class="form-grid">
                 <div class="form-group">
                     <label>Servicio:</label>
@@ -154,19 +229,29 @@
                         {% endfor %}
                     </select>
                 </div>
+            {% endif %}
+                {% if session.get('active_area') != 'INSTALACIONES' %}
                 <div class="form-group" style="grid-column: span 2;">
                     <label>Observación Callcenter:</label>
                     <textarea name="observacion_callcenter" rows="2"
                         style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); font-family: inherit; font-size: 0.95rem; resize: vertical;"
                         placeholder="Cliente indica problemas en la señal..."></textarea>
                 </div>
+                {% endif %}
                 <div class="form-group" style="grid-column: span 2;">
-                    <h4 style="margin-bottom: 15px; color: #475569; font-size: 0.95rem; font-weight: 700;">Información de Conexión (Opcional):</h4>
+                    <h4 style="margin-bottom: 15px; color: #475569; font-size: 0.95rem; font-weight: 700;">
+                        {% if session.get('active_area') == 'INSTALACIONES' %}
+                            Caja más cercana (Opcional):
+                        {% else %}
+                            Información de Conexión (Opcional):
+                        {% endif %}
+                    </h4>
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px;">
                         <div>
                             <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px; display: block;">CAJA:</label>
                             <input type="text" name="info_caja" class="form-control" placeholder="Ej. NAP-01">
                         </div>
+                        {% if session.get('active_area') != 'INSTALACIONES' %}
                         <div>
                             <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px; display: block;">HILO:</label>
                             <input type="text" name="info_hilo" class="form-control" placeholder="Ej. 12">
@@ -183,16 +268,41 @@
                             <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px; display: block;">Clave (PPPoE):</label>
                             <input type="text" name="info_pas" class="form-control" placeholder="Contraseña">
                         </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
 
-            <button type="submit" class="btn btn-block" style="margin-top: 20px;">Guardar Visita</button>
+            <button type="submit" class="btn btn-block" style="margin-top: 20px;">
+                {% if session.get('active_area') == 'INSTALACIONES' %}
+                    Guardar Instalación
+                {% else %}
+                    Guardar Visita
+                {% endif %}
+            </button>
         </form>
     </div>
 </div>
 
 <script>
+    function actualizarServicioInstalacion(valor) {
+        // Actualizar el hidden_problema
+        const hiddenProblema = document.getElementById('hidden_problema');
+        if (hiddenProblema) {
+            hiddenProblema.value = valor;
+        }
+        
+        // Mostrar/ocultar el botón de Ver Historial
+        const btnHistorial = document.getElementById('btn-ver-historial-registro');
+        if (btnHistorial) {
+            if (valor === 'CAMBIO DE DOMICILIO') {
+                btnHistorial.style.display = 'flex';
+            } else {
+                btnHistorial.style.display = 'none';
+            }
+        }
+    }
+
     function autoCompletarCoordenadasSector(select) {
         const selectedOption = select.options[select.selectedIndex];
         const lat = selectedOption.getAttribute('data-lat');
@@ -226,7 +336,9 @@
         const contenedor = document.getElementById('contenedor-recomendaciones-tecnicos');
         const lista = document.getElementById('lista-recomendaciones-tecnicos');
         
-        lista.innerHTML = '<li><i class="fa-solid fa-spinner fa-spin"></i> Buscando técnicos de soporte más cercanos...</li>';
+        const activeArea = "{{ session.get('active_area', 'SOPORTE') }}";
+        const areaLabel = activeArea === 'INSTALACIONES' ? 'instalaciones' : 'soporte';
+        lista.innerHTML = `<li><i class="fa-solid fa-spinner fa-spin"></i> Buscando técnicos de ${areaLabel} más cercanos...</li>`;
         contenedor.style.display = 'block';
         
         fetch(`/api/admin/tecnicos/mas_cercano?lat=${lat}&lon=${lon}`)
@@ -235,7 +347,7 @@
                 lista.innerHTML = '';
                 if (data.status === 'ok') {
                     if (data.recomendados.length === 0) {
-                        lista.innerHTML = '<li style="color: #c2410c;"><i class="fa-solid fa-triangle-exclamation"></i> No hay técnicos activos de soporte con señal GPS hoy.</li>';
+                        lista.innerHTML = `<li style="color: #c2410c;"><i class="fa-solid fa-triangle-exclamation"></i> No hay técnicos activos de ${areaLabel} con señal GPS hoy.</li>`;
                     } else {
                         data.recomendados.forEach(tec => {
                             const li = document.createElement('li');

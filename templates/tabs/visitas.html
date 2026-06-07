@@ -2,8 +2,20 @@
     <div class="hero-card">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px;">
             <div>
-                <h1 style="margin: 0; font-size: 2.2rem;">Centro de Comando</h1>
-                <p style="margin-top: 5px; opacity: 0.9; max-width: 600px;">Monitoreo operativo de visitas, técnicos y asignaciones. Vista consolidada para gestionar el estado operativo de Futurity.</p>
+                <h1 style="margin: 0; font-size: 2.2rem;">
+                    {% if session.get('active_area') == 'INSTALACIONES' %}
+                        Centro de Comando (Calidad)
+                    {% else %}
+                        Centro de Comando (Soporte)
+                    {% endif %}
+                </h1>
+                <p style="margin-top: 5px; opacity: 0.9; max-width: 600px;">
+                    {% if session.get('active_area') == 'INSTALACIONES' %}
+                        Monitoreo operativo de instalaciones, cuadrillas y asignaciones. Vista consolidada para gestionar el área de Calidad.
+                    {% else %}
+                        Monitoreo operativo de visitas, técnicos y asignaciones. Vista consolidada para gestionar el estado operativo de Futurity.
+                    {% endif %}
+                </p>
             </div>
             
             <form action="/" method="GET" style="display: flex; gap: 10px; align-items: center; background: rgba(255,255,255,0.1); padding: 10px 15px; border-radius: 12px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);">
@@ -70,7 +82,13 @@
                         <th>Cliente</th>
                         <th>Sector</th>
                         <th>Técnico</th>
-                        <th>Problema</th>
+                        <th>
+                            {% if session.get('active_area') == 'INSTALACIONES' %}
+                                Servicio / Producto
+                            {% else %}
+                                Problema
+                            {% endif %}
+                        </th>
                         <th>Estado</th>
                         <th>Acción</th>
                     </tr>
@@ -88,6 +106,7 @@
                                 </div>
                             </div>
 
+                            {% if session.get('active_area') != 'INSTALACIONES' %}
                             <div style="margin-top: 8px;">
                                 {% if visita.prioridad == 'ALTA' %}
                                     <span style="background-color: #fee2e2; color: #b91c1c; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; border: 1px solid #fca5a5;">ALTA</span>
@@ -97,6 +116,7 @@
                                     <span style="background-color: #fef3c7; color: #b45309; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; border: 1px solid #fcd34d;">MEDIA</span>
                                 {% endif %}
                             </div>
+                            {% endif %}
                         </td>
                         
                         <td style="vertical-align: middle;">
@@ -110,7 +130,13 @@
                         </td>
                         <td style="vertical-align: middle;">{{ visita.sector }}</td>
                         <td style="vertical-align: middle;">{{ visita.tecnico_principal or 'Auto' }}</td>
-                        <td style="vertical-align: middle;">{{ visita.problema }}</td>
+                        <td style="vertical-align: middle;">
+                            {% if session.get('active_area') == 'INSTALACIONES' %}
+                                {{ visita.servicio }} / {{ visita.producto }}
+                            {% else %}
+                                {{ visita.problema }}
+                            {% endif %}
+                        </td>
                         <td style="vertical-align: middle;">
                             <span class="badge-{{ visita.estado|lower }}">{{ visita.estado }}</span>
                             <div class="visita-timer-container" 
@@ -136,22 +162,27 @@
                                     <div>
                                         <p style="margin: 0 0 8px 0;"><strong>👤 Creado por:</strong> <span
                                                 style="color: var(--primary);">{{ visita.creado_por }}</span></p>
-                                        <p style="margin: 0 0 8px 0;"><strong>📄 Contrato:</strong> {{ visita.contrato
-                                            }}
-                                            ({{ visita.empresa }})</p>
-                                        <p style="margin: 0 0 8px 0;"><strong>📞 Contacto:</strong> {{ visita.telefonos
-                                            }}
-                                        </p>
-                                        <p style="margin: 0 0 8px 0;"><strong>📍 Dirección:</strong> {{ visita.direccion
-                                            }}
-                                        </p>
-                                        <p style="margin: 0 0 8px 0;"><strong>⏰ Preferencia Cliente:</strong> {{
-                                            visita.preferencia_horaria }}</p>
+                                        <p style="margin: 0 0 8px 0;"><strong>📄 Contrato:</strong> {{ visita.contrato }} ({{ visita.empresa }})</p>
+                                        <p style="margin: 0 0 8px 0;">
+                                             <strong>📞 Contacto:</strong> {{ visita.telefonos }}
+                                             <button type="button" class="btn" style="background-color: #25d366; color: white; padding: 2px 6px; font-size: 0.75rem; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; margin-left: 8px; display: inline-flex; align-items: center; gap: 4px;" 
+                                                 onclick="enviarNotificacionProgramacion('{{ visita.cliente }}', '{{ visita.telefonos }}', '{{ visita.fecha_programada }}', '{{ visita.preferencia_horaria }}', '{{ visita.tecnico_principal or 'Sin asignar' }}', '{{ visita.tecnico_apoyo or '' }}', '{{ visita.placa_vehiculo_principal or 'S/P' }}', '{{ visita.es_instalacion }}')">
+                                                 <i class="fa-brands fa-whatsapp"></i> Avisar Agenda
+                                             </button>
+                                         </p>
+                                        <p style="margin: 0 0 8px 0;"><strong>📍 Dirección:</strong> {{ visita.direccion }}</p>
+                                        <p style="margin: 0 0 8px 0;"><strong>⏰ Preferencia Cliente:</strong> {{ visita.preferencia_horaria }}</p>
                                     </div>
                                     <div>
-                                        <p style="margin: 0 0 8px 0;"><strong>📡 Servicio:</strong> {{ visita.servicio
-                                            }} {%
-                                            if visita.velocidad_mbps %}({{ visita.velocidad_mbps }} Mbps){% endif %}</p>
+                                        {% if session.get('active_area') == 'INSTALACIONES' %}
+                                            <p style="margin: 0 0 8px 0;"><strong>📡 Servicio a Realizar:</strong> <span style="background-color: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">{{ visita.servicio }}</span></p>
+                                            <p style="margin: 0 0 8px 0;"><strong>📦 Producto:</strong> {{ visita.producto }}</p>
+                                            <p style="margin: 0 0 8px 0;"><strong>🔌 Tipo:</strong> {{ visita.tipo_instalacion }}</p>
+                                            <p style="margin: 0 0 8px 0;"><strong>👤 Vendedor:</strong> {{ visita.vendedor or 'N/A' }}</p>
+                                            <p style="margin: 0 0 8px 0;"><strong>📅 Recibido Coordinación:</strong> {{ visita.recibido_coordinacion or 'N/A' }}</p>
+                                        {% else %}
+                                            <p style="margin: 0 0 8px 0;"><strong>📡 Servicio:</strong> {{ visita.servicio }} {% if visita.velocidad_mbps %}({{ visita.velocidad_mbps }} Mbps){% endif %}</p>
+                                        {% endif %}
                                         <p style="margin: 0 0 8px 0;"><strong>🗣️ Observación Callcenter:</strong> <br>
                                             <span
                                                 style="background: white; padding: 5px; display: block; border-radius: 4px; border: 1px solid #e2e8f0; margin-top: 4px;">{{
@@ -189,22 +220,39 @@
                                     {% if visita.estado in ['PENDIENTE', 'REAGENDADA'] %}
                                     <button type="button" class="btn"
                                         style="background-color: #ef4444; padding: 6px 12px; font-size: 0.85rem;"
-                                        onclick="mostrarFormulario('cancelar', {{ visita.id_visita }})">Terminar /
-                                        Cancelar</button>
+                                        onclick="mostrarFormulario('cancelar', {{ visita.id_visita }})">
+                                        {% if session.get('active_area') == 'INSTALACIONES' %}
+                                            Terminar / Cancelar
+                                        {% else %}
+                                            Terminar / Cancelar
+                                        {% endif %}
+                                    </button>
                                     <button type="button" class="btn"
                                         style="background-color: #f59e0b; padding: 6px 12px; font-size: 0.85rem;"
-                                        onclick="mostrarFormulario('reagendar', {{ visita.id_visita }})">Reagendar
-                                        Visita</button>
+                                        onclick="mostrarFormulario('reagendar', {{ visita.id_visita }})">
+                                        {% if session.get('active_area') == 'INSTALACIONES' %}
+                                            Reagendar Instalación
+                                        {% else %}
+                                            Reagendar Visita
+                                        {% endif %}
+                                    </button>
                                     <button type="button" class="btn" style="background-color: #6366f1; padding: 6px 12px; font-size: 0.85rem;" onclick="mostrarFormulario('reasignar', {{ visita.id_visita }})">Cambiar Técnicos</button>
 
 
                                     <div id="form-reagendar-{{ visita.id_visita }}" style="display: none; margin-top: 10px; background-color: #fef3c7; padding: 15px; border-radius: 8px; border: 1px solid #fcd34d;">
                                         <form action="/api/visitas/reagendar/{{ visita.id_visita }}" method="POST" style="display: flex; flex-direction: column; gap: 10px; align-items: stretch; text-align: left;">
                                             <div>
-                                                <label style="font-size: 0.8rem; font-weight: bold; color: #b45309;">Nueva Fecha de Visita:</label>
+                                                <label style="font-size: 0.8rem; font-weight: bold; color: #b45309;">
+                                                    {% if session.get('active_area') == 'INSTALACIONES' %}
+                                                        Nueva Fecha de Instalación:
+                                                    {% else %}
+                                                        Nueva Fecha de Visita:
+                                                    {% endif %}
+                                                </label>
                                                 <input type="date" name="nueva_fecha" class="form-control" required min="{{ fecha_actual }}" style="padding: 6px;">
                                             </div>
                                             
+                                            {% if session.get('active_area') != 'INSTALACIONES' %}
                                             <div>
                                                 <label style="font-size: 0.8rem; font-weight: bold; color: #b45309;">Prioridad para el nuevo día:</label>
                                                 <select name="nueva_prioridad" class="form-control" style="padding: 6px;">
@@ -213,17 +261,41 @@
                                                     <option value="BAJA" {% if visita.prioridad == 'BAJA' %}selected{% endif %}>BAJA</option>
                                                 </select>
                                             </div>
+                                            {% else %}
+                                            <input type="hidden" name="nueva_prioridad" value="MEDIA">
+                                            {% endif %}
 
                                             <div>
                                                 <label style="font-size: 0.8rem; font-weight: bold; color: #b45309;">Motivo del cambio:</label>
                                                 <textarea name="observacion_reagendado" class="form-control" style="padding: 6px; resize: vertical; min-height: 60px;" placeholder="Ej: Cliente no estaba en casa / Pidió lunes 10am"></textarea>
                                             </div>
                                             
-                                            <button type="submit" class="btn" style="background-color: #d97706; color: white; padding: 8px 12px; font-size: 0.85rem; font-weight: bold; margin-top: 5px; border: none; border-radius: 4px; cursor: pointer;">Confirmar Reagendamiento</button>
+                                            <button type="submit" class="btn" style="background-color: #d97706; color: white; padding: 8px 12px; font-size: 0.85rem; font-weight: bold; margin-top: 5px; border: none; border-radius: 4px; cursor: pointer;">
+                                                {% if session.get('active_area') == 'INSTALACIONES' %}
+                                                    Confirmar Reagendamiento de Instalación
+                                                {% else %}
+                                                    Confirmar Reagendamiento
+                                                {% endif %}
+                                            </button>
                                         </form>
                                     </div>
 
                                     <div id="form-reasignar-{{ visita.id_visita }}" style="display: none; margin-top: 10px; background-color: #e0e7ff; padding: 15px; border-radius: 8px; border: 1px solid #c7d2fe;">
+                                        {% if session.get('active_area') == 'INSTALACIONES' %}
+                                        <form action="/api/visitas/{{ visita.id_visita }}/reasignar" method="POST" style="display: flex; flex-direction: column; gap: 10px; align-items: stretch; text-align: left;">
+                                            <div>
+                                                <label style="font-size: 0.8rem; font-weight: bold; color: #3730a3;">Cuadrilla Asignada:</label>
+                                                <select id="reasignar-cuadrilla-{{ visita.id_visita }}" class="form-control" style="padding: 6px;" onchange="actualizarReasignarCuadrilla({{ visita.id_visita }}, this.value)">
+                                                    <option value="">-- Seleccionar Cuadrilla --</option>
+                                                    <option value="CUADRILLA_1" {% if visita.tecnico_principal == 'HENRY CUENCA' and visita.tecnico_apoyo == 'EDUARDO CRUZ' %}selected{% endif %}>CUADRILLA 1 (Henry Cuenca / Eduardo Cruz)</option>
+                                                    <option value="CUADRILLA_2" {% if visita.tecnico_principal == 'JOOEL ARROYO' and visita.tecnico_apoyo == 'OSWALDO BERMEO' %}selected{% endif %}>CUADRILLA 2 (Jooel Arroyo / Oswaldo Bermeo)</option>
+                                                </select>
+                                                <input type="hidden" name="tecnico_principal" id="reasignar-principal-{{ visita.id_visita }}" value="{{ visita.tecnico_principal or '' }}">
+                                                <input type="hidden" name="tecnico_apoyo" id="reasignar-apoyo-{{ visita.id_visita }}" value="{{ visita.tecnico_apoyo or '' }}">
+                                            </div>
+                                            <button type="submit" class="btn" style="background-color: #4338ca; padding: 8px 15px; align-self: flex-end;">Actualizar Cuadrilla</button>
+                                        </form>
+                                        {% else %}
                                         <form action="/api/visitas/{{ visita.id_visita }}/reasignar" method="POST" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: flex-end;">
                                             <div>
                                                 <label style="font-size: 0.8rem; font-weight: bold; color: #3730a3;">Técnico Principal:</label>
@@ -244,6 +316,7 @@
                                             </div>
                                             <button type="submit" class="btn" style="background-color: #4338ca; padding: 8px 15px;">Actualizar</button>
                                         </form>
+                                        {% endif %}
                                     </div>
 
                                     <div id="form-cancelar-{{ visita.id_visita }}"
@@ -269,8 +342,13 @@
                                                 </select>
                                             </div>
                                             <button type="submit" class="btn"
-                                                style="background-color: #b91c1c; padding: 6px 12px; font-size: 0.85rem;">Guardar
-                                                y Cerrar Visita</button>
+                                                style="background-color: #b91c1c; padding: 6px 12px; font-size: 0.85rem;">
+                                                {% if session.get('active_area') == 'INSTALACIONES' %}
+                                                    Guardar y Cerrar Instalación
+                                                {% else %}
+                                                    Guardar y Cerrar Visita
+                                                {% endif %}
+                                            </button>
                                         </form>
                                     </div>
 
@@ -307,7 +385,13 @@
                     {% else %}
                     <tr>
                         <td colspan="7">
-                            <div class="empty-state">No hay visitas pendientes hoy.</div>
+                            <div class="empty-state">
+                                {% if session.get('active_area') == 'INSTALACIONES' %}
+                                    No hay instalaciones pendientes hoy.
+                                {% else %}
+                                    No hay visitas pendientes hoy.
+                                {% endif %}
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -416,4 +500,47 @@
     // Ejecutar inmediatamente y luego cada segundo
     actualizarCronometrosVisitas();
     setInterval(actualizarCronometrosVisitas, 1000);
+
+    function actualizarReasignarCuadrilla(id, val) {
+        const principalInput = document.getElementById('reasignar-principal-' + id);
+        const apoyoInput = document.getElementById('reasignar-apoyo-' + id);
+        if (val === 'CUADRILLA_1') {
+            principalInput.value = 'HENRY CUENCA';
+            apoyoInput.value = 'EDUARDO CRUZ';
+        } else if (val === 'CUADRILLA_2') {
+            principalInput.value = 'JOOEL ARROYO';
+            apoyoInput.value = 'OSWALDO BERMEO';
+        } else {
+            principalInput.value = '';
+            apoyoInput.value = '';
+        }
+    }
+
+    function enviarNotificacionProgramacion(cliente, telefonos, fechaStr, preferencia, tecnico, apoyo, placa, esInstalacion) {
+        let tel = telefonos.split('/')[0].replace(/\D/g, '');
+        if (tel.startsWith('0')) {
+            tel = '593' + tel.substring(1);
+        }
+
+        let fecha = fechaStr;
+        try {
+            const partes = fechaStr.split('-');
+            if (partes.length === 3) {
+                fecha = `${partes[2]}/${partes[1]}/${partes[0]}`;
+            }
+        } catch(e) {}
+
+        let mensaje = "";
+        if (esInstalacion === "1" || esInstalacion === 1) {
+            let cuadrilla = tecnico;
+            if (apoyo && apoyo.trim() !== '') {
+                cuadrilla += ` y ${apoyo}`;
+            }
+            mensaje = `¡Hola! En Futurity queremos ser el amigo que te conecta, porque tú nos importas. 💙 Tu servicio de instalación ha sido programado con éxito:\n\n👤 Cliente: ${cliente}\n📅 Fecha: ${fecha}\n⏰ Horario: ${preferencia}\n🚗 Cuadrilla: ${cuadrilla} (Vehículo Placa: ${placa})\n\n¡Estamos listos para atenderte!`;
+        } else {
+            mensaje = `¡Hola! En Futurity queremos ser el amigo que te conecta, porque tú nos importas. 💙 Tu visita técnica de soporte ha sido programada con éxito:\n\n👤 Cliente: ${cliente}\n📅 Fecha: ${fecha}\n⏰ Horario: ${preferencia}\n\n¡Estamos listos para atenderte!`;
+        }
+
+        window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`, '_blank');
+    }
 </script>

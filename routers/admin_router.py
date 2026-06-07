@@ -21,7 +21,7 @@ from urllib.parse import urlencode
 def dashboard_calidad():
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    if session.get('user_role') not in ['ADMIN']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
         from flask import flash
         flash('No tienes permiso para acceder al control de calidad.', 'danger')
         return redirect(url_for('dashboard'))
@@ -37,7 +37,7 @@ def dashboard_calidad():
 def api_dashboard_calidad():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver datos de control de calidad."}), 403
         
     conexion = get_db_connection()
@@ -274,9 +274,10 @@ def auditoria_cliente():
 def api_tecnicos_ubicaciones():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver la ubicación de los técnicos."}), 403
         
+    active_area = session.get('active_area', 'SOPORTE')
     conexion = get_db_connection()
     if not conexion:
         return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
@@ -293,14 +294,17 @@ def api_tecnicos_ubicaciones():
                    estado_actividad AS estado, 
                    foto_perfil,
                    foto_vehiculo,
-                   placa_vehiculo
+                   placa_vehiculo,
+                   alerta_panico,
+                   mensaje_panico
             FROM tecnicos
             WHERE activo = 1 
+              AND area_trabajo = %s
               AND latitud_actual IS NOT NULL 
               AND longitud_actual IS NOT NULL
-              AND ultima_conexion >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)
+              AND (ultima_conexion >= DATE_SUB(NOW(), INTERVAL 10 MINUTE) OR alerta_panico = 1)
         """
-        cursor.execute(query)
+        cursor.execute(query, (active_area,))
         ubicaciones = cursor.fetchall()
         
         # Formatear fecha/hora a ISO para serialización JSON
@@ -319,8 +323,24 @@ def api_tecnicos_ubicaciones():
 def metricas_globales():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas globales."}), 403
+
+    active_area = session.get('active_area', 'SOPORTE')
+    es_instalacion_val = 1 if active_area == 'INSTALACIONES' else 0
+
+    # Obtener parámetros de filtros (hoy y hace 3 meses por defecto si no se especifican)
+    hoy_dt = date.today()
+    hace_tres_meses = (hoy_dt - timedelta(days=90)).isoformat()
+    hoy_str = hoy_dt.isoformat()
+
+    fecha_inicio = request.args.get('fecha_inicio', hace_tres_meses)
+    if not fecha_inicio:
+        fecha_inicio = hace_tres_meses
+    fecha_fin = request.args.get('fecha_fin', hoy_str)
+    if not fecha_fin:
+        fecha_fin = hoy_str
+    tecnico_filtro = request.args.get('tecnico', '').strip()
 
     conexion = get_db_connection()
     if not conexion:
@@ -328,17 +348,25 @@ def metricas_globales():
     
     cursor = conexion.cursor(dictionary=True)
     try:
-        # 1. Total visitas y KPIs en los últimos 3 meses
-        query_kpis = """
+        # Cláusula WHERE común
+        where_clause = "WHERE fecha_programada >= %s AND fecha_programada <= %s AND es_instalacion = %s"
+        params = [fecha_inicio, fecha_fin, es_instalacion_val]
+
+        if tecnico_filtro and tecnico_filtro != 'TODOS':
+            where_clause += " AND (tecnico_principal = %s OR tecnico_apoyo = %s)"
+            params.extend([tecnico_filtro, tecnico_filtro])
+
+        # 1. Total visitas/instalaciones y KPIs
+        query_kpis = f"""
             SELECT 
                 COUNT(*) as total_visitas,
                 SUM(CASE WHEN estado IN ('FINALIZADA', 'SOLVENTADA_REMOTA') THEN 1 ELSE 0 END) as visitas_efectivas,
                 AVG(CASE WHEN estado = 'FINALIZADA' AND hora_inicio_visita IS NOT NULL AND hora_fin_visita IS NOT NULL 
                          THEN TIMESTAMPDIFF(MINUTE, hora_inicio_visita, hora_fin_visita) ELSE NULL END) as tiempo_promedio
             FROM visitas_tecnicas
-            WHERE fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+            {where_clause}
         """
-        cursor.execute(query_kpis)
+        cursor.execute(query_kpis, params)
         kpis = cursor.fetchone()
         
         total = kpis['total_visitas'] or 0
@@ -347,13 +375,13 @@ def metricas_globales():
         tiempo_promedio = round(float(kpis['tiempo_promedio'] or 0), 1)
         
         # 2. Distribución por Estado
-        query_estados = """
+        query_estados = f"""
             SELECT estado, COUNT(*) as cantidad
             FROM visitas_tecnicas
-            WHERE fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+            {where_clause}
             GROUP BY estado
         """
-        cursor.execute(query_estados)
+        cursor.execute(query_estados, params)
         estados_raw = cursor.fetchall()
         estados = {
             'PENDIENTE': 0,
@@ -373,44 +401,54 @@ def metricas_globales():
             elif est == 'CANCELADA':
                 estados['CANCELADA'] += cant
         
-        # 3. Top 3 Clientes con más visitas
-        query_top_clientes = """
+        # 3. Top 3 Clientes con más visitas/instalaciones
+        query_top_clientes = f"""
             SELECT cliente, contrato, COUNT(*) as total_visitas
             FROM visitas_tecnicas
-            WHERE fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+            {where_clause}
               AND contrato IS NOT NULL AND contrato != ''
               AND estado IN ('FINALIZADA', 'SOLVENTADA_REMOTA')
             GROUP BY cliente, contrato
             ORDER BY total_visitas DESC
             LIMIT 3
         """
-        cursor.execute(query_top_clientes)
+        cursor.execute(query_top_clientes, params)
         top_clientes = cursor.fetchall()
         
-        # 4. Top 5 Problemas comunes
-        query_problemas = """
-            SELECT problema, COUNT(*) as cantidad
-            FROM visitas_tecnicas
-            WHERE fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
-            GROUP BY problema
-            ORDER BY cantidad DESC
-            LIMIT 5
-        """
-        cursor.execute(query_problemas)
+        # 4. Top 5 Problemas comunes (o Productos en caso de instalación)
+        if es_instalacion_val == 1:
+            query_problemas = f"""
+                SELECT producto as problema, COUNT(*) as cantidad
+                FROM visitas_tecnicas
+                {where_clause}
+                GROUP BY producto
+                ORDER BY cantidad DESC
+                LIMIT 5
+            """
+        else:
+            query_problemas = f"""
+                SELECT problema, COUNT(*) as cantidad
+                FROM visitas_tecnicas
+                {where_clause}
+                GROUP BY problema
+                ORDER BY cantidad DESC
+                LIMIT 5
+            """
+        cursor.execute(query_problemas, params)
         top_problemas = cursor.fetchall()
         
-        # 5. Evolución semanal de visitas
-        query_evolucion = """
+        # 5. Evolución semanal
+        query_evolucion = f"""
             SELECT 
                 DATE_FORMAT(fecha_programada, '%Y-%u') as semana,
                 MIN(fecha_programada) as inicio_semana,
                 COUNT(*) as cantidad
             FROM visitas_tecnicas
-            WHERE fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+            {where_clause}
             GROUP BY semana
             ORDER BY inicio_semana ASC
         """
-        cursor.execute(query_evolucion)
+        cursor.execute(query_evolucion, params)
         evolucion_raw = cursor.fetchall()
         
         evolucion = []
@@ -421,6 +459,10 @@ def metricas_globales():
                 'label': f"Sem {fecha_str}",
                 'cantidad': row['cantidad']
             })
+
+        # 6. Obtener lista de técnicos activos para los filtros (excluyendo no técnico y tecnología)
+        cursor.execute("SELECT nombre FROM tecnicos WHERE activo = 1 AND nombre NOT IN ('NO TECNICO', 'TECNOLOGIA') ORDER BY nombre ASC")
+        tecnicos = [t['nombre'] for t in cursor.fetchall()]
             
         data = {
             'status': 'ok',
@@ -432,7 +474,8 @@ def metricas_globales():
             'estados': estados,
             'top_clientes': top_clientes,
             'top_problemas': top_problemas,
-            'evolucion': evolucion
+            'evolucion': evolucion,
+            'tecnicos': tecnicos
         }
         
         return jsonify(data)
@@ -2903,7 +2946,7 @@ def api_tecnico_devolucion():
 
 @admin_bp.route('/api/admin/tecnicos/mas_cercano', methods=['GET'])
 def obtener_tecnico_mas_cercano():
-    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR']:
+    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     lat_str = request.args.get('lat')
@@ -2918,23 +2961,24 @@ def obtener_tecnico_mas_cercano():
     except ValueError:
         return jsonify({"status": "error", "message": "Coordenadas no válidas"}), 400
         
+    active_area = session.get('active_area', 'SOPORTE')
     conexion = get_db_connection()
     if not conexion:
         return jsonify({"status": "error", "message": "Error de conexión"}), 500
         
     cursor = conexion.cursor(dictionary=True)
     try:
-        # Consultamos técnicos activos, cuyo área de trabajo sea SOPORTE,
+        # Consultamos técnicos activos, cuyo área de trabajo sea la activa de la sesión,
         # y que tengan coordenadas GPS reales (no nulas) registradas.
         cursor.execute("""
             SELECT id_tecnico, nombre, latitud_actual, longitud_actual, estado_actividad, placa_vehiculo
             FROM tecnicos
             WHERE activo = 1 
-              AND area_trabajo = 'SOPORTE'
+              AND area_trabajo = %s
               AND latitud_actual IS NOT NULL 
               AND longitud_actual IS NOT NULL
               AND ultima_conexion >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)
-        """)
+        """, (active_area,))
         tecnicos = cursor.fetchall()
         
         import math
@@ -2974,3 +3018,206 @@ def obtener_tecnico_mas_cercano():
     finally:
         cursor.close()
         conexion.close()
+
+
+@admin_bp.route('/api/admin/metricas_tiempos', methods=['GET'])
+def metricas_tiempos():
+    if 'user_id' not in session:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas de tiempos."}), 403
+
+    active_area = session.get('active_area', 'SOPORTE')
+    es_instalacion_val = 1 if active_area == 'INSTALACIONES' else 0
+
+    # Obtener parámetros de filtros (hoy y hace 3 meses por defecto si no se especifican)
+    hoy_dt = date.today()
+    hace_tres_meses = (hoy_dt - timedelta(days=90)).isoformat()
+    hoy_str = hoy_dt.isoformat()
+
+    fecha_inicio = request.args.get('fecha_inicio', hace_tres_meses)
+    if not fecha_inicio:
+        fecha_inicio = hace_tres_meses
+    fecha_fin = request.args.get('fecha_fin', hoy_str)
+    if not fecha_fin:
+        fecha_fin = hoy_str
+    tecnico_filtro = request.args.get('tecnico', '').strip()
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "No se pudo conectar a la base de datos"}), 500
+    
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        # Cláusula WHERE común
+        where_clause = "WHERE fecha_programada >= %s AND fecha_programada <= %s AND es_instalacion = %s"
+        params = [fecha_inicio, fecha_fin, es_instalacion_val]
+
+        if tecnico_filtro and tecnico_filtro != 'TODOS':
+            where_clause += " AND (tecnico_principal = %s OR tecnico_apoyo = %s)"
+            params.extend([tecnico_filtro, tecnico_filtro])
+
+        # 1. KPIs Generales de Tiempos
+        query_kpis = f"""
+            SELECT 
+                COUNT(*) as total_asignadas,
+                SUM(CASE WHEN estado IN ('FINALIZADA', 'SOLVENTADA_REMOTA') THEN 1 ELSE 0 END) as total_finalizadas,
+                AVG(CASE WHEN estado = 'FINALIZADA' AND hora_en_ruta IS NOT NULL AND hora_inicio_visita IS NOT NULL 
+                         THEN TIMESTAMPDIFF(MINUTE, hora_en_ruta, hora_inicio_visita) ELSE NULL END) as avg_traslado,
+                AVG(CASE WHEN estado = 'FINALIZADA' AND hora_inicio_visita IS NOT NULL AND hora_fin_visita IS NOT NULL 
+                         THEN TIMESTAMPDIFF(MINUTE, hora_inicio_visita, hora_fin_visita) ELSE NULL END) as avg_resolucion,
+                AVG(CASE WHEN estado = 'FINALIZADA' AND hora_en_ruta IS NOT NULL AND hora_fin_visita IS NOT NULL 
+                         THEN TIMESTAMPDIFF(MINUTE, hora_en_ruta, hora_fin_visita) ELSE NULL END) as avg_total
+            FROM visitas_tecnicas
+            {where_clause}
+        """
+        cursor.execute(query_kpis, params)
+        kpis_row = cursor.fetchone()
+        
+        total_asignadas = kpis_row['total_asignadas'] or 0
+        total_finalizadas = kpis_row['total_finalizadas'] or 0
+        tasa_efectividad = round(float(total_finalizadas / total_asignadas * 100), 1) if total_asignadas > 0 else 0.0
+        
+        kpis = {
+            'total_asignadas': total_asignadas,
+            'total_finalizadas': total_finalizadas,
+            'tasa_efectividad': tasa_efectividad,
+            'avg_traslado': round(float(kpis_row['avg_traslado'] or 0), 1),
+            'avg_resolucion': round(float(kpis_row['avg_resolucion'] or 0), 1),
+            'avg_total': round(float(kpis_row['avg_total'] or 0), 1)
+        }
+
+        # 2. Comparativa por Técnico (solo si no se filtra por un técnico específico)
+        comparativa_tecnicos = []
+        if not tecnico_filtro or tecnico_filtro == 'TODOS':
+            query_comp = f"""
+                SELECT 
+                    tecnico_principal AS tecnico,
+                    COUNT(*) as asignadas,
+                    SUM(CASE WHEN estado IN ('FINALIZADA', 'SOLVENTADA_REMOTA') THEN 1 ELSE 0 END) as finalizadas,
+                    AVG(CASE WHEN estado = 'FINALIZADA' AND hora_en_ruta IS NOT NULL AND hora_inicio_visita IS NOT NULL 
+                             THEN TIMESTAMPDIFF(MINUTE, hora_en_ruta, hora_inicio_visita) ELSE NULL END) as avg_traslado,
+                    AVG(CASE WHEN estado = 'FINALIZADA' AND hora_inicio_visita IS NOT NULL AND hora_fin_visita IS NOT NULL 
+                             THEN TIMESTAMPDIFF(MINUTE, hora_inicio_visita, hora_fin_visita) ELSE NULL END) as avg_resolucion
+                FROM visitas_tecnicas
+                {where_clause}
+                  AND tecnico_principal IS NOT NULL AND tecnico_principal != '' AND tecnico_principal NOT IN ('NO TECNICO', 'TECNOLOGIA')
+                GROUP BY tecnico_principal
+                ORDER BY finalizadas DESC
+            """
+            cursor.execute(query_comp, params)
+            rows_comp = cursor.fetchall()
+            for r in rows_comp:
+                comparativa_tecnicos.append({
+                    'tecnico': r['tecnico'],
+                    'asignadas': r['asignadas'],
+                    'finalizadas': r['finalizadas'],
+                    'avg_traslado': round(float(r['avg_traslado'] or 0), 1),
+                    'avg_resolucion': round(float(r['avg_resolucion'] or 0), 1)
+                })
+
+        # 3. Tiempos por Tipo de Problema / Producto
+        categoria_col = 'producto' if es_instalacion_val == 1 else 'problema'
+        query_problemas = f"""
+            SELECT 
+                {categoria_col} as categoria,
+                COUNT(*) as cantidad,
+                AVG(CASE WHEN estado = 'FINALIZADA' AND hora_inicio_visita IS NOT NULL AND hora_fin_visita IS NOT NULL 
+                         THEN TIMESTAMPDIFF(MINUTE, hora_inicio_visita, hora_fin_visita) ELSE NULL END) as avg_resolucion
+            FROM visitas_tecnicas
+            {where_clause}
+              AND {categoria_col} IS NOT NULL AND {categoria_col} != ''
+            GROUP BY {categoria_col}
+            ORDER BY cantidad DESC
+            LIMIT 8
+        """
+        cursor.execute(query_problemas, params)
+        rows_prob = cursor.fetchall()
+        tiempos_problemas = []
+        for r in rows_prob:
+            tiempos_problemas.append({
+                'categoria': r['categoria'],
+                'cantidad': r['cantidad'],
+                'avg_resolucion': round(float(r['avg_resolucion'] or 0), 1)
+            })
+
+        # 4. Evolución semanal de tiempos
+        query_evolucion = f"""
+            SELECT 
+                DATE_FORMAT(fecha_programada, '%Y-%u') as semana,
+                MIN(fecha_programada) as inicio_semana,
+                AVG(CASE WHEN estado = 'FINALIZADA' AND hora_en_ruta IS NOT NULL AND hora_inicio_visita IS NOT NULL 
+                         THEN TIMESTAMPDIFF(MINUTE, hora_en_ruta, hora_inicio_visita) ELSE NULL END) as avg_traslado,
+                AVG(CASE WHEN estado = 'FINALIZADA' AND hora_inicio_visita IS NOT NULL AND hora_fin_visita IS NOT NULL 
+                         THEN TIMESTAMPDIFF(MINUTE, hora_inicio_visita, hora_fin_visita) ELSE NULL END) as avg_resolucion
+            FROM visitas_tecnicas
+            {where_clause}
+            GROUP BY semana
+            ORDER BY inicio_semana ASC
+        """
+        cursor.execute(query_evolucion, params)
+        rows_evol = cursor.fetchall()
+        evolucion = []
+        for r in rows_evol:
+            ini_dt = r['inicio_semana']
+            fecha_lbl = ini_dt.strftime('%d/%m') if isinstance(ini_dt, (datetime, date)) else str(ini_dt)
+            evolucion.append({
+                'label': f"Sem {fecha_lbl}",
+                'avg_traslado': round(float(r['avg_traslado'] or 0), 1),
+                'avg_resolucion': round(float(r['avg_resolucion'] or 0), 1)
+            })
+
+        # 5. Detalle de Bitácora SLA (últimas 50 visitas con tiempos calculados)
+        query_bitacora = f"""
+            SELECT 
+                id_visita,
+                cliente,
+                contrato,
+                tecnico_principal,
+                sector,
+                {categoria_col} as categoria,
+                estado,
+                hora_en_ruta,
+                hora_inicio_visita,
+                hora_fin_visita,
+                CASE WHEN hora_en_ruta IS NOT NULL AND hora_inicio_visita IS NOT NULL 
+                     THEN TIMESTAMPDIFF(MINUTE, hora_en_ruta, hora_inicio_visita) ELSE NULL END as tiempo_traslado,
+                CASE WHEN hora_inicio_visita IS NOT NULL AND hora_fin_visita IS NOT NULL 
+                     THEN TIMESTAMPDIFF(MINUTE, hora_inicio_visita, hora_fin_visita) ELSE NULL END as tiempo_resolucion
+            FROM visitas_tecnicas
+            {where_clause}
+            ORDER BY fecha_programada DESC, id_visita DESC
+            LIMIT 50
+        """
+        cursor.execute(query_bitacora, params)
+        rows_bit = cursor.fetchall()
+        bitacora = []
+        for r in rows_bit:
+            bitacora.append({
+                'id_visita': r['id_visita'],
+                'cliente': r['cliente'],
+                'contrato': r['contrato'] or '',
+                'tecnico': r['tecnico_principal'] or 'Sin asignar',
+                'sector': r['sector'] or '-',
+                'categoria': r['categoria'] or 'General',
+                'estado': r['estado'],
+                'hora_en_ruta': r['hora_en_ruta'].isoformat() if r['hora_en_ruta'] else None,
+                'hora_inicio': r['hora_inicio_visita'].isoformat() if r['hora_inicio_visita'] else None,
+                'hora_fin': r['hora_fin_visita'].isoformat() if r['hora_fin_visita'] else None,
+                'tiempo_traslado': r['tiempo_traslado'],
+                'tiempo_resolucion': r['tiempo_resolucion']
+            })
+
+        return jsonify({
+            'status': 'ok',
+            'kpis': kpis,
+            'comparativa_tecnicos': comparativa_tecnicos,
+            'tiempos_problemas': tiempos_problemas,
+            'evolucion': evolucion,
+            'bitacora': bitacora
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
