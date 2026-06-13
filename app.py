@@ -10,7 +10,7 @@ from routers.admin_router import admin_bp
 from routers.atenciones_router import atenciones_bp
 from routers.usuarios_router import usuarios_bp
 # Tus módulos internos
-from optimizador import interpretar_preferencia_horaria
+from optimizador import interpretar_preferencia_horaria, optimizar_todas_las_visitas
 from db_config import get_db_connection
 from utils import normalizar_horario_texto, parsear_informacion_tecnica
 
@@ -287,26 +287,8 @@ def dashboard():
     # Parsear información técnica (Caja, Hilo, IP, etc.) para visualización en Call Center
     visitas = parsear_informacion_tecnica(visitas)
 
-    # --- 3. MOTOR DE ORDENAMIENTO INTELIGENTE ---
-    def peso_orden(v):
-        # A. ESTADO (Los que están trabajando o en ruta van PRIMERO)
-        estado_val = 0 if v['estado'] in ['EN_PROGRESO', 'EN_RUTA'] else 1 if v['estado'] == 'PENDIENTE' else 9
-        
-        # B. PRIORIDAD (ALTA=1, MEDIA=2, BAJA=3)
-        prioridad_raw = v.get('prioridad', 'MEDIA')
-        prioridad_val = {'ALTA': 1, 'MEDIA': 2, 'BAJA': 3}.get(prioridad_raw, 2)
-        
-        # C. HORA (Interpretamos el texto del Call Center)
-        hora_val = interpretar_preferencia_horaria(v.get('preferencia_horaria', ''))
-        
-        return (estado_val, prioridad_val, hora_val, v['id_visita'])
-
-    # Aplicamos el ordenamiento global
-    visitas.sort(key=peso_orden)
-
-    # --- 4. ASIGNACIÓN DE "PARADA #" (Global para toda la empresa) ---
-    for indice, v in enumerate(visitas, start=1):
-        v['numero_parada'] = indice
+    # --- 3. MOTOR DE ORDENAMIENTO INTELIGENTE (OPTIMIZACIÓN GEOGRÁFICA) ---
+    visitas = optimizar_todas_las_visitas(visitas)
 
     # --- 5. ESTADÍSTICAS DEL DÍA SELECCIONADO ---
     cursor.execute("""

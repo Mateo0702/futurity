@@ -50,4 +50,160 @@ def interpretar_preferencia_horaria(texto):
         return hora_sugerida * 100
     
     return 9999
+
+
+def optimizar_ruta_tecnico(visitas, starting_lat=None, starting_lon=None):
+    if not visitas:
+        return []
+        
+    # Default office starting point
+    if starting_lat is None or starting_lon is None:
+        starting_lat = -2.896829
+        starting_lon = -78.975419
+        
+    # Segregate visits by state
+    active = []
+    pending = []
+    finished = []
+    
+    for v in visitas:
+        if v.get('estado') in ['EN_PROGRESO', 'EN_RUTA']:
+            active.append(v)
+        elif v.get('estado') in ['FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA']:
+            finished.append(v)
+        else:
+            pending.append(v)
+            
+    # Start point for optimizing pending visits
+    current_lat = starting_lat
+    current_lon = starting_lon
+    
+    # If there are active visits, the optimization start point should be the location of the last active visit (if coordinates are present)
+    if active:
+        for act_v in reversed(active):
+            v_lat = act_v.get('latitud')
+            v_lon = act_v.get('longitud')
+            if v_lat is not None and v_lon is not None:
+                try:
+                    current_lat = float(v_lat)
+                    current_lon = float(v_lon)
+                    break
+                except (ValueError, TypeError):
+                    pass
+                 
+    # Separate pending visits with valid coordinates from those without
+    pending_with_coords = []
+    pending_without_coords = []
+    for p in pending:
+        p_lat = p.get('latitud')
+        p_lon = p.get('longitud')
+        if p_lat is not None and p_lon is not None:
+            try:
+                # Store coordinates as floats for calculation
+                p['lat_float'] = float(p_lat)
+                p['lon_float'] = float(p_lon)
+                pending_with_coords.append(p)
+            except (ValueError, TypeError):
+                pending_without_coords.append(p)
+        else:
+            pending_without_coords.append(p)
+            
+    # Nearest Neighbor sequencing
+    sequenced_pending = []
+    current_pt = (current_lat, current_lon)
+    
+    while pending_with_coords:
+        best_idx = 0
+        best_dist = 999999.0
+        for idx, v in enumerate(pending_with_coords):
+            dist = calcular_distancia(current_pt[0], current_pt[1], v['lat_float'], v['lon_float'])
+            if dist < best_dist:
+                best_dist = dist
+                best_idx = idx
+                 
+        next_visit = pending_with_coords.pop(best_idx)
+        # Clean temporary float keys
+        if 'lat_float' in next_visit: del next_visit['lat_float']
+        if 'lon_float' in next_visit: del next_visit['lon_float']
+        sequenced_pending.append(next_visit)
+        current_pt = (float(next_visit['latitud']), float(next_visit['longitud']))
+        
+    # Clean temporary keys for any other items
+    for p in pending_without_coords:
+        if 'lat_float' in p: del p['lat_float']
+        if 'lon_float' in p: del p['lon_float']
+        
+    # Append pending without coordinates at the end of pending
+    sequenced_pending.extend(pending_without_coords)
+    
+    # Combine all
+    sorted_visitas = active + sequenced_pending + finished
+    
+    # Re-assign sequential numero_parada
+    for idx, v in enumerate(sorted_visitas, start=1):
+        v['numero_parada'] = idx
+         
+    return sorted_visitas
+
+
+def optimizar_todas_las_visitas(visitas):
+    if not visitas:
+        return []
+        
+    # Group by technician
+    groups = {}
+    for v in visitas:
+        tec = v.get('tecnico_principal')
+        if tec is None or tec in ['', 'NO TECNICO', 'SIN ASIGNAR', 'Auto']:
+            tec = 'SIN_ASIGNAR'
+        if tec not in groups:
+            groups[tec] = []
+        groups[tec].append(v)
+        
+    # Connect to DB to get live coordinates of each technician if available
+    conexion = get_db_connection()
+    tec_coords = {}
+    if conexion:
+        try:
+            cursor = conexion.cursor(dictionary=True)
+            cursor.execute("""
+                SELECT nombre, latitud_actual, longitud_actual 
+                FROM tecnicos 
+                WHERE activo = 1 
+                  AND latitud_actual IS NOT NULL 
+                  AND longitud_actual IS NOT NULL
+            """)
+            for row in cursor.fetchall():
+                tec_coords[row['nombre']] = (float(row['latitud_actual']), float(row['longitud_actual']))
+        except Exception as e:
+            print(f"Error reading technician coordinates: {e}")
+        finally:
+            cursor.close()
+            conexion.close()
+             
+    optimized_visitas = []
+    
+    # Process named technicians first
+    for tec, group_visitas in groups.items():
+        if tec == 'SIN_ASIGNAR':
+            continue
+        lat, lon = tec_coords.get(tec, (None, None))
+        opt_group = optimizar_ruta_tecnico(group_visitas, lat, lon)
+        optimized_visitas.extend(opt_group)
+        
+    # Process unassigned last
+    if 'SIN_ASIGNAR' in groups:
+        opt_group = optimizar_ruta_tecnico(groups['SIN_ASIGNAR'], None, None)
+        optimized_visitas.extend(opt_group)
+        
+    # Sort for display:
+    # Put unassigned at the end.
+    # Grouped by technician name, then by numero_parada
+    def display_sort_key(v):
+        tec = v.get('tecnico_principal') or 'SIN_ASIGNAR'
+        is_unassigned = 1 if tec in ['', 'NO TECNICO', 'SIN ASIGNAR', 'Auto', 'SIN_ASIGNAR'] else 0
+        return (is_unassigned, tec, v.get('numero_parada', 9999))
+        
+    optimized_visitas.sort(key=display_sort_key)
+    return optimized_visitas
 

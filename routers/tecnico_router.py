@@ -52,43 +52,25 @@ def panel_tecnico(nombre_tecnico):
     
     hoy = date.today().isoformat()
     
-    # 1. CAMBIO CLAVE: Traemos TODAS las visitas de la empresa de HOY (Quitamos el filtro de técnico aquí)
+    # 1. Traemos las visitas del técnico de hoy
     query = """
         SELECT * FROM visitas_tecnicas 
         WHERE fecha_programada = %s 
+        AND (tecnico_principal = %s OR tecnico_apoyo = %s)
         AND estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA')
     """
-    cursor.execute(query, (hoy,))
-    todas_las_visitas = cursor.fetchall()
+    cursor.execute(query, (hoy, nombre_real, nombre_real))
+    visitas_del_tecnico = cursor.fetchall()
     
-    # =========================================================
-    # EL MOTOR OPTIMIZADOR EN VIVO (Aplica a nivel empresa)
-    # =========================================================
-    def peso_orden(v):
-        if v['estado'] in ['EN_PROGRESO', 'EN_RUTA']:
-            estado_val = 0 
-        elif v['estado'] == 'FINALIZADA':
-            estado_val = 9 
-        else:
-            estado_val = 1 
-
-        prioridad_val = {'ALTA': 1, 'MEDIA': 2, 'BAJA': 3}.get(v.get('prioridad', 'MEDIA'), 2)
-        hora_val = interpretar_preferencia_horaria(v.get('preferencia_horaria', ''))
-
-        return (estado_val, prioridad_val, hora_val, v['id_visita'])
-
-    # 2. Ordenamos todas las visitas del día
-    todas_las_visitas.sort(key=peso_orden)
+    # 2. Consultar las coordenadas en vivo del técnico desde la BD
+    cursor.execute("SELECT latitud_actual, longitud_actual FROM tecnicos WHERE nombre = %s", (nombre_real,))
+    tec_coords_row = cursor.fetchone()
+    lat_act = float(tec_coords_row['latitud_actual']) if tec_coords_row and tec_coords_row['latitud_actual'] is not None else None
+    lon_act = float(tec_coords_row['longitud_actual']) if tec_coords_row and tec_coords_row['longitud_actual'] is not None else None
     
-    # 3. Enumeramos globalmente (Esta será la Parada #1, Parada #2, etc. para toda la empresa)
-    for indice, visita in enumerate(todas_las_visitas, start=1):
-        visita['numero_parada'] = indice
-
-    # 4. FILTRO FINAL: Extraemos solo las que le corresponden a este técnico en específico
-    visitas_del_tecnico = [
-        v for v in todas_las_visitas 
-        if v.get('tecnico_principal') == nombre_real or v.get('tecnico_apoyo') == nombre_real
-    ]
+    # 3. Optimizar las visitas de este técnico geográficamente
+    from optimizador import optimizar_ruta_tecnico
+    visitas_del_tecnico = optimizar_ruta_tecnico(visitas_del_tecnico, lat_act, lon_act)
     
     # --- Carga de catálogos y soluciones (Queda igual) ---
     soluciones = obtener_soluciones_activas()

@@ -26,6 +26,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     }, 100);
                 }
             }
+            if (targetTab === 'tab-registro') {
+                if (typeof inicializarMapaRegistro === 'function') {
+                    inicializarMapaRegistro();
+                }
+                if (mapaRegistro) {
+                    setTimeout(() => {
+                        mapaRegistro.invalidateSize();
+                    }, 100);
+                }
+            }
         });
     });
 
@@ -154,6 +164,16 @@ document.addEventListener('DOMContentLoaded', () => {
             location.reload();
         }
     }, 30000); // Revisar cada 30 segundos
+
+    // Inicializar mapa de registro si la pestaña activa al cargar es la de registro
+    const tabRegistro = document.getElementById('tab-registro');
+    if (tabRegistro && tabRegistro.classList.contains('active')) {
+        setTimeout(() => {
+            if (typeof inicializarMapaRegistro === 'function') {
+                inicializarMapaRegistro();
+            }
+        }, 200);
+    }
 
 });
 

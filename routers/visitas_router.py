@@ -45,9 +45,18 @@ def registrar_visita():
         sector = request.form.get('sector')
         
         dir_texto = request.form.get('direccion', '')
-        lat = request.form.get('latitud', '')
-        lon = request.form.get('longitud', '')
+        lat = request.form.get('latitud', '').strip()
+        lon = request.form.get('longitud', '').strip()
         direccion_completa = f"{dir_texto} ({lat}, {lon})" if lat and lon else dir_texto
+        
+        try:
+            lat_val = float(lat) if lat else None
+        except ValueError:
+            lat_val = None
+        try:
+            lon_val = float(lon) if lon else None
+        except ValueError:
+            lon_val = None
         
         servicio = request.form.get('servicio')
         velocidad_mbps = request.form.get('velocidad_mbps')
@@ -79,10 +88,10 @@ def registrar_visita():
         if info_pas: info_parts.append(f"PAS: {info_pas}")
         
         informacion_tecnico = "\n".join(info_parts)
-
+ 
         # --- AQUÍ CONVERTIMOS EL TEXTO A MINUTOS PARA EL OPTIMIZADOR ---
         ventana_inicio, ventana_fin = normalizar_horario_texto(preferencia)
-
+ 
         # 1. Consultar el turno o restricción del técnico
         if tecnico_principal and preferencia:
             preferencia_horaria = preferencia.lower()
@@ -114,10 +123,10 @@ def registrar_visita():
                 
                 cursor_val.close()
                 conexion_val.close()
-
+ 
         conexion = get_db_connection()
         cursor = conexion.cursor()
-
+ 
         # Añadimos los campos ventana_inicio_min y ventana_fin_min al INSERT
         query = """
             INSERT INTO visitas_tecnicas 
@@ -125,15 +134,17 @@ def registrar_visita():
             empresa, contrato, cliente, telefonos, sector, direccion, 
             servicio, velocidad_mbps, problema, observacion_callcenter, informacion_tecnico, 
             ventana_inicio_min, ventana_fin_min, estado, prioridad,
-            es_instalacion, producto, tipo_instalacion, vendedor, recibido_coordinacion)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE', %s, %s, %s, %s, %s, %s)
+            es_instalacion, producto, tipo_instalacion, vendedor, recibido_coordinacion,
+            latitud, longitud)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE', %s, %s, %s, %s, %s, %s, %s, %s)
         """ 
         valores = (
             creado_por, tecnico_principal, tecnico_apoyo, fecha_programada, preferencia,
             empresa, contrato, cliente, telefonos, sector, direccion_completa,
             servicio, velocidad_mbps, problema, observacion_callcenter, informacion_tecnico,
             ventana_inicio, ventana_fin, prioridad,
-            es_instalacion, producto, tipo_instalacion, vendedor, recibido_coordinacion
+            es_instalacion, producto, tipo_instalacion, vendedor, recibido_coordinacion,
+            lat_val, lon_val
         )
         
         cursor.execute(query, valores)

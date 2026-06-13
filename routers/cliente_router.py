@@ -150,3 +150,28 @@ def calificar_visita(token):
     finally:
         cursor.close()
         conexion.close()
+
+@cliente_bp.route('/api/geocode')
+def api_geocode():
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify([])
+    
+    import urllib.request
+    import urllib.parse
+    import json
+    
+    url = f"https://nominatim.openstreetmap.org/search?format=json&limit=1&q={urllib.parse.quote(query)}"
+    req = urllib.request.Request(
+        url, 
+        headers={'User-Agent': 'FuturityControlCenter/1.0 (mateo@futurity.com.ec)'}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as response:
+            if response.status == 200:
+                data = json.loads(response.read().decode('utf-8'))
+                return jsonify(data)
+            return jsonify([])
+    except Exception as e:
+        print(f"Error in server geocode api: {e}")
+        return jsonify([])

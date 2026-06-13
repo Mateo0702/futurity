@@ -7,7 +7,7 @@
         {% endif %}
     </h2>
     <div class="card">
-        <form action="/api/visitas" method="POST">
+        <form action="/api/visitas" method="POST" autocomplete="off">
             <input type="hidden" name="es_instalacion" value="{% if session.get('active_area') == 'INSTALACIONES' %}1{% else %}0{% endif %}">
 
             <h3 style="margin-bottom: 15px; color: var(--primary); font-size: 1.1rem;">Datos de Asignación</h3>
@@ -151,8 +151,14 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Dirección Exacta:</label>
-                    <input type="text" name="direccion" required placeholder="Calle sin nombre, referencias..."
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px;">
+                        <label style="margin: 0; font-weight: 700; color: #475569; font-size: 0.85rem;">Dirección Exacta:</label>
+                        <button type="button" id="btn-buscar-direccion" onclick="buscarDireccionEnMapa()" 
+                            style="background-color: #f8fafc; border: 1px solid #cbd5e1; color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                            <i class="fa-solid fa-magnifying-glass-location"></i> Buscar en Mapa
+                        </button>
+                    </div>
+                    <input type="text" name="direccion" id="registro-direccion" required placeholder="Calle sin nombre, referencias..."
                         class="form-control">
                 </div>
                 <div class="form-group">
@@ -162,6 +168,10 @@
                 <div class="form-group">
                     <label>Longitud (Opcional):</label>
                     <input type="text" name="longitud" id="registro-longitud" placeholder="-78.998..." class="form-control">
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>Ubicación en el Mapa (Haz clic o arrastra el marcador para precisar):</label>
+                    <div id="mapa-registro" style="height: 280px; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); z-index: 1;"></div>
                 </div>
                 <div class="form-group" style="grid-column: span 2;">
                     <label>Preferencia Horaria (Cliente):</label>
@@ -303,6 +313,159 @@
         }
     }
 
+    let mapaRegistro;
+    let marcadorRegistro;
+
+    function inicializarMapaRegistro() {
+        if (mapaRegistro) return; // Ya inicializado
+
+        const inputLat = document.getElementById('registro-latitud');
+        const inputLon = document.getElementById('registro-longitud');
+        
+        let defaultLat = -2.9001;
+        let defaultLon = -78.9959;
+        
+        if (inputLat && inputLat.value.trim() !== '') {
+            defaultLat = parseFloat(inputLat.value);
+        }
+        if (inputLon && inputLon.value.trim() !== '') {
+            defaultLon = parseFloat(inputLon.value);
+        }
+
+        mapaRegistro = L.map('mapa-registro').setView([defaultLat, defaultLon], 14);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(mapaRegistro);
+
+        // Crear marcador arrastrable
+        marcadorRegistro = L.marker([defaultLat, defaultLon], {
+            draggable: true
+        }).addTo(mapaRegistro);
+
+        // Evento dragend para actualizar inputs
+        marcadorRegistro.on('dragend', function (e) {
+            const pos = marcadorRegistro.getLatLng();
+            inputLat.value = pos.lat.toFixed(6);
+            inputLon.value = pos.lng.toFixed(6);
+        });
+
+        // Evento click en mapa para mover marcador
+        mapaRegistro.on('click', function (e) {
+            marcadorRegistro.setLatLng(e.latlng);
+            inputLat.value = e.latlng.lat.toFixed(6);
+            inputLon.value = e.latlng.lng.toFixed(6);
+        });
+
+        // Evento input para cuando el usuario edite las coordenadas a mano
+        const actualizarDesdeInputs = () => {
+            const lat = parseFloat(inputLat.value);
+            const lon = parseFloat(inputLon.value);
+            if (!isNaN(lat) && !isNaN(lon)) {
+                marcadorRegistro.setLatLng([lat, lon]);
+                mapaRegistro.setView([lat, lon], 17);
+            }
+        };
+        inputLat.addEventListener('input', actualizarDesdeInputs);
+        inputLon.addEventListener('input', actualizarDesdeInputs);
+    }
+
+    function actualizarMapaRegistro(lat, lon, zoom = 16) {
+        if (!mapaRegistro) {
+            inicializarMapaRegistro();
+        }
+        if (mapaRegistro && marcadorRegistro) {
+            marcadorRegistro.setLatLng([lat, lon]);
+            mapaRegistro.setView([lat, lon], zoom);
+        }
+    }
+
+    function buscarDireccionEnMapa() {
+        const sector = document.getElementById('registro-sector').value.trim();
+        const direccion = document.getElementById('registro-direccion').value.trim();
+        const btn = document.getElementById('btn-buscar-direccion');
+        
+        if (!direccion) {
+            alert("Por favor, ingrese una dirección exacta primero.");
+            return;
+        }
+        
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Buscando...`;
+
+        // Generamos un máximo de 2 consultas para evitar bloqueos por límite de tasa (429) o demoras de Nominatim
+        const queries = [];
+        
+        const direccionLimpia = direccion.replace(/\s+y\s+/gi, ' & ').trim();
+        queries.push(`${direccionLimpia}, Cuenca, Ecuador`);
+        
+        // Si era una intersección (contiene ' y ' o ' & '), añadimos de fallback la primera calle por si acaso
+        if (direccion.toLowerCase().includes(' y ') || direccion.toLowerCase().includes(' & ')) {
+            const partes = direccion.split(/\s+(?:y|&)\s+/i);
+            if (partes[0].trim()) {
+                queries.push(`${partes[0].trim()}, Cuenca, Ecuador`);
+            }
+        }
+
+        // Ejecutar las consultas de manera secuencial hasta que una devuelva resultados
+        let promiseChain = Promise.resolve(null);
+        
+        queries.forEach(query => {
+            promiseChain = promiseChain.then(result => {
+                if (result) return result; // Si ya tenemos resultado, lo propagamos
+                
+                return fetch(`/api/geocode?q=${encodeURIComponent(query)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data && data.length > 0) {
+                            return data[0];
+                        }
+                        return null;
+                    })
+                    .catch(err => {
+                        console.error("Error en query:", query, err);
+                        return null;
+                    });
+            });
+        });
+        
+        promiseChain.then(finalResult => {
+            if (finalResult) {
+                const lat = parseFloat(finalResult.lat);
+                const lon = parseFloat(finalResult.lon);
+                document.getElementById('registro-latitud').value = lat.toFixed(6);
+                document.getElementById('registro-longitud').value = lon.toFixed(6);
+                
+                inicializarMapaRegistro();
+                actualizarMapaRegistro(lat, lon, 17); // Zoom cerrado (17) para calles/intersecciones precisas
+            } else {
+                alert("No se pudo encontrar una ubicación precisa para esa dirección. Intente ubicar el marcador manualmente.");
+            }
+        }).catch(err => {
+            console.error("Error general en geocodificación:", err);
+            alert("Error al conectar con el servicio de mapas.");
+        }).finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    }
+
+    // Geocodificar al perder el foco (blur) en la dirección si las coordenadas están vacías
+    document.addEventListener('DOMContentLoaded', () => {
+        const inputDir = document.getElementById('registro-direccion');
+        if (inputDir) {
+            inputDir.addEventListener('blur', () => {
+                const lat = document.getElementById('registro-latitud').value.trim();
+                const lon = document.getElementById('registro-longitud').value.trim();
+                const dir = inputDir.value.trim();
+                if (dir && (!lat || !lon)) {
+                    buscarDireccionEnMapa();
+                }
+            });
+        }
+    });
+
     function autoCompletarCoordenadasSector(select) {
         const selectedOption = select.options[select.selectedIndex];
         const lat = selectedOption.getAttribute('data-lat');
@@ -318,6 +481,9 @@
             
             // Ocultar recomendaciones anteriores por si cambió el sector
             document.getElementById('contenedor-recomendaciones-tecnicos').style.display = 'none';
+            
+            // Actualizar mapa y marcador con zoom intermedio (15) para sectores
+            actualizarMapaRegistro(parseFloat(lat), parseFloat(lon), 15);
         } else {
             inputLat.value = '';
             inputLon.value = '';

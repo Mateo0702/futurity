@@ -218,27 +218,31 @@
                         <label style="font-weight: 700;">Tipo de Solicitud:</label>
                         <select name="tipo_solicitud" id="aten_tipo_solicitud" required class="form-control">
                             <option value="SOPORTE TÉCNICO" selected>SOPORTE TÉCNICO</option>
-                            <option value="RECLAMO">RECLAMO</option>
-                            <option value="PAGO FACTURA">PAGO FACTURA</option>
-                            <option value="ACUERDO DE PAGOS">ACUERDO DE PAGOS</option>
-                            <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
-                            <option value="CONSULTA">CONSULTA</option>
-                            <option value="CANCELACIÓN DEFINITIVA">CANCELACIÓN DEFINITIVA</option>
                             <option value="ACTUALIZACION DE DATOS">ACTUALIZACION DE DATOS</option>
-                            <option value="FACTURACION">FACTURACION</option>
-                            <option value="COBRANZAS">COBRANZAS</option>
-                            <option value="INCREMENTO MEGAS">INCREMENTO MEGAS</option>
-                            <option value="RECONEXION">RECONEXION</option>
-                            <option value="CONTRATA ZAPPING">CONTRATA ZAPPING</option>
-                            <option value="CORTE VOLUNTARIO">CORTE VOLUNTARIO</option>
                             <option value="ACTUALIZACION DE DEBITO">ACTUALIZACION DE DEBITO</option>
-                            <option value="DEBITO DE CTA O T/C">DEBITO DE CTA O T/C</option>
+                            <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
                             <option value="ENTREGA DE EQUIPOS">ENTREGA DE EQUIPOS</option>
+                            <option value="INCREMENTO MEGAS">INCREMENTO MEGAS</option>
+                            <option value="TRANSFERENCIA">TRANSFERENCIA</option>
+                            <option value="MIGRACIÓN">MIGRACIÓN</option>
+                            <option value="RETIRAR EQUIPOS">RETIRAR EQUIPOS</option>
+                            <option value="CONSULTA">CONSULTA</option>
+                            <option value="ENTREGAR EQUIPOS">ENTREGAR EQUIPOS</option>
+                            <option value="ACUERDO DE PAGOS">ACUERDO DE PAGOS</option>
+                            <option value="DEBITO DE CTA O T/C">DEBITO DE CTA O T/C</option>
+                            <option value="PAGO FACTURA">PAGO FACTURA</option>
+                            <option value="RECONEXION">RECONEXION</option>
+                            <option value="RETIRO DE FACTURA">RETIRO DE FACTURA</option>
+                            <option value="FACTURACION">FACTURACION</option>
                             <option value="INSTALACION ADICIONAL">INSTALACION ADICIONAL</option>
                             <option value="INSTALACION NUEVA">INSTALACION NUEVA</option>
+                            <option value="VENTA DE ROUTER">VENTA DE ROUTER</option>
+                            <option value="CONTRATA ZAPPING">CONTRATA ZAPPING</option>
+                            <option value="CONTRATA DGO">CONTRATA DGO</option>
+                            <option value="RECLAMO">RECLAMO</option>
                             <option value="RETENCIÓN">RETENCIÓN</option>
-                            <option value="RETIRAR EQUIPOS">RETIRAR EQUIPOS</option>
-                            <option value="TRANSFERENCIA">TRANSFERENCIA</option>
+                            <option value="CANCELACIÓN DEFINITIVA">CANCELACIÓN DEFINITIVA</option>
+                            <option value="CORTE VOLUNTARIO">CORTE VOLUNTARIO</option>
                         </select>
                     </div>
 
@@ -246,11 +250,14 @@
                     <div class="form-group">
                         <label style="font-weight: 700;">Medio de Contacto:</label>
                         <select name="medio_contacto" id="aten_medio_contacto" required class="form-control">
-                            <option value="WHATSAPP" selected>WHATSAPP</option>
+                            <option value="OFICINA" selected>OFICINA</option>
                             <option value="TELEFONO">TELÉFONO</option>
-                            <option value="OFICINA">OFICINA</option>
+                            <option value="WHATSAPP">WHATSAPP</option>
+                            <option value="WHATSAPP + TELEFONO">WHATSAPP + TELEFONO</option>
                             <option value="REDES SOCIALES">REDES SOCIALES</option>
                             <option value="CHAT INTERNO">CHAT INTERNO</option>
+                            <option value="CONTROL CALIDAD">CONTROL CALIDAD</option>
+                            <option value="WHATSAPP TECNICOS">WHATSAPP TECNICOS</option>
                         </select>
                     </div>
 
@@ -258,13 +265,19 @@
                     <div class="form-group">
                         <label style="font-weight: 700;">Acción Realizada:</label>
                         <select name="accion" id="aten_accion" required class="form-control" onchange="verificarAccionVisita(this.value)">
-                            <option value="SOPORTE MEDIANTE MENSAJES" selected>SOPORTE MEDIANTE MENSAJES</option>
+                            <option value="VISITA TECNICA" selected>VISITA TECNICA</option>
+                            <option value="VISITA TECNICA COBRADA">VISITA TECNICA COBRADA</option>
                             <option value="SOPORTE MEDIANTE LLAMADA">SOPORTE MEDIANTE LLAMADA</option>
-                            <option value="VISITA TECNICA">VISITA TÉCNICA</option>
-                            <option value="VISITA TECNICA COBRADA">VISITA TÉCNICA COBRADA</option>
-                            <option value="SE DA INFORMACION">SE DA INFORMACIÓN</option>
-                            <option value="ESCALAR A TECNOLOGIA">ESCALAR A TECNOLOGÍA</option>
-                            <option value="RETENCION">RETENCIÓN</option>
+                            <option value="LLAMADA SALIENTE">LLAMADA SALIENTE</option>
+                            <option value="SMART OLT">SMART OLT</option>
+                            <option value="SOPORTE MEDIANTE MENSAJES">SOPORTE MEDIANTE MENSAJES</option>
+                            <option value="CORTE INTERNO DE SERVICIO">CORTE INTERNO DE SERVICIO</option>
+                            <option value="SOPORTE EN OFICINAS">SOPORTE EN OFICINAS</option>
+                            <option value="SOPORTE A TECNICO DE CAMPO">SOPORTE A TECNICO DE CAMPO</option>
+                            <option value="TRANSFERIR / EXTENSIONES">TRANSFERIR / EXTENSIONES</option>
+                            <option value="SE DA INFORMACION">SE DA INFORMACION</option>
+                            <option value="ESCALAR A TECNOLOGIA">ESCALAR A TECNOLOGIA</option>
+                            <option value="RETENCION">RETENCION</option>
                         </select>
                     </div>
 
@@ -272,15 +285,62 @@
                     <div class="form-group">
                         <label style="font-weight: 700;">Motivo de Consulta:</label>
                         <select name="motivo" id="aten_motivo" required class="form-control">
-                            <option value="EQUIPOS APAGADOS">EQUIPOS APAGADOS</option>
-                            <option value="EQUIPOS INHIBIDOS">EQUIPOS INHIBIDOS</option>
-                            <option value="INFORMACION / PAGOS" selected>INFORMACIÓN / PAGOS</option>
-                            <option value="DESCONFIGURACIÓN DE EQUIPOS">DESCONFIGURACIÓN DE EQUIPOS</option>
-                            <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
-                            <option value="MIGRACIÓN DE SERVICIO">MIGRACIÓN DE SERVICIO</option>
-                            <option value="LENTITUD">LENTITUD</option>
-                            <option value="SIN SEÑAL / PON ROJO">SIN SEÑAL / PON ROJO</option>
-                            <option value="CABLE CAIDO">CABLE CAÍDO</option>
+                            <option value="INFORMACION / PAGOS" selected>INFORMACION / PAGOS</option>
+                            <option value="Visita Radio Enlace">Visita Radio Enlace</option>
+                            <option value="Visita Potencia Degradada">Visita Potencia Degradada</option>
+                            <option value="Visita Revisión de Servicio">Visita Revisión de Servicio</option>
+                            <option value="Visita Equipo Alarmado">Visita Equipo Alarmado</option>
+                            <option value="Visita Cambio de Router">Visita Cambio de Router</option>
+                            <option value="Visita Colocación de Router">Visita Colocación de Router</option>
+                            <option value="Visita Configuración de Equipos">Visita Configuración de Equipos</option>
+                            <option value="Visita HFC">Visita HFC</option>
+                            <option value="Visita Canales Borrosos">Visita Canales Borrosos</option>
+                            <option value="Visita Paso de Cable UTP">Visita Paso de Cable UTP</option>
+                            <option value="Visita Reubicación de equipos (Retención)">Visita Reubicación de equipos (Retención)</option>
+                            <option value="VISITA TECNICA Equipos no Encienden">VISITA TECNICA Equipos no Encienden</option>
+                            <option value="VISITA TECNICA No Marca Velocidad Contratada">VISITA TECNICA No Marca Velocidad Contratada</option>
+                            <option value="Visita Paso de Cable Fibra O. (Cobrado)">Visita Paso de Cable Fibra O. (Cobrado)</option>
+                            <option value="Visita Paso de Cable RG6 (Cobrado)">Visita Paso de Cable RG6 (Cobrado)</option>
+                            <option value="Visita Paso de Cable UTP (Cobrado)">Visita Paso de Cable UTP (Cobrado)</option>
+                            <option value="Visita Configuración de Equipos (Cobrado)">Visita Configuración de Equipos (Cobrado)</option>
+                            <option value="Visita Reubicación de equipos (Cobrado)">Visita Reubicación de equipos (Cobrado)</option>
+                            <option value="Visita Cambio de ONU">Visita Cambio de ONU</option>
+                            <option value="Visita sin servicio de cable">Visita sin servicio de cable</option>
+                            <option value="Desconfiguración de Equipos">Desconfiguración de Equipos</option>
+                            <option value="Equipos apagados">Equipos apagados</option>
+                            <option value="Equipos Inhibidos">Equipos Inhibidos</option>
+                            <option value="Validación de Servicio">Validación de Servicio</option>
+                            <option value="Problema con dispositivos del cliente">Problema con dispositivos del cliente</option>
+                            <option value="Configuración de Equipos ONU / Router">Configuración de Equipos ONU / Router</option>
+                            <option value="Migración / Potencia degradada">Migración / Potencia degradada</option>
+                            <option value="Configuración mediante ANY DESK">Configuración mediante ANY DESK</option>
+                            <option value="CUENTAS ZAPPING">CUENTAS ZAPPING</option>
+                            <option value="Activación de Servicio">Activación de Servicio</option>
+                            <option value="Cambio de Domicilio">Cambio de Domicilio</option>
+                            <option value="Migración de Servicio">Migración de Servicio</option>
+                            <option value="Actualización de Velocidad">Actualización de Velocidad</option>
+                            <option value="Configuración de Equipos en instalación">Configuración de Equipos en instalación</option>
+                            <option value="Paso a Cartera">Paso a Cartera</option>
+                            <option value="Paso a Ventas">Paso a Ventas</option>
+                            <option value="Paso a soporte técnico">Paso a soporte técnico</option>
+                            <option value="Corte de servicio - Reconexión Autorizada">Corte de servicio - Reconexión Autorizada</option>
+                            <option value="Corte de servicio - Corte Autorizado">Corte de servicio - Corte Autorizado</option>
+                            <option value="Valores a Pagar">Valores a Pagar</option>
+                            <option value="Dirección y Horarios de Atención">Dirección y Horarios de Atención</option>
+                            <option value="Acuerdo de Pagos">Acuerdo de Pagos</option>
+                            <option value="Actualización de Pagos">Actualización de Pagos</option>
+                            <option value="Recepción de Equipos">Recepción de Equipos</option>
+                            <option value="Información">Información</option>
+                            <option value="TICKET AL NOC / DAÑO HFC">TICKET AL NOC / DAÑO HFC</option>
+                            <option value="TICKET AL NOC / DAÑO GPON">TICKET AL NOC / DAÑO GPON</option>
+                            <option value="TICKET AL NOC / DAÑO RADIAL">TICKET AL NOC / DAÑO RADIAL</option>
+                            <option value="TICKET AL NOC / SIN CANAL">TICKET AL NOC / SIN CANAL</option>
+                            <option value="TICKET AL NOC / PAGINAS BLOQUEADAS">TICKET AL NOC / PAGINAS BLOQUEADAS</option>
+                            <option value="TICKET AL NOC / NAT TIPO 3">TICKET AL NOC / NAT TIPO 3</option>
+                            <option value="TICKET AL NOC / CAIDA GENERAL">TICKET AL NOC / CAIDA GENERAL</option>
+                            <option value="CAÍDA GENERAL / OLT">CAÍDA GENERAL / OLT</option>
+                            <option value="COBRO CON TARJETA">COBRO CON TARJETA</option>
+                            <option value="PASO A RETENCION">PASO A RETENCION</option>
                         </select>
                     </div>
 
