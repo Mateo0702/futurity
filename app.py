@@ -1,6 +1,7 @@
 from flask import Flask, render_template, session, redirect, url_for, request, flash, jsonify
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 import uuid
+import re
 from datetime import date, timedelta
 
 from routers.visitas_router import visitas_bp
@@ -72,6 +73,25 @@ def check_single_session():
 
 
 @app.before_request
+def check_password_change_required():
+    # Rutas permitidas que no requieren redirección
+    rutas_permitidas = ['static', 'login', 'logout', 'cambiar_password', 'cliente.rastreo_cliente', 'cliente.encuesta_cliente', 'cliente.firma_cliente']
+    if request.endpoint in rutas_permitidas or request.endpoint is None:
+        return
+        
+    # No interferir con llamadas de API en segundo plano
+    if request.path.startswith('/api/'):
+        return
+
+    # Si el usuario tiene primer_ingreso activo en su sesión
+    if 'user_id' in session and session.get('primer_ingreso') == 1:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return
+        flash('Por seguridad, debes cambiar tu contraseña inicial antes de continuar.', 'warning')
+        return redirect(url_for('cambiar_password'))
+
+
+@app.before_request
 def check_user_active_area():
     if 'user_id' in session:
         rol = session.get('user_role')
@@ -140,6 +160,7 @@ def login():
             session['user_name'] = usuario['nombre']
             session['user_role'] = usuario['rol']
             session['session_token'] = nuevo_token # Guardamos el token en la cookie del navegador
+            session['primer_ingreso'] = usuario.get('primer_ingreso', 1)
             
             # Redireccionar según el rol del usuario
             rol = usuario.get('rol', 'ASESOR')
@@ -200,6 +221,82 @@ def logout():
 
     session.clear() # Borramos la sesión
     return redirect(url_for('login'))
+
+
+def validar_seguridad_contrasena(password):
+    if len(password) < 8:
+        return False, "La contraseña debe tener al menos 8 caracteres."
+    if not re.search(r'[A-Z]', password):
+        return False, "La contraseña debe incluir al menos una letra mayúscula."
+    if not re.search(r'[a-z]', password):
+        return False, "La contraseña debe incluir al menos una letra minúscula."
+    if not re.search(r'[0-9]', password):
+        return False, "La contraseña debe incluir al menos un número."
+    if not re.search(r'[^A-Za-z0-9]', password):
+        return False, "La contraseña debe incluir al menos un carácter especial o signo (ej: !@#$%^&*)."
+    return True, None
+
+
+@app.route('/cambiar_password', methods=['GET', 'POST'])
+def cambiar_password():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        nueva = request.form.get('nueva_password', '').strip()
+        confirmacion = request.form.get('confirmar_password', '').strip()
+
+        if not nueva or not confirmacion:
+            flash('Ambos campos son obligatorios.', 'danger')
+            return render_template('cambiar_password.html')
+
+        if nueva != confirmacion:
+            flash('Las contraseñas no coinciden.', 'danger')
+            return render_template('cambiar_password.html')
+
+        es_segura, mensaje = validar_seguridad_contrasena(nueva)
+        if not es_segura:
+            flash(mensaje, 'danger')
+            return render_template('cambiar_password.html')
+
+        conexion = get_db_connection()
+        if not conexion:
+            flash('Error de conexión a la base de datos.', 'danger')
+            return render_template('cambiar_password.html')
+
+        try:
+            cursor = conexion.cursor()
+            # Hashear la nueva contraseña
+            pass_hash = generate_password_hash(nueva, method='scrypt')
+            cursor.execute("""
+                UPDATE usuarios_callcenter 
+                SET password_hash = %s, primer_ingreso = 0 
+                WHERE id_usuario = %s
+            """, (pass_hash, session['user_id']))
+            conexion.commit()
+            cursor.close()
+
+            # Actualizar la sesión
+            session['primer_ingreso'] = 0
+            flash('Tu contraseña se ha cambiado exitosamente.', 'success')
+
+            # Redirigir según el rol
+            rol = session.get('user_role')
+            if rol == 'TECNICO':
+                nombre_url = session.get('user_name', '').replace(' ', '_')
+                return redirect(url_for('tecnico.panel_tecnico', nombre_tecnico=nombre_url))
+            elif rol == 'BODEGA':
+                return redirect(url_for('dashboard', tab='inventario'))
+            else:
+                return redirect(url_for('dashboard'))
+
+        except Exception as e:
+            print(f"Error al cambiar contraseña: {e}")
+            flash('Ocurrió un error al actualizar la contraseña.', 'danger')
+        finally:
+            conexion.close()
+
+    return render_template('cambiar_password.html')
 
 
 # --- 1. RUTA PRINCIPAL: El Dashboard ---

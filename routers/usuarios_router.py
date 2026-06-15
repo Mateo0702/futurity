@@ -154,7 +154,7 @@ def update_usuario(id_usuario):
             pass_hash = generate_password_hash(password, method='scrypt')
             cursor.execute("""
                 UPDATE usuarios_callcenter
-                SET nombre = %s, email = %s, password_hash = %s, rol = %s, activo = %s
+                SET nombre = %s, email = %s, password_hash = %s, rol = %s, activo = %s, primer_ingreso = 1
                 WHERE id_usuario = %s
             """, (nombre, email, pass_hash, rol, activo, id_usuario))
         else:

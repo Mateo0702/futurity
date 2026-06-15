@@ -16,6 +16,15 @@ def update():
             conn.commit()
             print("Columna session_token añadida con éxito.")
 
+        # Verificar si primer_ingreso existe en usuarios_callcenter
+        cursor.execute("SHOW COLUMNS FROM usuarios_callcenter LIKE 'primer_ingreso'")
+        if cursor.fetchone():
+            print("La columna primer_ingreso ya existe en usuarios_callcenter.")
+        else:
+            cursor.execute("ALTER TABLE usuarios_callcenter ADD COLUMN primer_ingreso TINYINT(1) DEFAULT 1;")
+            conn.commit()
+            print("Columna primer_ingreso añadida con éxito.")
+
         # Verificar y agregar alerta_panico en tecnicos
         cursor.execute("SHOW COLUMNS FROM tecnicos LIKE 'alerta_panico'")
         if cursor.fetchone():
