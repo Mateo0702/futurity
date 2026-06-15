@@ -4,7 +4,7 @@
         /* Cards KPI style */
         .metric-kpi-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 20px;
             margin-bottom: 25px;
         }
@@ -287,7 +287,7 @@
             </div>
 
             <!-- Fila de Gráficas y Top Clientes -->
-            <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
                 <!-- Lado Izquierdo: Donut de Estados y Top Clientes -->
                 <div style="display: flex; flex-direction: column; gap: 20px;">
                     <!-- Estados -->
@@ -371,7 +371,7 @@
             </div>
 
             <!-- Fila de Gráficas y Top de Atenciones -->
-            <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
                 <!-- Lado Izquierdo: Canales de Contacto y Acciones -->
                 <div style="display: flex; flex-direction: column; gap: 20px;">
                     <!-- Medios de contacto (Donut) -->
@@ -421,7 +421,7 @@
         <!-- SUB-TAB CONTENT TIEMPOS Y RENDIMIENTO -->
         <div id="subtab-content-tiempos" class="subtab-content" style="display: none;">
             <!-- Fila de KPIs de Tiempos -->
-            <div class="metric-kpi-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 25px; display: grid; gap: 20px;">
+            <div class="metric-kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 25px; display: grid; gap: 20px;">
                 <div class="metric-kpi-card" style="background: white; padding: 20px; border-radius: 20px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 15px; box-shadow: var(--shadow-sm);">
                     <div class="metric-kpi-icon" style="background: rgba(59,130,246,0.1); color: #3b82f6; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
                         <i class="fa-solid fa-truck"></i>
@@ -464,7 +464,7 @@
             </div>
 
             <!-- Gráficas de Tiempos -->
-            <div style="display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; margin-bottom: 25px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 25px;">
                 <!-- Izquierda: Comparativa de tiempos por técnico (se oculta si hay filtro por un técnico) -->
                 <div id="card-grafico-tecnicos" class="card" style="padding: 20px; display: flex; flex-direction: column; min-height: 320px; background: white; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm);">
                     <h4 style="margin: 0 0 15px 0; font-size: 0.85rem; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
@@ -528,20 +528,20 @@
     <!-- Buscador de Auditoría -->
     <div class="card" style="margin-bottom: 25px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 25px;">
         <h4 style="margin: 0 0 15px 0; color: #1e293b; font-size: 1rem; font-weight: 700;"><i class="fa-solid fa-search" style="margin-right: 8px; color: var(--primary);"></i> Auditoría por Contrato</h4>
-        <form id="form-auditoria" onsubmit="event.preventDefault(); buscarHistorialAvanzado();" style="display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 15px; align-items: flex-end;">
-            <div>
+        <form id="form-auditoria" onsubmit="event.preventDefault(); buscarHistorialAvanzado();" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end;">
+            <div style="flex: 1; min-width: 150px;">
                 <label style="font-size: 0.75rem; font-weight: bold; color: #64748b;">Desde:</label>
-                <input type="date" id="busqueda_desde" class="form-control" style="padding: 10px;">
+                <input type="date" id="busqueda_desde" class="form-control" style="padding: 10px; width: 100%; box-sizing: border-box;">
             </div>
-            <div>
+            <div style="flex: 1; min-width: 150px;">
                 <label style="font-size: 0.75rem; font-weight: bold; color: #64748b;">Hasta:</label>
-                <input type="date" id="busqueda_hasta" class="form-control" style="padding: 10px;">
+                <input type="date" id="busqueda_hasta" class="form-control" style="padding: 10px; width: 100%; box-sizing: border-box;">
             </div>
-            <div>
+            <div style="flex: 2; min-width: 200px;">
                 <label style="font-size: 0.75rem; font-weight: bold; color: #64748b;">Número de Contrato:</label>
-                <input type="text" id="busqueda_contrato" class="form-control" placeholder="Ej. 7587" style="padding: 10px;">
+                <input type="text" id="busqueda_contrato" class="form-control" placeholder="Ej. 7587" style="padding: 10px; width: 100%; box-sizing: border-box;">
             </div>
-            <button type="submit" class="btn" style="padding: 10px 25px; height: 45px;"><i class="fa-solid fa-search"></i> Buscar</button>
+            <button type="submit" class="btn" style="padding: 10px 25px; height: 45px; flex: 0 0 auto;"><i class="fa-solid fa-search"></i> Buscar</button>
         </form>
     </div>
 

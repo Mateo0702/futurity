@@ -180,12 +180,12 @@
                     <!-- Sector -->
                     <div class="form-group">
                         <label style="font-weight: 700;">Sector:</label>
-                        <select name="sector" id="aten_sector" class="form-control">
-                            <option value="">-- Seleccionar Sector --</option>
+                        <input type="text" name="sector" id="aten_sector" class="form-control" list="aten-sectores-list" placeholder="Escribe para buscar sector...">
+                        <datalist id="aten-sectores-list">
                             {% for sector in sectores %}
-                            <option value="{{ sector.nombre_sector }}">{{ sector.nombre_sector }}</option>
+                            <option value="{{ sector.nombre_sector }}"></option>
                             {% endfor %}
-                        </select>
+                        </datalist>
                     </div>
 
                     <!-- Fecha de Instalación (Oculta/Informativa) -->
@@ -285,64 +285,65 @@
                     <!-- Motivo -->
                     <div class="form-group">
                         <label style="font-weight: 700;">Motivo de Consulta:</label>
-                        <select name="motivo" id="aten_motivo" required class="form-control">
-                            <option value="INFORMACION / PAGOS" selected>INFORMACION / PAGOS</option>
-                            <option value="Visita Radio Enlace">Visita Radio Enlace</option>
-                            <option value="Visita Potencia Degradada">Visita Potencia Degradada</option>
-                            <option value="Visita Revisión de Servicio">Visita Revisión de Servicio</option>
-                            <option value="Visita Equipo Alarmado">Visita Equipo Alarmado</option>
-                            <option value="Visita Cambio de Router">Visita Cambio de Router</option>
-                            <option value="Visita Colocación de Router">Visita Colocación de Router</option>
-                            <option value="Visita Configuración de Equipos">Visita Configuración de Equipos</option>
-                            <option value="Visita HFC">Visita HFC</option>
-                            <option value="Visita Canales Borrosos">Visita Canales Borrosos</option>
-                            <option value="Visita Paso de Cable UTP">Visita Paso de Cable UTP</option>
-                            <option value="Visita Reubicación de equipos (Retención)">Visita Reubicación de equipos (Retención)</option>
-                            <option value="VISITA TECNICA Equipos no Encienden">VISITA TECNICA Equipos no Encienden</option>
-                            <option value="VISITA TECNICA No Marca Velocidad Contratada">VISITA TECNICA No Marca Velocidad Contratada</option>
-                            <option value="Visita Paso de Cable Fibra O. (Cobrado)">Visita Paso de Cable Fibra O. (Cobrado)</option>
-                            <option value="Visita Paso de Cable RG6 (Cobrado)">Visita Paso de Cable RG6 (Cobrado)</option>
-                            <option value="Visita Paso de Cable UTP (Cobrado)">Visita Paso de Cable UTP (Cobrado)</option>
-                            <option value="Visita Configuración de Equipos (Cobrado)">Visita Configuración de Equipos (Cobrado)</option>
-                            <option value="Visita Reubicación de equipos (Cobrado)">Visita Reubicación de equipos (Cobrado)</option>
-                            <option value="Visita Cambio de ONU">Visita Cambio de ONU</option>
-                            <option value="Visita sin servicio de cable">Visita sin servicio de cable</option>
-                            <option value="Desconfiguración de Equipos">Desconfiguración de Equipos</option>
-                            <option value="Equipos apagados">Equipos apagados</option>
-                            <option value="Equipos Inhibidos">Equipos Inhibidos</option>
-                            <option value="Validación de Servicio">Validación de Servicio</option>
-                            <option value="Problema con dispositivos del cliente">Problema con dispositivos del cliente</option>
-                            <option value="Configuración de Equipos ONU / Router">Configuración de Equipos ONU / Router</option>
-                            <option value="Migración / Potencia degradada">Migración / Potencia degradada</option>
-                            <option value="Configuración mediante ANY DESK">Configuración mediante ANY DESK</option>
-                            <option value="CUENTAS ZAPPING">CUENTAS ZAPPING</option>
-                            <option value="Activación de Servicio">Activación de Servicio</option>
-                            <option value="Cambio de Domicilio">Cambio de Domicilio</option>
-                            <option value="Migración de Servicio">Migración de Servicio</option>
-                            <option value="Actualización de Velocidad">Actualización de Velocidad</option>
-                            <option value="Configuración de Equipos en instalación">Configuración de Equipos en instalación</option>
-                            <option value="Paso a Cartera">Paso a Cartera</option>
-                            <option value="Paso a Ventas">Paso a Ventas</option>
-                            <option value="Paso a soporte técnico">Paso a soporte técnico</option>
-                            <option value="Corte de servicio - Reconexión Autorizada">Corte de servicio - Reconexión Autorizada</option>
-                            <option value="Corte de servicio - Corte Autorizado">Corte de servicio - Corte Autorizado</option>
-                            <option value="Valores a Pagar">Valores a Pagar</option>
-                            <option value="Dirección y Horarios de Atención">Dirección y Horarios de Atención</option>
-                            <option value="Acuerdo de Pagos">Acuerdo de Pagos</option>
-                            <option value="Actualización de Pagos">Actualización de Pagos</option>
-                            <option value="Recepción de Equipos">Recepción de Equipos</option>
-                            <option value="Información">Información</option>
-                            <option value="TICKET AL NOC / DAÑO HFC">TICKET AL NOC / DAÑO HFC</option>
-                            <option value="TICKET AL NOC / DAÑO GPON">TICKET AL NOC / DAÑO GPON</option>
-                            <option value="TICKET AL NOC / DAÑO RADIAL">TICKET AL NOC / DAÑO RADIAL</option>
-                            <option value="TICKET AL NOC / SIN CANAL">TICKET AL NOC / SIN CANAL</option>
-                            <option value="TICKET AL NOC / PAGINAS BLOQUEADAS">TICKET AL NOC / PAGINAS BLOQUEADAS</option>
-                            <option value="TICKET AL NOC / NAT TIPO 3">TICKET AL NOC / NAT TIPO 3</option>
-                            <option value="TICKET AL NOC / CAIDA GENERAL">TICKET AL NOC / CAIDA GENERAL</option>
-                            <option value="CAÍDA GENERAL / OLT">CAÍDA GENERAL / OLT</option>
-                            <option value="COBRO CON TARJETA">COBRO CON TARJETA</option>
-                            <option value="PASO A RETENCION">PASO A RETENCION</option>
-                        </select>
+                        <input type="text" name="motivo" id="aten_motivo" required class="form-control" list="motivos-list" placeholder="Escribe para buscar motivo...">
+                        <datalist id="motivos-list">
+                            <option value="INFORMACION / PAGOS"></option>
+                            <option value="Visita Radio Enlace"></option>
+                            <option value="Visita Potencia Degradada"></option>
+                            <option value="Visita Revisión de Servicio"></option>
+                            <option value="Visita Equipo Alarmado"></option>
+                            <option value="Visita Cambio de Router"></option>
+                            <option value="Visita Colocación de Router"></option>
+                            <option value="Visita Configuración de Equipos"></option>
+                            <option value="Visita HFC"></option>
+                            <option value="Visita Canales Borrosos"></option>
+                            <option value="Visita Paso de Cable UTP"></option>
+                            <option value="Visita Reubicación de equipos (Retención)"></option>
+                            <option value="VISITA TECNICA Equipos no Encienden"></option>
+                            <option value="VISITA TECNICA No Marca Velocidad Contratada"></option>
+                            <option value="Visita Paso de Cable Fibra O. (Cobrado)"></option>
+                            <option value="Visita Paso de Cable RG6 (Cobrado)"></option>
+                            <option value="Visita Paso de Cable UTP (Cobrado)"></option>
+                            <option value="Visita Configuración de Equipos (Cobrado)"></option>
+                            <option value="Visita Reubicación de equipos (Cobrado)"></option>
+                            <option value="Visita Cambio de ONU"></option>
+                            <option value="Visita sin servicio de cable"></option>
+                            <option value="Desconfiguración de Equipos"></option>
+                            <option value="Equipos apagados"></option>
+                            <option value="Equipos Inhibidos"></option>
+                            <option value="Validación de Servicio"></option>
+                            <option value="Problema con dispositivos del cliente"></option>
+                            <option value="Configuración de Equipos ONU / Router"></option>
+                            <option value="Migración / Potencia degradada"></option>
+                            <option value="Configuración mediante ANY DESK"></option>
+                            <option value="CUENTAS ZAPPING"></option>
+                            <option value="Activación de Servicio"></option>
+                            <option value="Cambio de Domicilio"></option>
+                            <option value="Migración de Servicio"></option>
+                            <option value="Actualización de Velocidad"></option>
+                            <option value="Configuración de Equipos en instalación"></option>
+                            <option value="Paso a Cartera"></option>
+                            <option value="Paso a Ventas"></option>
+                            <option value="Paso a soporte técnico"></option>
+                            <option value="Corte de servicio - Reconexión Autorizada"></option>
+                            <option value="Corte de servicio - Corte Autorizado"></option>
+                            <option value="Valores a Pagar"></option>
+                            <option value="Dirección y Horarios de Atención"></option>
+                            <option value="Acuerdo de Pagos"></option>
+                            <option value="Actualización de Pagos"></option>
+                            <option value="Recepción de Equipos"></option>
+                            <option value="Información"></option>
+                            <option value="TICKET AL NOC / DAÑO HFC"></option>
+                            <option value="TICKET AL NOC / DAÑO GPON"></option>
+                            <option value="TICKET AL NOC / DAÑO RADIAL"></option>
+                            <option value="TICKET AL NOC / SIN CANAL"></option>
+                            <option value="TICKET AL NOC / PAGINAS BLOQUEADAS"></option>
+                            <option value="TICKET AL NOC / NAT TIPO 3"></option>
+                            <option value="TICKET AL NOC / CAIDA GENERAL"></option>
+                            <option value="CAÍDA GENERAL / OLT"></option>
+                            <option value="COBRO CON TARJETA"></option>
+                            <option value="PASO A RETENCION"></option>
+                        </datalist>
                     </div>
 
 
@@ -466,12 +467,19 @@
                     
                     // Pre-seleccionar sector
                     if (data.cliente.sector) {
-                        const sectorSelect = document.getElementById('aten_sector');
+                        const sectorInput = document.getElementById('aten_sector');
                         const sectorVal = data.cliente.sector.trim().toUpperCase();
-                        const options = Array.from(sectorSelect.options);
-                        const match = options.find(opt => opt.value.toUpperCase() === sectorVal);
-                        if (match) {
-                            sectorSelect.value = match.value;
+                        const datalist = document.getElementById('aten-sectores-list');
+                        if (datalist) {
+                            const options = Array.from(datalist.options);
+                            const match = options.find(opt => opt.value.toUpperCase() === sectorVal);
+                            if (match) {
+                                sectorInput.value = match.value;
+                            } else {
+                                sectorInput.value = data.cliente.sector;
+                            }
+                        } else {
+                            sectorInput.value = data.cliente.sector;
                         }
                     }
                     

@@ -1489,8 +1489,27 @@ tr:hover {
 .sidebar { 
   width: 280px; 
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-  overflow: hidden; 
+  overflow-y: auto;
+  overflow-x: hidden; 
   flex-shrink: 0; /* Importante para que no se deforme */
+}
+
+/* Custom scrollbar for sidebar */
+.sidebar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+
+body.dark-mode .sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 /* El sidebar colapsado */

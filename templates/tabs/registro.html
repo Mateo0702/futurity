@@ -143,12 +143,12 @@
             <div class="form-grid">
                 <div class="form-group">
                     <label>Sector:</label>
-                    <select name="sector" id="registro-sector" required class="form-control" onchange="autoCompletarCoordenadasSector(this)">
-                        <option value="">-- Seleccionar Sector --</option>
+                    <input type="text" name="sector" id="registro-sector" required class="form-control" list="sectores-list" placeholder="Escribe para buscar sector..." onchange="autoCompletarCoordenadasSector(this)">
+                    <datalist id="sectores-list">
                         {% for sector in sectores %}
-                        <option value="{{ sector.nombre_sector }}" data-lat="{{ sector.latitud_defecto }}" data-lon="{{ sector.longitud_defecto }}">{{ sector.nombre_sector }}</option>
+                        <option value="{{ sector.nombre_sector }}" data-lat="{{ sector.latitud_defecto }}" data-lon="{{ sector.longitud_defecto }}"></option>
                         {% endfor %}
-                    </select>
+                    </datalist>
                 </div>
                 <div class="form-group">
                     <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px;">
@@ -232,12 +232,12 @@
                 </div>
                 <div class="form-group" style="grid-column: span 2;">
                     <label>Problema Reportado:</label>
-                    <select name="problema" required class="form-control">
-                        <option value="">-- Seleccionar Problema --</option>
+                    <input type="text" name="problema" id="registro-problema" required class="form-control" list="problemas-list" placeholder="Escribe para buscar problema...">
+                    <datalist id="problemas-list">
                         {% for prob in problemas %}
-                        <option value="{{ prob.nombre }}">{{ prob.nombre }}</option>
+                        <option value="{{ prob.nombre }}"></option>
                         {% endfor %}
-                    </select>
+                    </datalist>
                 </div>
             {% endif %}
                 {% if session.get('active_area') != 'INSTALACIONES' %}
@@ -466,24 +466,35 @@
         }
     });
 
-    function autoCompletarCoordenadasSector(select) {
-        const selectedOption = select.options[select.selectedIndex];
-        const lat = selectedOption.getAttribute('data-lat');
-        const lon = selectedOption.getAttribute('data-lon');
+    function autoCompletarCoordenadasSector(input) {
+        const val = input.value.trim().toUpperCase();
+        const datalist = document.getElementById('sectores-list');
+        if (!datalist) return;
+        
+        const option = Array.from(datalist.options).find(opt => opt.value.toUpperCase() === val);
         
         const inputLat = document.getElementById('registro-latitud');
         const inputLon = document.getElementById('registro-longitud');
         
-        if (lat && lon) {
-            inputLat.value = lat;
-            inputLon.value = lon;
-            console.log(`Coordenadas auto-completadas para el sector: ${lat}, ${lon}`);
+        if (option) {
+            input.value = option.value; // Asegurar casing correcto
+            const lat = option.getAttribute('data-lat');
+            const lon = option.getAttribute('data-lon');
             
-            // Ocultar recomendaciones anteriores por si cambió el sector
-            document.getElementById('contenedor-recomendaciones-tecnicos').style.display = 'none';
-            
-            // Actualizar mapa y marcador con zoom intermedio (15) para sectores
-            actualizarMapaRegistro(parseFloat(lat), parseFloat(lon), 15);
+            if (lat && lon) {
+                inputLat.value = lat;
+                inputLon.value = lon;
+                console.log(`Coordenadas auto-completadas para el sector: ${lat}, ${lon}`);
+                
+                // Ocultar recomendaciones anteriores por si cambió el sector
+                document.getElementById('contenedor-recomendaciones-tecnicos').style.display = 'none';
+                
+                // Actualizar mapa y marcador con zoom intermedio (15) para sectores
+                actualizarMapaRegistro(parseFloat(lat), parseFloat(lon), 15);
+            } else {
+                inputLat.value = '';
+                inputLon.value = '';
+            }
         } else {
             inputLat.value = '';
             inputLon.value = '';
