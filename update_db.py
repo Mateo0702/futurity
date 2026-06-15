@@ -110,6 +110,17 @@ def update():
             conn.commit()
             print("Columna longitud añadida con éxito.")
             
+        # Verificar y agregar columnas para fotos extras opcionales (1 a 4)
+        for idx in range(1, 5):
+            col_name = f"foto_extra_{idx}"
+            cursor.execute(f"SHOW COLUMNS FROM visitas_tecnicas LIKE '{col_name}'")
+            if cursor.fetchone():
+                print(f"La columna {col_name} ya existe en visitas_tecnicas.")
+            else:
+                cursor.execute(f"ALTER TABLE visitas_tecnicas ADD COLUMN {col_name} VARCHAR(255) DEFAULT NULL;")
+                conn.commit()
+                print(f"Columna {col_name} añadida con éxito.")
+            
             
     except Exception as e:
         print(f"Error: {e}")

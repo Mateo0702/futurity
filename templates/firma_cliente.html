@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Futurity - Firma de Conformidad</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            color: #f8fafc;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .logo-circle {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 12px auto;
+            box-shadow: 0 10px 20px rgba(220, 38, 38, 0.3);
+        }
+
+        .logo-circle i {
+            font-size: 1.5rem;
+            color: white;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            margin-bottom: 6px;
+            background: linear-gradient(to right, #ffffff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+
+        .info-card {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 20px;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 6px;
+        }
+
+        .info-row:last-child {
+            margin-bottom: 0;
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .info-label {
+            color: #94a3b8;
+            font-weight: 600;
+        }
+
+        .info-value {
+            color: #f8fafc;
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .canvas-area {
+            background-color: white;
+            border: 2px dashed #cbd5e1;
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+            height: 200px;
+            margin-bottom: 16px;
+            touch-action: none; /* Evita que el navegador haga scroll mientras se firma */
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: crosshair;
+        }
+
+        .canvas-hint {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #94a3b8;
+            font-size: 0.85rem;
+            font-style: italic;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            text-align: center;
+            width: 80%;
+        }
+
+        .canvas-hint i {
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+            display: block;
+            color: #cbd5e1;
+        }
+
+        .actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-clear {
+            background: #334155;
+            color: #f8fafc;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-clear:hover {
+            background: #475569;
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(220, 38, 38, 0.4);
+        }
+
+        .btn-submit:active {
+            transform: translateY(1px);
+        }
+
+        /* Pantalla de éxito */
+        .success-screen {
+            text-align: center;
+            display: none;
+            animation: scaleUp 0.4s ease-out forwards;
+        }
+
+        @keyframes scaleUp {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .success-icon {
+            width: 72px;
+            height: 72px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin: 20px auto;
+            box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
+        }
+
+        .success-title {
+            font-size: 1.4rem;
+            font-weight: 800;
+            margin-bottom: 10px;
+            color: #10b981;
+        }
+
+        .success-text {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container" id="form-container">
+        <div class="header">
+            <div class="logo-circle">
+                <i class="fa-solid fa-file-signature"></i>
+            </div>
+            <h1>Firma de Conformidad</h1>
+            <p class="subtitle">Futurity - Servicio Técnico Autorizado</p>
+        </div>
+
+        <div class="info-card">
+            <div class="info-row">
+                <span class="info-label">Cliente:</span>
+                <span class="info-value">{{ visita.cliente }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Servicio:</span>
+                <span class="info-value">
+                    {% if visita.es_instalacion == 1 %}
+                        🔌 Instalación
+                    {% else %}
+                        🛠️ Soporte
+                    {% endif %}
+                </span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Técnico Asignado:</span>
+                <span class="info-value">{{ visita.tecnico_principal }}</span>
+            </div>
+        </div>
+
+        <div class="canvas-area">
+            <div class="canvas-hint" id="hint">
+                <i class="fa-solid fa-signature"></i>
+                Dibuje su firma digital en este recuadro
+            </div>
+            <canvas id="signature-canvas"></canvas>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-clear" id="clear-btn">
+                <i class="fa-solid fa-eraser"></i> Limpiar
+            </button>
+            <button class="btn btn-submit" id="submit-btn">
+                <i class="fa-solid fa-check"></i> Confirmar Firma
+            </button>
+        </div>
+    </div>
+
+    <!-- Pantalla de éxito -->
+    <div class="container success-screen" id="success-container">
+        <div class="success-icon">
+            <i class="fa-solid fa-check"></i>
+        </div>
+        <h2 class="success-title">Firma Registrada</h2>
+        <p class="success-text">
+            Muchas gracias. Su firma ha sido enviada con éxito al sistema. 
+            El técnico ya puede proceder a cerrar la orden en su dispositivo.
+        </p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('signature-canvas');
+        const ctx = canvas.getContext('2d');
+        const clearBtn = document.getElementById('clear-btn');
+        const submitBtn = document.getElementById('submit-btn');
+        const hint = document.getElementById('hint');
+        const formContainer = document.getElementById('form-container');
+        const successContainer = document.getElementById('success-container');
+
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let hasSigned = false;
+
+        // Ajustar el canvas al tamaño real en pixeles de su contenedor CSS
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+
+            // Configuración del pincel
+            ctx.strokeStyle = '#0f172a'; // Color azul oscuro para la firma
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+        }
+
+        // Ejecutar ajuste
+        window.addEventListener('load', resizeCanvas);
+        window.addEventListener('resize', resizeCanvas);
+
+        // Ocultar texto guía cuando se empieza a dibujar
+        function drawStarted() {
+            if (!hasSigned) {
+                hasSigned = true;
+                hint.style.opacity = '0';
+            }
+        }
+
+        // Dibujar (Mouse y Touch)
+        function startDrawing(e) {
+            isDrawing = true;
+            drawStarted();
+            const pos = getPos(e);
+            lastX = pos.x;
+            lastY = pos.y;
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const pos = getPos(e);
+            
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+
+            lastX = pos.x;
+            lastY = pos.y;
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            let clientX, clientY;
+
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        // Eventos Mouse
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', stopDrawing);
+
+        // Eventos Touch (Móviles)
+        canvas.addEventListener('touchstart', startDrawing, { passive: true });
+        canvas.addEventListener('touchmove', draw, { passive: true });
+        window.addEventListener('touchend', stopDrawing);
+
+        // Botón Limpiar
+        clearBtn.addEventListener('click', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            hint.style.opacity = '1';
+            hasSigned = false;
+        });
+
+        // Botón Enviar
+        submitBtn.addEventListener('click', () => {
+            if (!hasSigned) {
+                alert('Por favor, dibuje su firma primero antes de enviar.');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
+
+            // Convertir canvas a base64
+            const b64Image = canvas.toDataURL('image/png');
+
+            // Enviar vía Fetch a la API
+            fetch('/api/cliente/firmar/{{ token }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    firma_base64: b64Image
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    formContainer.style.display = 'none';
+                    successContainer.style.display = 'block';
+                } else {
+                    alert('Error del servidor: ' + (data.message || 'No se pudo guardar.'));
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fa-solid fa-check"></i> Confirmar Firma';
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Error de conexión. Inténtelo de nuevo.');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fa-solid fa-check"></i> Confirmar Firma';
+            });
+        });
+    </script>
+</body>
+</html>

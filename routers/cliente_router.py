@@ -175,3 +175,63 @@ def api_geocode():
     except Exception as e:
         print(f"Error in server geocode api: {e}")
         return jsonify([])
+
+
+@cliente_bp.route('/firmar/<token>')
+def firmar_remoto(token):
+    conexion = get_db_connection()
+    cursor = conexion.cursor(dictionary=True)
+    cursor.execute("SELECT id_visita, cliente, tecnico_principal, es_instalacion FROM visitas_tecnicas WHERE token_rastreo = %s", (token,))
+    visita = cursor.fetchone()
+    cursor.close()
+    conexion.close()
+
+    if not visita:
+        return "El enlace de firma no es válido o ha expirado.", 404
+
+    return render_template('firma_cliente.html', visita=visita, token=token)
+
+
+@cliente_bp.route('/api/cliente/firmar/<token>', methods=['POST'])
+def guardar_firma_remota(token):
+    import os
+    import base64
+
+    datos = request.get_json() or {}
+    b64_string = datos.get('firma_base64')
+    if not b64_string:
+        return jsonify({"status": "error", "message": "Falta la firma"}), 400
+
+    conexion = get_db_connection()
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id_visita FROM visitas_tecnicas WHERE token_rastreo = %s", (token,))
+        visita = cursor.fetchone()
+        if not visita:
+            return jsonify({"status": "error", "message": "Token inválido o expirado"}), 404
+        
+        id_visita = visita['id_visita']
+
+        uploads_dir = os.path.join('static', 'uploads')
+        if not os.path.exists(uploads_dir):
+            os.makedirs(uploads_dir)
+
+        if ',' in b64_string:
+            b64_string = b64_string.split(',')[1]
+
+        img_data = base64.b64decode(b64_string)
+        filename = f"firma_{id_visita}.png"
+        filepath = os.path.join(uploads_dir, filename)
+        with open(filepath, 'wb') as f:
+            f.write(img_data)
+
+        cursor.execute("UPDATE visitas_tecnicas SET firma_cliente = %s WHERE id_visita = %s", (filename, id_visita))
+        conexion.commit()
+
+        return jsonify({"status": "ok", "message": "Firma guardada con éxito."})
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()

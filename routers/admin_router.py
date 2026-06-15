@@ -1177,7 +1177,18 @@ def preview_reporte_calidad():
                     observacion_tecnico, 
                     tecnico_principal, 
                     tecnico_apoyo,
-                    hora_fin_visita
+                    hora_fin_visita,
+                    foto_equipos,
+                    foto_equipos_2,
+                    firma_cliente,
+                    modelo_onu,
+                    modelo_router,
+                    coordenadas_tecnico,
+                    foto_extra_1,
+                    foto_extra_2,
+                    foto_extra_3,
+                    foto_extra_4,
+                    equipos_juntos
                 FROM visitas_tecnicas
                 WHERE COALESCE(DATE(hora_fin_visita), fecha_programada) BETWEEN DATE_SUB(%s, INTERVAL 2 DAY) AND %s AND estado = 'FINALIZADA'
                   AND tecnico_principal IS NOT NULL 
@@ -1207,7 +1218,18 @@ def preview_reporte_calidad():
                     observacion_tecnico, 
                     tecnico_principal, 
                     tecnico_apoyo,
-                    hora_fin_visita
+                    hora_fin_visita,
+                    foto_equipos,
+                    foto_equipos_2,
+                    firma_cliente,
+                    modelo_onu,
+                    modelo_router,
+                    coordenadas_tecnico,
+                    foto_extra_1,
+                    foto_extra_2,
+                    foto_extra_3,
+                    foto_extra_4,
+                    equipos_juntos
                 FROM visitas_tecnicas
                 WHERE COALESCE(DATE(hora_fin_visita), fecha_programada) = %s AND estado = 'FINALIZADA'
                   AND tecnico_principal IS NOT NULL 

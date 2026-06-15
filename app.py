@@ -30,6 +30,12 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(atenciones_bp)
 app.register_blueprint(usuarios_bp)
 
+__version__ = "1.0.0"
+
+@app.context_processor
+def inject_version():
+    return dict(app_version=__version__)
+
 # --- FILTROS ---
 @app.template_filter('minutos_a_hora')
 def minutos_a_hora(minutos):

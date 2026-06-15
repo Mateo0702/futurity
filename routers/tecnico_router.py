@@ -177,6 +177,15 @@ def iniciar_visita(id_visita):
     conexion = get_db_connection()
     cursor = conexion.cursor()
     try:
+        # Generar token de rastreo si no existe para la firma remota
+        cursor.execute("SELECT token_rastreo FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        row = cursor.fetchone()
+        token = row[0] if row else None
+        if not token:
+            token_seguro = secrets.token_urlsafe(16)
+            cursor.execute("UPDATE visitas_tecnicas SET token_rastreo = %s WHERE id_visita = %s", (token_seguro, id_visita))
+            conexion.commit()
+
         query = "UPDATE visitas_tecnicas SET estado = 'EN_PROGRESO', hora_inicio_visita = NOW() WHERE id_visita = %s"
         cursor.execute(query, (id_visita,))
         conexion.commit()
@@ -222,6 +231,12 @@ def finalizar_visita(id_visita):
     foto_equipos_2_b64 = request.form.get('foto_equipos_2_base64')
     firma_cliente_b64 = request.form.get('firma_cliente_base64')
     
+    # Fotos adicionales opcionales
+    foto_extra_1_b64 = request.form.get('foto_extra_1_base64')
+    foto_extra_2_b64 = request.form.get('foto_extra_2_base64')
+    foto_extra_3_b64 = request.form.get('foto_extra_3_base64')
+    foto_extra_4_b64 = request.form.get('foto_extra_4_base64')
+    
     # Procesar archivos físicos
     uploads_dir = os.path.join('static', 'uploads')
     if not os.path.exists(uploads_dir):
@@ -249,13 +264,28 @@ def finalizar_visita(id_visita):
         
     firma_cliente_filename = guardar_imagen_base64(firma_cliente_b64, f"firma_{id_visita}.png")
 
+    # Guardar fotos adicionales opcionales
+    foto_extra_1_filename = guardar_imagen_base64(foto_extra_1_b64, f"extra_{id_visita}_1.jpg")
+    foto_extra_2_filename = guardar_imagen_base64(foto_extra_2_b64, f"extra_{id_visita}_2.jpg")
+    foto_extra_3_filename = guardar_imagen_base64(foto_extra_3_b64, f"extra_{id_visita}_3.jpg")
+    foto_extra_4_filename = guardar_imagen_base64(foto_extra_4_b64, f"extra_{id_visita}_4.jpg")
+
     # Capturamos las listas dinámicas de materiales enviados desde el HTML
     materiales_ids = request.form.getlist('materiales_seleccionados[]')
     cantidades = request.form.getlist('cantidades_materiales[]')
     
     conexion = get_db_connection()
-    cursor = conexion.cursor()
+    cursor = conexion.cursor(dictionary=True)
     try:
+        # Validar la firma del cliente (enviada ahora o guardada previamente de manera remota)
+        cursor.execute("SELECT firma_cliente FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        firma_row = cursor.fetchone()
+        firma_existente = firma_row['firma_cliente'] if (firma_row and firma_row['firma_cliente']) else None
+        
+        firma_final_filename = firma_cliente_filename or firma_existente
+        if not firma_final_filename:
+            raise Exception("No se puede finalizar la visita sin la firma de conformidad del cliente.")
+
         # 1. Actualizar la visita técnica
         query = """
             UPDATE visitas_tecnicas 
@@ -269,12 +299,18 @@ def finalizar_visita(id_visita):
                 equipos_juntos = %s,
                 foto_equipos = %s,
                 foto_equipos_2 = %s,
-                firma_cliente = %s
+                firma_cliente = %s,
+                foto_extra_1 = %s,
+                foto_extra_2 = %s,
+                foto_extra_3 = %s,
+                foto_extra_4 = %s
             WHERE id_visita = %s
         """
         cursor.execute(query, (
             solucion, observacion, onu, router, coordenadas,
-            equipos_juntos_val, foto_equipos_filename, foto_equipos_2_filename, firma_cliente_filename,
+            equipos_juntos_val, foto_equipos_filename, foto_equipos_2_filename,
+            firma_final_filename,
+            foto_extra_1_filename, foto_extra_2_filename, foto_extra_3_filename, foto_extra_4_filename,
             id_visita
         ))
         
@@ -691,3 +727,31 @@ def desactivar_panico():
             conexion.close()
             
     return jsonify({"status": "error", "message": "Faltan parámetros"}), 400
+
+
+@tecnico_bp.route('/api/tecnico/verificar_firma/<int:id_visita>')
+def verificar_firma(id_visita):
+    from flask import url_for
+    conexion = get_db_connection()
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT firma_cliente, token_rastreo FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        visita = cursor.fetchone()
+        if not visita:
+            return jsonify({"status": "error", "message": "Visita no encontrada"}), 404
+        
+        if visita['firma_cliente']:
+            return jsonify({
+                "status": "firmado", 
+                "firma_url": url_for('static', filename='uploads/' + visita['firma_cliente'])
+            })
+        else:
+            return jsonify({
+                "status": "pendiente",
+                "token": visita['token_rastreo']
+            })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()

@@ -193,8 +193,19 @@
     <!-- Tabla de Vista Previa -->
     <div class="card" style="padding: 25px; box-shadow: var(--shadow-sm);">
         <h3 id="reporte-title"
-            style="margin-top: 0; margin-bottom: 20px; font-size: 1.25rem; color: #0f172a; font-weight: 800; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-            <i class="fa-solid fa-magnifying-glass-chart" style="color: var(--primary);"></i> Previsualización de Datos
+            style="margin-top: 0; margin-bottom: 20px; font-size: 1.25rem; color: #0f172a; font-weight: 800; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <span id="reporte-title-text" style="display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-magnifying-glass-chart" style="color: var(--primary);"></i> Previsualización de Datos
+            </span>
+            <!-- Selector de Vista (Solo visible para Calidad) -->
+            <div id="calidad-view-toggle-container" style="display: flex; gap: 5px; background: #e2e8f0; padding: 4px; border-radius: 8px; border: 1px solid #cbd5e1; align-items: center;">
+                <button type="button" id="btn-view-table" onclick="setCalidadView('table')" style="border: none; background: var(--primary); color: white; padding: 6px 12px; font-size: 0.8rem; font-weight: bold; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.2s;">
+                    <i class="fa-solid fa-table"></i> Vista Tabla
+                </button>
+                <button type="button" id="btn-view-cards" onclick="setCalidadView('cards')" style="border: none; background: transparent; color: #64748b; padding: 6px 12px; font-size: 0.8rem; font-weight: bold; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.2s;">
+                    <i class="fa-solid fa-table-cells-large"></i> Fichas de Auditoría
+                </button>
+            </div>
         </h3>
 
         <!-- Contenedor Tabla Calidad -->
@@ -222,6 +233,13 @@
                     <!-- Filas inyectadas por JS -->
                 </tbody>
             </table>
+        </div>
+
+        <!-- Contenedor Fichas de Auditoría (Calidad) -->
+        <div id="wrapper-fichas-calidad" style="display: none; max-height: 580px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; background-color: #f8fafc;">
+            <div id="reporte-calidad-fichas-container" style="display: grid; grid-template-columns: 1fr; gap: 25px;">
+                <!-- Fichas inyectadas por JS -->
+            </div>
         </div>
 
         <!-- Contenedor Tabla Actividades -->
@@ -485,6 +503,8 @@
     let cmChartAgenteInstance = null;
     let cmChartTipoInstance = null;
     let cachedCmData = null;
+    let calidadViewMode = localStorage.getItem('calidad_view_mode') || 'table';
+    let cachedCalidadVisitas = [];
 
     document.addEventListener("DOMContentLoaded", function () {
         // Inicializar con la fecha de hoy
@@ -498,6 +518,7 @@
         if (inputFecha) {
             inputFecha.value = fechaStr;
             cargarPreviewReporte();
+            updateCalidadViewButtons();
 
             // Vincular cambio de fecha para recargar preview
             inputFecha.addEventListener('change', cargarPreviewReporte);
@@ -566,13 +587,15 @@
         const kpiDiaSiguiente = document.getElementById('kpi-card-dia-siguiente');
 
         const wrapCalidad = document.getElementById('wrapper-tabla-calidad');
+        const wrapFichasCalidad = document.getElementById('wrapper-fichas-calidad');
         const wrapActividades = document.getElementById('wrapper-tabla-actividades');
         const wrapDiaSiguiente = document.getElementById('wrapper-tabla-dia-siguiente');
         const wrapCuadroMando = document.getElementById('wrapper-tabla-cuadro-mando');
 
         const cardConfig = document.getElementById('card-config-cuadro-mando');
         const btnDescarga = document.getElementById('btn-descarga-reporte');
-        const titleIcon = document.getElementById('reporte-title');
+        const titleText = document.getElementById('reporte-title-text');
+        const toggleContainer = document.getElementById('calidad-view-toggle-container');
 
         // Reset styles for all buttons
         [btnCalidad, btnActividades, btnDiaSiguiente, btnCuadroMando].forEach(btn => {
@@ -589,11 +612,17 @@
         if (kpiDiaSiguiente) kpiDiaSiguiente.style.display = 'none';
 
         if (wrapCalidad) wrapCalidad.style.display = 'none';
+        if (wrapFichasCalidad) wrapFichasCalidad.style.display = 'none';
         if (wrapActividades) wrapActividades.style.display = 'none';
         if (wrapDiaSiguiente) wrapDiaSiguiente.style.display = 'none';
         if (wrapCuadroMando) wrapCuadroMando.style.display = 'none';
 
         if (cardConfig) cardConfig.style.display = 'none';
+
+        // Toggle container visibility
+        if (toggleContainer) {
+            toggleContainer.style.display = (tabName === 'calidad') ? 'flex' : 'none';
+        }
 
         if (tabName === 'calidad') {
             if (btnCalidad) {
@@ -602,14 +631,20 @@
                 btnCalidad.style.fontWeight = '800';
             }
             if (kpiCalidad) kpiCalidad.style.display = 'flex';
-            if (wrapCalidad) wrapCalidad.style.display = 'block';
+            
+            // Toggle table or cards depending on view mode
+            if (calidadViewMode === 'table') {
+                if (wrapCalidad) wrapCalidad.style.display = 'block';
+            } else {
+                if (wrapFichasCalidad) wrapFichasCalidad.style.display = 'block';
+            }
 
             if (btnDescarga) {
                 btnDescarga.style.backgroundColor = '#16a34a';
                 btnDescarga.style.borderColor = '#16a34a';
                 btnDescarga.style.boxShadow = '0 4px 6px rgba(22, 163, 74, 0.2)';
             }
-            if (titleIcon) titleIcon.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color: var(--primary);"></i> Previsualización: Detalle de Visitas (Calidad)`;
+            if (titleText) titleText.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color: var(--primary);"></i> Previsualización: Detalle de Visitas (Calidad)`;
         } else if (tabName === 'actividades') {
             if (btnActividades) {
                 btnActividades.style.color = '#ea580c';
@@ -624,7 +659,7 @@
                 btnDescarga.style.borderColor = '#ea580c';
                 btnDescarga.style.boxShadow = '0 4px 6px rgba(234, 88, 12, 0.2)';
             }
-            if (titleIcon) titleIcon.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color: #ea580c;"></i> Previsualización: Resumen por Técnico`;
+            if (titleText) titleText.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color: #ea580c;"></i> Previsualización: Resumen por Técnico`;
         } else if (tabName === 'dia-siguiente') {
             if (btnDiaSiguiente) {
                 btnDiaSiguiente.style.color = '#0284c7';
@@ -639,7 +674,7 @@
                 btnDescarga.style.borderColor = '#0284c7';
                 btnDescarga.style.boxShadow = '0 4px 6px rgba(2, 132, 199, 0.2)';
             }
-            if (titleIcon) titleIcon.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color: #0284c7;"></i> Previsualización: Visitas del Día Siguiente`;
+            if (titleText) titleText.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color: #0284c7;"></i> Previsualización: Visitas del Día Siguiente`;
         } else if (tabName === 'cuadro-mando') {
             if (btnCuadroMando) {
                 btnCuadroMando.style.color = '#1f497d';
@@ -654,7 +689,7 @@
                 btnDescarga.style.borderColor = '#1f497d';
                 btnDescarga.style.boxShadow = '0 4px 6px rgba(31, 73, 125, 0.2)';
             }
-            if (titleIcon) titleIcon.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color: #1f497d;"></i> Previsualización: Cuadro de Mando Diario`;
+            if (titleText) titleText.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color: #1f497d;"></i> Previsualización: Cuadro de Mando Diario`;
         }
 
         cargarPreviewReporte();
@@ -679,93 +714,288 @@
 
     function cargarPreviewCalidad(fecha) {
         const tbody = document.getElementById('reporte-calidad-tbody');
+        const fichasContainer = document.getElementById('reporte-calidad-fichas-container');
         const kpiTotal = document.getElementById('reporte-kpi-total');
 
+        const loadingHtml = `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 50px; color: #64748b; width: 100%;">
+                <div class="spinner" style="border-width: 3px; width: 24px; height: 24px;"></div>
+                <span style="font-weight: 600;">Cargando reporte de calidad...</span>
+            </div>
+        `;
         if (tbody) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="11" style="text-align: center; padding: 50px; color: #64748b;">
-                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
-                            <div class="spinner" style="border-width: 3px; width: 24px; height: 24px;"></div>
-                            <span style="font-weight: 600;">Cargando reporte de calidad...</span>
-                        </div>
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = `<tr><td colspan="11" style="text-align: center;">${loadingHtml}</td></tr>`;
+        }
+        if (fichasContainer) {
+            fichasContainer.innerHTML = loadingHtml;
         }
 
         fetch(`/api/admin/reporte_calidad/preview?fecha=${fecha}`)
             .then(res => res.json())
             .then(data => {
                 if (data.status === 'ok') {
-                    const visitas = data.visitas;
-                    if (kpiTotal) kpiTotal.innerText = visitas.length;
-
-                    if (!tbody) return;
-
-                    if (visitas.length === 0) {
-                        tbody.innerHTML = `
-                            <tr>
-                                <td colspan="11" style="text-align: center; padding: 60px; color: #64748b; font-style: italic; font-weight: 600;">
-                                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;">
-                                        <i class="fa-solid fa-folder-open" style="font-size: 2rem; color: #cbd5e1;"></i>
-                                        <span>No hay visitas efectivas registradas en esta fecha.</span>
-                                    </div>
-                                </td>
-                            </tr>
-                        `;
-                        return;
-                    }
-
-                    let html = '';
-                    visitas.forEach((v, index) => {
-                        const fmtDt = (isoStr) => {
-                            if (!isoStr) return '-';
-                            try {
-                                const d = new Date(isoStr);
-                                const day = String(d.getDate()).padStart(2, '0');
-                                const month = String(d.getMonth() + 1).padStart(2, '0');
-                                const year = String(d.getFullYear()).substring(2);
-                                const hours = String(d.getHours()).padStart(2, '0');
-                                const mins = String(d.getMinutes()).padStart(2, '0');
-                                return `${day}/${month}/${year} ${hours}:${mins}`;
-                            } catch (e) {
-                                return isoStr;
-                            }
-                        };
-
-                        const regFmt = fmtDt(v.fecha_registro);
-                        const finFmt = fmtDt(v.hora_fin_visita);
-
-                        let techs = v.tecnico_principal || 'Sin técnico';
-                        if (v.tecnico_apoyo) {
-                            techs += ` / ${v.tecnico_apoyo}`;
-                        }
-
-                        html += `
-                            <tr style="border-bottom: 1px solid #f1f5f9; hover: background-color: #f8fafc;">
-                                <td style="text-align: center; font-weight: bold; color: var(--primary); padding: 12px 8px;">${index + 1}</td>
-                                <td style="white-space: nowrap; padding: 12px; color: #475569;">${regFmt}</td>
-                                <td style="font-weight: 700; text-align: center; padding: 12px; color: #0f172a;">${v.contrato || '-'}</td>
-                                <td style="font-weight: 700; color: #0f172a; padding: 12px;">${v.cliente || ''}</td>
-                                <td style="padding: 12px; color: #475569;">${v.telefonos || ''}</td>
-                                <td style="padding: 12px; color: #475569;">${v.sector || ''}</td>
-                                <td style="padding: 12px;"><span style="background-color: #e0f2fe; color: #0369a1; font-size: 0.75rem; font-weight: bold; padding: 3px 8px; border-radius: 6px;">${v.servicio || ''}</span></td>
-                                <td style="max-width: 200px; font-weight: 600; color: #16a34a; word-wrap: break-word; padding: 12px;">${v.solucion_tecnico || ''}</td>
-                                <td style="max-width: 250px; font-style: italic; font-size: 0.85rem; color: #475569; word-wrap: break-word; padding: 12px;">${v.observacion_tecnico || 'Sin observaciones.'}</td>
-                                <td style="font-weight: 600; color: #4f46e5; padding: 12px;">${techs}</td>
-                                <td style="white-space: nowrap; font-weight: 700; color: #0f172a; padding: 12px;">${finFmt}</td>
-                            </tr>
-                        `;
-                    });
-                    tbody.innerHTML = html;
+                    cachedCalidadVisitas = data.visitas;
+                    if (kpiTotal) kpiTotal.innerText = cachedCalidadVisitas.length;
+                    renderCalidadPreview();
                 } else {
-                    if (tbody) tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: #dc2626; padding: 30px; font-weight: bold;">Error al cargar datos: ${data.message}</td></tr>`;
+                    const errorHtml = `Error al cargar datos: ${data.message}`;
+                    if (tbody) tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: #dc2626; padding: 30px; font-weight: bold;">${errorHtml}</td></tr>`;
+                    if (fichasContainer) fichasContainer.innerHTML = `<div style="text-align: center; color: #dc2626; padding: 30px; font-weight: bold;">${errorHtml}</div>`;
                 }
             })
             .catch(err => {
-                if (tbody) tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: #dc2626; padding: 30px; font-weight: bold;">Error de conexión con el servidor.</td></tr>`;
+                const errorHtml = `Error de conexión con el servidor.`;
+                if (tbody) tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: #dc2626; padding: 30px; font-weight: bold;">${errorHtml}</td></tr>`;
+                if (fichasContainer) fichasContainer.innerHTML = `<div style="text-align: center; color: #dc2626; padding: 30px; font-weight: bold;">${errorHtml}</div>`;
             });
+    }
+
+    function setCalidadView(mode) {
+        calidadViewMode = mode;
+        localStorage.setItem('calidad_view_mode', mode);
+        updateCalidadViewButtons();
+        renderCalidadPreview();
+    }
+
+    function updateCalidadViewButtons() {
+        const btnTable = document.getElementById('btn-view-table');
+        const btnCards = document.getElementById('btn-view-cards');
+        if (!btnTable || !btnCards) return;
+
+        if (calidadViewMode === 'table') {
+            btnTable.style.background = 'var(--primary)';
+            btnTable.style.color = 'white';
+            btnCards.style.background = 'transparent';
+            btnCards.style.color = '#64748b';
+        } else {
+            btnCards.style.background = 'var(--primary)';
+            btnCards.style.color = 'white';
+            btnTable.style.background = 'transparent';
+            btnTable.style.color = '#64748b';
+        }
+    }
+
+    function renderCalidadPreview() {
+        const wrapCalidad = document.getElementById('wrapper-tabla-calidad');
+        const wrapFichasCalidad = document.getElementById('wrapper-fichas-calidad');
+        
+        if (activeReportTab === 'calidad') {
+            if (calidadViewMode === 'table') {
+                if (wrapCalidad) wrapCalidad.style.display = 'block';
+                if (wrapFichasCalidad) wrapFichasCalidad.style.display = 'none';
+            } else {
+                if (wrapCalidad) wrapCalidad.style.display = 'none';
+                if (wrapFichasCalidad) wrapFichasCalidad.style.display = 'block';
+            }
+        }
+
+        const tbody = document.getElementById('reporte-calidad-tbody');
+        const fichasContainer = document.getElementById('reporte-calidad-fichas-container');
+
+        if (!tbody || !fichasContainer) return;
+
+        if (cachedCalidadVisitas.length === 0) {
+            const emptyHtmlTable = `
+                <tr>
+                    <td colspan="11" style="text-align: center; padding: 60px; color: #64748b; font-style: italic; font-weight: 600;">
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;">
+                            <i class="fa-solid fa-folder-open" style="font-size: 2rem; color: #cbd5e1;"></i>
+                            <span>No hay visitas efectivas registradas en esta fecha.</span>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            const emptyHtmlCards = `
+                <div style="text-align: center; padding: 60px; color: #64748b; font-style: italic; font-weight: 600; background: white; border-radius: 10px; border: 1px dashed #cbd5e1; width: 100%;">
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;">
+                        <i class="fa-solid fa-folder-open" style="font-size: 2rem; color: #cbd5e1;"></i>
+                        <span>No hay visitas efectivas registradas en esta fecha.</span>
+                    </div>
+                </div>
+            `;
+            tbody.innerHTML = emptyHtmlTable;
+            fichasContainer.innerHTML = emptyHtmlCards;
+            return;
+        }
+
+        const fmtDt = (isoStr) => {
+            if (!isoStr) return '-';
+            try {
+                const d = new Date(isoStr);
+                const day = String(d.getDate()).padStart(2, '0');
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const year = String(d.getFullYear()).substring(2);
+                const hours = String(d.getHours()).padStart(2, '0');
+                const mins = String(d.getMinutes()).padStart(2, '0');
+                return `${day}/${month}/${year} ${hours}:${mins}`;
+            } catch (e) {
+                return isoStr;
+            }
+        };
+
+        // Render Table View
+        let tableHtml = '';
+        cachedCalidadVisitas.forEach((v, index) => {
+            const regFmt = fmtDt(v.fecha_registro);
+            const finFmt = fmtDt(v.hora_fin_visita);
+            let techs = v.tecnico_principal || 'Sin técnico';
+            if (v.tecnico_apoyo) {
+                techs += ` / ${v.tecnico_apoyo}`;
+            }
+            tableHtml += `
+                <tr style="border-bottom: 1px solid #f1f5f9; hover: background-color: #f8fafc;">
+                    <td style="text-align: center; font-weight: bold; color: var(--primary); padding: 12px 8px;">${index + 1}</td>
+                    <td style="white-space: nowrap; padding: 12px; color: #475569;">${regFmt}</td>
+                    <td style="font-weight: 700; text-align: center; padding: 12px; color: #0f172a;">${v.contrato || '-'}</td>
+                    <td style="font-weight: 700; color: #0f172a; padding: 12px;">${v.cliente || ''}</td>
+                    <td style="padding: 12px; color: #475569;">${v.telefonos || ''}</td>
+                    <td style="padding: 12px; color: #475569;">${v.sector || ''}</td>
+                    <td style="padding: 12px;"><span style="background-color: #e0f2fe; color: #0369a1; font-size: 0.75rem; font-weight: bold; padding: 3px 8px; border-radius: 6px;">${v.servicio || ''}</span></td>
+                    <td style="max-width: 200px; font-weight: 600; color: #16a34a; word-wrap: break-word; padding: 12px;">${v.solucion_tecnico || ''}</td>
+                    <td style="max-width: 250px; font-style: italic; font-size: 0.85rem; color: #475569; word-wrap: break-word; padding: 12px;">${v.observacion_tecnico || 'Sin observaciones.'}</td>
+                    <td style="font-weight: 600; color: #4f46e5; padding: 12px;">${techs}</td>
+                    <td style="white-space: nowrap; font-weight: 700; color: #0f172a; padding: 12px;">${finFmt}</td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = tableHtml;
+
+        // Render Cards View
+        let cardsHtml = '';
+        cachedCalidadVisitas.forEach((v, index) => {
+            const regFmt = fmtDt(v.fecha_registro);
+            const finFmt = fmtDt(v.hora_fin_visita);
+            let techs = v.tecnico_principal || 'Sin técnico';
+            if (v.tecnico_apoyo) {
+                techs += ` / ${v.tecnico_apoyo}`;
+            }
+
+            // 1. Foto Equipos HTML
+            let fotoEquiposHtml = '';
+            if (v.foto_equipos) {
+                fotoEquiposHtml = `
+                    <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; width: 100%;">
+                        <div style="flex: 1; min-width: 50px;">
+                            <img src="/static/uploads/${v.foto_equipos}" style="max-height: 80px; max-width: 100%; border-radius: 4px; border: 1px solid #cbd5e1; cursor: pointer; transition: transform 0.2s;" onclick="window.open(this.src)" onmouseenter="this.style.transform='scale(1.1)'" onmouseleave="this.style.transform='scale(1)'" title="Ver imagen completa">
+                            <div style="font-size: 0.65rem; color: #64748b; margin-top: 2px;">${v.equipos_juntos ? 'ONU/Router' : 'ONU'}</div>
+                        </div>
+                `;
+                if (!v.equipos_juntos && v.foto_equipos_2) {
+                    fotoEquiposHtml += `
+                        <div style="flex: 1; min-width: 50px;">
+                            <img src="/static/uploads/${v.foto_equipos_2}" style="max-height: 80px; max-width: 100%; border-radius: 4px; border: 1px solid #cbd5e1; cursor: pointer; transition: transform 0.2s;" onclick="window.open(this.src)" onmouseenter="this.style.transform='scale(1.1)'" onmouseleave="this.style.transform='scale(1)'" title="Ver imagen completa">
+                            <div style="font-size: 0.65rem; color: #64748b; margin-top: 2px;">Router</div>
+                        </div>
+                    `;
+                }
+                fotoEquiposHtml += `</div>`;
+            } else {
+                fotoEquiposHtml = `<span style="font-size: 0.8rem; color: #94a3b8; font-style: italic;">Sin foto registrada</span>`;
+            }
+
+            // 2. Firma Cliente HTML
+            let firmaHtml = '';
+            if (v.firma_cliente) {
+                firmaHtml = `
+                    <div style="background: white; padding: 4px; border-radius: 4px; border: 1px solid #cbd5e1; display: inline-block;">
+                        <img src="/static/uploads/${v.firma_cliente}" style="max-height: 65px; max-width: 100px; cursor: pointer; transition: transform 0.2s;" onclick="window.open(this.src)" onmouseenter="this.style.transform='scale(1.1)'" onmouseleave="this.style.transform='scale(1)'" title="Ver firma completa">
+                    </div>
+                `;
+            } else {
+                firmaHtml = `<span style="font-size: 0.8rem; color: #94a3b8; font-style: italic;">Sin firma registrada</span>`;
+            }
+
+            // 3. Fotos Extras HTML
+            let extraPhotosHtml = '';
+            let extraCount = 0;
+            const extraPhotosList = [v.foto_extra_1, v.foto_extra_2, v.foto_extra_3, v.foto_extra_4].filter(img => img);
+            extraCount = extraPhotosList.length;
+
+            if (extraCount > 0) {
+                extraPhotosHtml = `<div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; width: 100%;">`;
+                extraPhotosList.forEach((img, idx) => {
+                    extraPhotosHtml += `
+                        <div style="position: relative;">
+                            <img src="/static/uploads/${img}" style="width: 38px; height: 38px; object-fit: cover; border-radius: 4px; border: 1px solid #cbd5e1; cursor: pointer; transition: transform 0.2s;" onclick="window.open(this.src)" onmouseenter="this.style.transform='scale(1.25)'" onmouseleave="this.style.transform='scale(1)'" title="Ver evidencia adicional ${idx + 1}">
+                        </div>
+                    `;
+                });
+                extraPhotosHtml += `</div>`;
+            } else {
+                extraPhotosHtml = `<span style="font-size: 0.8rem; color: #94a3b8; font-style: italic;">Sin fotos adicionales</span>`;
+            }
+
+            cardsHtml += `
+                <div class="card" style="padding: 20px; border-left: 5px solid var(--primary); margin-bottom: 0; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 15px; background: white; border-radius: 8px;">
+                    <!-- Ficha Header: Info del Cliente -->
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <span style="font-size: 0.8rem; color: var(--primary); font-weight: bold; text-transform: uppercase;">Contrato #${v.contrato || '-'}</span>
+                            <h4 style="margin: 4px 0 0 0; font-size: 1.15rem; color: #0f172a; font-weight: bold;">${v.cliente || ''}</h4>
+                            <div style="font-size: 0.85rem; color: #64748b; margin-top: 4px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                                <span><i class="fa-solid fa-phone"></i> ${v.telefonos || ''}</span>
+                                <span>|</span>
+                                <span><i class="fa-solid fa-map-pin"></i> Sector: ${v.sector || ''}</span>
+                                <span>|</span>
+                                <span style="font-weight: 600; color: #475569;"><i class="fa-solid fa-hashtag"></i> ID: VT-${v.id_visita}</span>
+                            </div>
+                        </div>
+                        <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                            <span style="background-color: #e0f2fe; color: #0369a1; font-size: 0.75rem; font-weight: bold; padding: 4px 10px; border-radius: 6px; text-transform: uppercase;">${v.servicio || ''}</span>
+                            <span style="font-size: 0.75rem; color: #64748b; font-weight: 500;">
+                                <i class="fa-regular fa-clock"></i> Cierre: ${finFmt}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Ficha Body: Datos Técnicos y Evidencias -->
+                    <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; flex-wrap: wrap; align-items: start;">
+                        <!-- Detalles Técnicos -->
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; color: #334155; border-right: 1px solid #f1f5f9; padding-right: 15px;">
+                            <p style="margin: 0; line-height: 1.4;"><strong>👥 Técnico(s):</strong> <span style="font-weight: 600; color: #4f46e5;">${techs}</span></p>
+                            <p style="margin: 0; line-height: 1.4;"><strong>🛠️ Solución Aplicada:</strong> <span style="font-weight: 600; color: #16a34a;">${v.solucion_tecnico || ''}</span></p>
+                            <p style="margin: 0; line-height: 1.4;"><strong>📝 Observación Técnico:</strong> <span style="font-style: italic; color: #475569;">${v.observacion_tecnico || 'Sin observaciones.'}</span></p>
+                            
+                            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-top: 5px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.8rem;">
+                                <div><strong>ONU Instalada:</strong> <br><span style="color: #64748b; font-weight: 500;">${v.modelo_onu || 'N/A'}</span></div>
+                                <div><strong>Router Instalado:</strong> <br><span style="color: #64748b; font-weight: 500;">${v.modelo_router || 'N/A'}</span></div>
+                                <div style="grid-column: span 2; border-top: 1px solid #e2e8f0; padding-top: 6px; margin-top: 2px;">
+                                    <strong>📍 Coordenadas de Cierre:</strong> <br>
+                                    <span style="color: #64748b; font-weight: 500; font-family: monospace;">${v.coordenadas_tecnico || 'Sin GPS'}</span>
+                                    ${v.coordenadas_tecnico ? `<a href="https://maps.google.com/?q=${v.coordenadas_tecnico}" target="_blank" style="margin-left: 6px; color: #0284c7; text-decoration: none; font-weight: bold;"><i class="fa-solid fa-location-dot"></i> Ver Mapa</a>` : ''}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Evidencias Visuales (Fotos y Firma) -->
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <strong style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block;">Evidencias de Cierre</strong>
+                            
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                                <!-- Col 1: Foto Equipos -->
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 110px;">
+                                    <div style="font-size: 0.65rem; font-weight: bold; color: #64748b; margin-bottom: 6px; text-align: left; width: 100%; display: flex; align-items: center; gap: 4px;"><i class="fa-solid fa-camera"></i> Equipos:</div>
+                                    ${fotoEquiposHtml}
+                                </div>
+
+                                <!-- Col 2: Firma Cliente -->
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 110px;">
+                                    <div style="font-size: 0.65rem; font-weight: bold; color: #64748b; margin-bottom: 6px; text-align: left; width: 100%; display: flex; align-items: center; gap: 4px;"><i class="fa-solid fa-signature"></i> Firma:</div>
+                                    ${firmaHtml}
+                                </div>
+
+                                <!-- Col 3: Fotos Extras -->
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 110px;">
+                                    <div style="font-size: 0.65rem; font-weight: bold; color: #64748b; margin-bottom: 6px; text-align: left; width: 100%; display: flex; align-items: center; gap: 4px;"><i class="fa-solid fa-images"></i> Extras (${extraCount}):</div>
+                                    ${extraPhotosHtml}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        fichasContainer.innerHTML = cardsHtml;
     }
 
     function cargarPreviewActividades(fecha) {

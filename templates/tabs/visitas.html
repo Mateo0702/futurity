@@ -372,14 +372,14 @@
                                             </div>
 
                                             <!-- Fotos de Equipos y Firma de Cierre -->
-                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-top: 15px;">
                                                 <!-- Fotos de Equipos -->
                                                 <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                                                     <span style="font-weight: bold; font-size: 0.8rem; color: #475569; margin-bottom: 8px; align-self: flex-start; display: flex; align-items: center; gap: 4px;"><i class="fa-solid fa-camera"></i> Evidencia de Equipos:</span>
                                                     {% if visita.foto_equipos %}
                                                         <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
                                                             <div style="text-align: center;">
-                                                                <img src="{{ url_for('static', filename='uploads/' + visita.foto_equipos) }}" style="max-height: 120px; max-width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; transition: transform 0.2s;" onclick="window.open(this.src)" onmouseenter="this.style.transform='scale(1.05)'" onmouseleave="this.style.transform='scale(1)'">
+                                                                 <img src="{{ url_for('static', filename='uploads/' + visita.foto_equipos) }}" style="max-height: 120px; max-width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; transition: transform 0.2s;" onclick="window.open(this.src)" onmouseenter="this.style.transform='scale(1.05)'" onmouseleave="this.style.transform='scale(1)'">
                                                                 <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px;">
                                                                     {% if visita.equipos_juntos %}
                                                                         ONU / Router
@@ -399,6 +399,7 @@
                                                         <span style="font-size: 0.85rem; color: #94a3b8; font-style: italic;">Sin foto registrada</span>
                                                     {% endif %}
                                                 </div>
+
 
                                                 <!-- Firma del Cliente -->
                                                 <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
