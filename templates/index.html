@@ -39,13 +39,25 @@
             <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--sidebar-text); margin-bottom: 6px; font-weight: 700;">
                 <i class="fa-solid fa-network-wired"></i> Área Operativa
             </div>
-            <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: bold; color: var(--text-main); background: var(--sidebar-hover); padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color); width: 100%; justify-content: center;">
-                {% if session.get('active_area') == 'INSTALACIONES' %}
-                    🔌 Calidad
-                {% else %}
-                    🛠️ Soporte
-                {% endif %}
-            </div>
+            {% if session.get('user_role') == 'ADMIN' %}
+                <div class="segmented-control" id="area-switcher">
+                    <div class="segmented-slider" style="transform: translateX({% if session.get('active_area') == 'INSTALACIONES' %}100%{% else %}0%{% endif %});"></div>
+                    <button type="button" class="segmented-btn {% if session.get('active_area') != 'INSTALACIONES' %}active{% endif %}" data-area="SOPORTE">
+                        🛠️ Soporte
+                    </button>
+                    <button type="button" class="segmented-btn {% if session.get('active_area') == 'INSTALACIONES' %}active{% endif %}" data-area="INSTALACIONES">
+                        🔌 Calidad
+                    </button>
+                </div>
+            {% else %}
+                <div class="static-area-badge">
+                    {% if session.get('active_area') == 'INSTALACIONES' %}
+                        🔌 Calidad
+                    {% else %}
+                        🛠️ Soporte
+                    {% endif %}
+                </div>
+            {% endif %}
         </div>
 
         {% if session.get('user_role') in ['ADMIN', 'ASESOR', 'CALIDAD'] %}
@@ -269,6 +281,46 @@
             if (icon) icon.className = 'fa-solid fa-sun';
             if (span) span.textContent = 'Modo Claro';
         }
+
+        // Area Switcher Logic
+        const areaSwitcher = document.getElementById('area-switcher');
+        if (areaSwitcher) {
+            const btns = areaSwitcher.querySelectorAll('.segmented-btn');
+            const slider = areaSwitcher.querySelector('.segmented-slider');
+            btns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const area = btn.getAttribute('data-area');
+                    
+                    // Mover visualmente el slider y activar el botón
+                    if (area === 'INSTALACIONES') {
+                        slider.style.transform = 'translateX(100%)';
+                    } else {
+                        slider.style.transform = 'translateX(0%)';
+                    }
+                    btns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    // Hacer llamada POST a la API
+                    fetch('/api/admin/cambiar_area_vista', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ active_area: area })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'ok') {
+                            location.reload();
+                        } else {
+                            alert('Error al cambiar de área operativa: ' + data.message);
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error switching area:', err);
+                        alert('Error de conexión al cambiar de área operativa.');
+                    });
+                });
+            });
+        }
     </script>
     <script>
         // --- FUNCIÓN PARA CERRAR EL MODAL ---
@@ -304,13 +356,14 @@
                                 let colorEstado = visita.estado === 'FINALIZADA' ? '#16a34a' : '#ef4444';
 
                                 let html = `
-                                <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid ${colorEstado}; border-right: 1px solid #e2e8f0; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
-                                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #e2e8f0; border-left: 4px solid ${colorEstado};">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; align-items: center;">
                                         <span style="font-size: 0.85rem; color: #475569; font-weight: bold;">📅 ${fecha}</span>
-                                        <span style="background-color: #e2e8f0; color: #334155; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">${visita.estado}</span>
+                                        <span class="historial-badge-estado status-${visita.estado.toLowerCase()}">${visita.estado}</span>
                                     </div>
                                     <h6 style="color: #0f172a; margin: 0 0 5px 0; font-size: 1rem;">Problema: <span style="color: #b91c1c;">${visita.problema}</span></h6>
                                     <p style="font-size: 0.85rem; margin: 0 0 8px 0; color: #475569;"><strong>Solución:</strong> ${visita.solucion_tecnico || 'Sin registrar'}</p>
+                                    ${visita.observacion_tecnico ? `<p style="font-size: 0.85rem; margin: 0 0 8px 0; color: #475569; font-style: italic; line-height: 1.4;"><strong>Obs. Técnico:</strong> "${visita.observacion_tecnico}"</p>` : ''}
                                     <small style="color: #64748b; display: block; border-top: 1px solid #cbd5e1; padding-top: 8px;">Técnico: ${visita.tecnico_principal}</small>
                                 </div>
                                 `;

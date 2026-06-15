@@ -375,6 +375,11 @@ def rastreo_vivo(id_visita):
 
             # Actualizar coordenadas globales del técnico (para el administrador)
             tecnico_nombre = session.get('user_name')
+            if not tecnico_nombre:
+                cursor.execute("SELECT tecnico_principal FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+                tec_row = cursor.fetchone()
+                tecnico_nombre = tec_row[0] if tec_row else None
+
             if tecnico_nombre:
                 cursor.execute("""
                     UPDATE tecnicos 
@@ -466,15 +471,30 @@ def obtener_historial_cliente(nombre_cliente):
     
     try:
         # Buscamos visitas del cliente en los últimos 3 meses (90 días)
-        # Filtramos para que traiga principalmente las FINALIZADAS o CANCELADAS para ver el desenlace
-        query = """
-            SELECT fecha_programada, problema, solucion_tecnico, tecnico_principal, estado
-            FROM visitas_tecnicas
-            WHERE cliente = %s AND estado IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
-            AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
-            ORDER BY fecha_programada DESC
-        """
-        cursor.execute(query, (nombre_cliente,))
+        # Filtramos para que traiga principalmente las FINALIZADAS o CANCELADAS para ver el desenlace.
+        # Soporta nombres invertidos (ej: "RAUL MOISES ORTIZ TENORIO" y "ORTIZ TENORIO RAUL MOISES") dividiendo la búsqueda por palabras.
+        palabras = [p.strip() for p in nombre_cliente.split() if p.strip()]
+        if palabras:
+            condiciones = " AND ".join(["cliente LIKE %s" for _ in palabras])
+            valores = [f"%{p}%" for p in palabras]
+            query = f"""
+                SELECT fecha_programada, problema, solucion_tecnico, observacion_tecnico, tecnico_principal, estado
+                FROM visitas_tecnicas
+                WHERE ({condiciones}) AND estado IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
+                AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+                ORDER BY fecha_programada DESC
+            """
+            cursor.execute(query, tuple(valores))
+        else:
+            query = """
+                SELECT fecha_programada, problema, solucion_tecnico, observacion_tecnico, tecnico_principal, estado
+                FROM visitas_tecnicas
+                WHERE cliente = %s AND estado IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
+                AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+                ORDER BY fecha_programada DESC
+            """
+            cursor.execute(query, (nombre_cliente,))
+            
         historial = cursor.fetchall()
         
         return jsonify({"status": "ok", "historial": historial})

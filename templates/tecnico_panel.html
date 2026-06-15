@@ -7,6 +7,8 @@
     <title>Futurity - Panel Técnico</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#dc2626">
 </head>
 
 <body class="body-tecnico">
@@ -44,10 +46,22 @@
                 </select>
             </div>
 
+            <!-- Wake Lock Manual Control Toggle -->
+            <div id="container-wake-lock" style="margin-top: 15px; margin-bottom: 20px; text-align: left; background: rgba(255, 255, 255, 0.05); padding: 12px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);">
+                <label style="font-size: 0.8rem; color: #94a3b8; font-weight: 800; display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;"><i class="fa-solid fa-mobile-screen-button"></i> Pantalla Activa (GPS):</label>
+                <button type="button" id="btn-wake-lock" onclick="toggleWakeLockManualmente()" style="width: 100%; padding: 8px 12px; border-radius: 8px; border: none; background-color: #ef4444; color: #fff; font-size: 0.85rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: background-color 0.2s;">
+                    <i class="fa-solid fa-lock-open"></i> <span>Desactivado</span>
+                </button>
+                <small style="color: #94a3b8; font-size: 0.72rem; margin-top: 6px; display: block; line-height: 1.3;">Actívalo para evitar que se apague la pantalla y asegurar el rastreo GPS constante.</small>
+            </div>
+
+            <button type="button" onclick="window.location.reload();" class="theme-btn-tecnico theme-refresh" title="Actualizar Visitas">
+                <i class="fa-solid fa-arrows-rotate"></i> <span>Actualizar Visitas</span>
+            </button>
             <button id="theme-toggle-tecnico" class="theme-btn-tecnico theme-dark" title="Alternar Modo Oscuro">
                 <i class="fa-solid fa-moon"></i> <span>Modo Oscuro</span>
             </button>
-            <a href="/logout" class="theme-btn-tecnico theme-logout">
+            <a href="/logout" onclick="if (window.AndroidBridge) { window.AndroidBridge.stopTracking(); }" class="theme-btn-tecnico theme-logout">
                 <i class="fa-solid fa-right-from-bracket"></i> <span>Cerrar Sesión</span>
             </a>
         </div>
@@ -551,12 +565,13 @@
                                 
                                 let html = `
                                 <div style="background-color: #2b2b40; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid ${colorEstado};">
-                                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; align-items: center;">
                                         <span style="font-size: 0.85rem; color: #aaa;">📅 ${fecha}</span>
-                                        <span style="background-color: #111; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">${visita.estado}</span>
+                                        <span class="historial-badge-estado status-${visita.estado.toLowerCase()}">${visita.estado}</span>
                                     </div>
                                     <h6 style="color: #fff; margin: 0 0 5px 0; font-size: 1rem;">Problema: <span style="color: #ffb74d;">${visita.problema}</span></h6>
                                     <p style="font-size: 0.85rem; margin: 0 0 8px 0; color: #ccc;"><strong>Solución:</strong> ${visita.solucion_tecnico || 'Sin registrar'}</p>
+                                    ${visita.observacion_tecnico ? `<p style="font-size: 0.85rem; margin: 0 0 8px 0; color: #ccc; font-style: italic; line-height: 1.4;"><strong>Obs. Técnico:</strong> "${visita.observacion_tecnico}"</p>` : ''}
                                     <small style="color: #888; display: block; border-top: 1px solid #444; padding-top: 8px;">Técnico: ${visita.tecnico_principal}</small>
                                 </div>
                                 `;
@@ -738,8 +753,39 @@
         }
 
         // --- 1.4. RASTREO SATELITAL GLOBAL DE LA JORNADA ---
+        window.recibirUbicacionNativa = function(tipo, lat, lon) {
+            if (tipo === 'global') {
+                console.log("Enviando ping global nativo:", lat, lon);
+                fetch('/api/tecnico/ping_global', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ latitud: lat, longitud: lon })
+                })
+                .catch(err => console.log("Error de conexión ping global nativo:", err));
+            } else {
+                const idVisita = tipo;
+                const inputCoords = document.getElementById(`coords-${idVisita}`);
+                const btn = document.getElementById(`btn-gps-${idVisita}`);
+                if (inputCoords && btn) {
+                    inputCoords.value = `${lat}, ${lon}`;
+                    btn.innerHTML = "✓ GPS Capturado con éxito (Nativo)";
+                    btn.style.backgroundColor = "#10b981";
+                    btn.disabled = false;
+                }
+            }
+        };
+
         let intervaloRastreoGlobal = null;
         function iniciarRastreoGlobal() {
+            if (window.AndroidBridge) {
+                function enviarPingGlobalNativo() {
+                    window.AndroidBridge.requestSingleLocation("global");
+                }
+                enviarPingGlobalNativo();
+                intervaloRastreoGlobal = setInterval(enviarPingGlobalNativo, 20000);
+                return;
+            }
+
             if (navigator.geolocation) {
                 function enviarPingGlobal() {
                     navigator.geolocation.getCurrentPosition(
@@ -770,6 +816,21 @@
         // Iniciar el rastreo global del técnico al cargar la página
         window.addEventListener('DOMContentLoaded', () => {
             iniciarRastreoGlobal();
+
+            // Si estamos en la app nativa y no hay visitas en ruta activa, detenemos el servicio nativo por seguridad
+            if (window.AndroidBridge) {
+                // Ocultar el botón manual de Pantalla Activa ya que el GPS corre nativamente en segundo plano
+                const wakeLockContainer = document.getElementById('container-wake-lock');
+                if (wakeLockContainer) {
+                    wakeLockContainer.style.display = 'none';
+                }
+
+                const tieneVisitasEnRuta = document.querySelector('.visita-en-ruta') !== null;
+                if (!tieneVisitasEnRuta) {
+                    console.log("📲 No hay visitas en ruta activa. Deteniendo servicio nativo de ubicación.");
+                    window.AndroidBridge.stopTracking();
+                }
+            }
         });
 
         // --- 1.4.5. GESTIÓN DE DESCANSOS (ALMUERZO) ---
@@ -970,30 +1031,106 @@
 
         // --- 1.5. WAKE LOCK (MANTENER PANTALLA ACTIVA) ---
         let wakeLock = null;
-        async function mantenerPantallaActiva() {
-            if ('wakeLock' in navigator) {
-                try {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                    console.log('✅ Pantalla mantenida activa para el rastreo GPS.');
-                    
-                    // Si el técnico minimiza el navegador y vuelve, hay que reactivarlo
-                    document.addEventListener('visibilitychange', async () => {
-                        if (wakeLock !== null && document.visibilityState === 'visible') {
-                            wakeLock = await navigator.wakeLock.request('screen');
-                        }
-                    });
-                    
-                } catch (err) {
-                    console.warn(`❌ El navegador bloqueó la pantalla activa: ${err.name}, ${err.message}`);
-                }
+
+        async function toggleWakeLockManualmente() {
+            if (wakeLock === null) {
+                // El usuario quiere activarlo
+                localStorage.setItem('userPrefersWakeLock', 'true');
+                await requestWakeLock();
             } else {
-                console.warn('⚠️ Tu navegador no soporta Wake Lock.');
+                // El usuario quiere desactivarlo
+                localStorage.setItem('userPrefersWakeLock', 'false');
+                await releaseWakeLock();
             }
         }
+
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator && wakeLock === null) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('✅ Wake Lock activado.');
+                    updateWakeLockUI(true);
+                    
+                    wakeLock.addEventListener('release', () => {
+                        console.log('⚠️ Wake Lock liberado por el sistema/pantalla.');
+                        // Marcar como nulo al liberarse para evitar errores de doble pulsación
+                        wakeLock = null;
+                        updateWakeLockUI(false);
+                    });
+                } catch (err) {
+                    console.error('Error al solicitar Wake Lock:', err);
+                    localStorage.setItem('userPrefersWakeLock', 'false');
+                    wakeLock = null;
+                    updateWakeLockUI(false);
+                }
+            }
+        }
+
+        async function releaseWakeLock() {
+            if (wakeLock !== null) {
+                try {
+                    await wakeLock.release();
+                } catch (err) {
+                    console.error('Error al liberar Wake Lock:', err);
+                }
+                wakeLock = null;
+            }
+            updateWakeLockUI(false);
+        }
+
+        function updateWakeLockUI(isActive) {
+            const btn = document.getElementById('btn-wake-lock');
+            if (btn) {
+                const span = btn.querySelector('span');
+                const icon = btn.querySelector('i');
+                if (isActive) {
+                    btn.style.backgroundColor = '#10b981';
+                    span.textContent = 'Pantalla Activa';
+                    icon.className = 'fa-solid fa-lock';
+                } else {
+                    btn.style.backgroundColor = '#ef4444';
+                    span.textContent = 'Desactivado';
+                    icon.className = 'fa-solid fa-lock-open';
+                }
+            }
+        }
+
+        async function mantenerPantallaActiva() {
+            // Intenta activar automáticamente si hay preferencia guardada
+            const prefersActive = localStorage.getItem('userPrefersWakeLock') === 'true';
+            if (prefersActive) {
+                await requestWakeLock();
+            }
+        }
+
+        // Reactivación automática si la página vuelve a estar visible
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible') {
+                const prefersActive = localStorage.getItem('userPrefersWakeLock') === 'true';
+                if (prefersActive) {
+                    console.log('🔄 Reactivando Wake Lock al volver a la visibilidad...');
+                    await requestWakeLock();
+                }
+            }
+        });
+
+        // Intentar activar al cargar la página si estaba habilitado
+        window.addEventListener('DOMContentLoaded', async () => {
+            const prefersActive = localStorage.getItem('userPrefersWakeLock') === 'true';
+            if (prefersActive) {
+                await requestWakeLock();
+            }
+        });
 
         // --- 2. RASTREADOR GPS EN SEGUNDO PLANO (Rastreo en vivo) ---
         let intervaloRastreo = null;
         function iniciarRastreoSilencioso(idVisita) {
+            if (window.AndroidBridge) {
+                console.log("📲 Iniciando rastreo satelital nativo Android para visita:", idVisita);
+                window.AndroidBridge.startTracking(idVisita.toString(), window.location.origin);
+                return;
+            }
+
             if (navigator.geolocation) {
                 // Función interna que captura y envía
                 function enviarPing() {
@@ -1027,6 +1164,12 @@
             const textoOriginal = btn.innerHTML;
             btn.innerHTML = "⏳ Calculando satélites...";
             btn.disabled = true;
+
+            if (window.AndroidBridge) {
+                window.AndroidBridge.stopTracking();
+                window.AndroidBridge.requestSingleLocation(idVisita.toString());
+                return;
+            }
 
             if (navigator.geolocation) {
                 if (intervaloRastreo !== null) clearInterval(intervaloRastreo);
@@ -1307,6 +1450,15 @@
                         return;
                     }
                 }
+            }
+            
+            // Activar/desactivar Wake Lock automáticamente según el flujo de la visita
+            if (tipo === 'camino' || tipo === 'iniciar') {
+                localStorage.setItem('userPrefersWakeLock', 'true');
+                requestWakeLock();
+            } else if (tipo === 'finalizar') {
+                localStorage.setItem('userPrefersWakeLock', 'false');
+                releaseWakeLock();
             }
             
             const data = serializeForm(form);
@@ -1802,6 +1954,13 @@
             inicializarCanvasesFirma();
             inicializarFormulariosDesdeCola();
             procesarColaSincronizacion();
+            
+            // Registrar Service Worker para PWA
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/static/service-worker.js')
+                    .then(reg => console.log('✅ Service Worker registrado con éxito:', reg.scope))
+                    .catch(err => console.error('❌ Error al registrar el Service Worker:', err));
+            }
         });
     </script>
 </body>

@@ -1,5 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
 
+    // Forzar el scroll al inicio en la carga inicial para evitar restauraciones molestas de caché
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        mainContent.scrollTop = 0;
+    }
+
     // --- 1. LÓGICA DE PESTAÑAS (TABS) ---
     const navItems = document.querySelectorAll('.nav-item');
     const tabContents = document.querySelectorAll('.tab-content');
@@ -14,6 +20,11 @@ document.addEventListener('DOMContentLoaded', () => {
             item.classList.add('active');
             const targetTab = item.getAttribute('data-tab');
             document.getElementById(targetTab).classList.add('active');
+
+            // Reiniciar scroll al cambiar de pestaña
+            if (mainContent) {
+                mainContent.scrollTop = 0;
+            }
 
             // Inicializar y redimensionar el mapa si se activa la pestaña
             if (targetTab === 'tab-mapa-tecnicos') {

@@ -1,0 +1,22 @@
+{
+  "name": "Futurity Técnico",
+  "short_name": "Futurity",
+  "description": "Panel Técnico de Futurity para gestión de visitas y optimización de rutas.",
+  "start_url": "/login",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0f19",
+  "theme_color": "#dc2626",
+  "icons": [
+    {
+      "src": "/static/img/logo_futurity.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/img/logo_futurity.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
