@@ -47,7 +47,7 @@ def minutos_a_hora(minutos):
 @app.before_request
 def check_single_session():
     # Ignorar rutas estáticas y rutas públicas que no requieren validación estricta
-    rutas_ignoradas = ['static', 'login', 'logout', 'tecnico.panel_tecnico', 'tecnico.en_camino_visita', 'tecnico.iniciar_visita', 'tecnico.finalizar_visita', 'tecnico.rastreo_vivo', 'tecnico.cerrar_visita_proceso', 'cliente.rastreo_cliente']
+    rutas_ignoradas = ['static', 'login', 'logout', 'tecnico.panel_tecnico', 'tecnico.en_camino_visita', 'tecnico.iniciar_visita', 'tecnico.finalizar_visita', 'tecnico.rastreo_vivo', 'tecnico.cerrar_visita_proceso', 'cliente.rastreo_cliente', 'cliente.publico_cuadro_mando']
     if request.endpoint in rutas_ignoradas or request.endpoint is None:
         return
 
@@ -75,7 +75,7 @@ def check_single_session():
 @app.before_request
 def check_password_change_required():
     # Rutas permitidas que no requieren redirección
-    rutas_permitidas = ['static', 'login', 'logout', 'cambiar_password', 'cliente.rastreo_cliente', 'cliente.encuesta_cliente', 'cliente.firma_cliente']
+    rutas_permitidas = ['static', 'login', 'logout', 'cambiar_password', 'cliente.rastreo_cliente', 'cliente.encuesta_cliente', 'cliente.firma_cliente', 'cliente.publico_cuadro_mando']
     if request.endpoint in rutas_permitidas or request.endpoint is None:
         return
         
@@ -120,6 +120,42 @@ def cambiar_area_vista():
 
 
 # --- RUTAS DE AUTENTICACIÓN (LOGIN / LOGOUT) ---
+@app.route('/login/token', methods=['GET'])
+def login_por_token():
+    user_id = request.args.get('user_id')
+    token = request.args.get('token')
+    
+    if not user_id or not token:
+        return redirect(url_for('login'))
+        
+    conexion = get_db_connection()
+    if not conexion:
+        return redirect(url_for('login'))
+        
+    cursor = conexion.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM usuarios_callcenter WHERE id_usuario = %s AND session_token = %s AND activo = 1", (user_id, token))
+    usuario = cursor.fetchone()
+    cursor.close()
+    conexion.close()
+    
+    if usuario:
+        # Recrear la sesión
+        session.permanent = True
+        session['user_id'] = usuario['id_usuario']
+        session['user_name'] = usuario['nombre']
+        session['user_role'] = usuario['rol']
+        session['session_token'] = token
+        session['primer_ingreso'] = usuario.get('primer_ingreso', 0)
+        
+        # Redireccionar según el rol
+        rol = usuario.get('rol', 'ASESOR')
+        if rol == 'TECNICO':
+            return redirect(url_for('tecnico.panel_tecnico'))
+        else:
+            return redirect(url_for('dashboard'))
+            
+    return redirect(url_for('login', error_token=1))
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     # Si ya está logueado, lo mandamos directo al dashboard

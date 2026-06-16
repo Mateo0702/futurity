@@ -17,8 +17,15 @@
             if (localStorage.getItem('theme') === 'dark') {
                 document.body.classList.add('dark-mode');
             }
+            // Guardar credenciales en localStorage para permitir auto-login
+            localStorage.setItem('user_id', '{{ session.user_id }}');
+            localStorage.setItem('user_role', '{{ session.user_role }}');
+            localStorage.setItem('session_token', '{{ session.session_token }}');
+            localStorage.setItem('user_name', '{{ session.user_name }}');
         })();
     </script>
+
+
 
     <!-- BANNER DE ESTADO OFFLINE -->
     <div id="offline-banner" style="display: none; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; text-align: center; padding: 12px; font-weight: 800; position: sticky; top: 0; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.15); font-size: 0.95rem;">
@@ -61,7 +68,7 @@
             <button id="theme-toggle-tecnico" class="theme-btn-tecnico theme-dark" title="Alternar Modo Oscuro">
                 <i class="fa-solid fa-moon"></i> <span>Modo Oscuro</span>
             </button>
-            <a href="/logout" onclick="if (window.AndroidBridge) { window.AndroidBridge.stopTracking(); }" class="theme-btn-tecnico theme-logout">
+            <a href="/logout" onclick="localStorage.clear(); if (window.AndroidBridge) { window.AndroidBridge.stopTracking(); }" class="theme-btn-tecnico theme-logout">
                 <i class="fa-solid fa-right-from-bracket"></i> <span>Cerrar Sesión</span>
             </a>
             <div style="margin-top: 20px; padding: 10px 0 0 0; border-top: 1px solid rgba(255, 255, 255, 0.1); text-align: center; font-size: 0.72rem; color: #94a3b8; opacity: 0.6; font-weight: 500;">
@@ -129,7 +136,7 @@
             </div>
 
             {% for visita in visitas %}
-            <div class="visita-card 
+            <div data-id="{{ visita.id_visita }}" class="visita-card 
             {% if visita.estado == 'EN_RUTA' %}visita-en-ruta
             {% elif visita.estado == 'EN_PROGRESO' %}visita-en-progreso
             {% elif visita.estado == 'FINALIZADA' %}visita-finalizada{% endif %}">
@@ -249,7 +256,7 @@
                         <i class="fa-brands fa-whatsapp" style="font-size: 1.25rem;"></i> Avisar al Cliente
                     </button>
 
-                    <form onsubmit="procesarAccionFormulario(event, {{ visita.id_visita }}, '/api/tecnico/iniciar/{{ visita.id_visita }}', 'iniciar')">
+                    <form onsubmit="iniciarTrabajoConGPS(event, {{ visita.id_visita }}, '/api/tecnico/iniciar/{{ visita.id_visita }}')">
                         <button type="submit" class="btn-action-start">
                             <i class="fa-solid fa-play"></i> Llegué / Iniciar Trabajo
                         </button>
@@ -263,6 +270,11 @@
                 </script>
 
                 {% elif visita.estado == 'EN_PROGRESO' %}
+                <script>
+                    window.addEventListener('DOMContentLoaded', () => {
+                        iniciarRastreoSilencioso('{{ visita.id_visita }}');
+                    });
+                </script>
                 <div style="background-color: #eff6ff; padding: 18px; border-radius: 12px; margin-top: 15px; border: 1px solid #bfdbfe;">
                     <h3 style="margin-top: 0; color: #1e3a8a; font-size: 1.1rem; font-weight: 800; margin-bottom: 12px;">
                         {% if visita.es_instalacion == 1 %}
@@ -813,6 +825,11 @@
         // --- 1.4. RASTREO SATELITAL GLOBAL DE LA JORNADA ---
         window.recibirUbicacionNativa = function(tipo, lat, lon) {
             if (tipo === 'global') {
+                const txtEstado = document.getElementById('txt-estado-jornada');
+                if (txtEstado && txtEstado.classList.contains('descanso')) {
+                    console.log("El técnico está en descanso. Saltando ping global nativo.");
+                    return;
+                }
                 console.log("Enviando ping global nativo:", lat, lon);
                 fetch('/api/tecnico/ping_global', {
                     method: 'POST',
@@ -820,6 +837,10 @@
                     body: JSON.stringify({ latitud: lat, longitud: lon })
                 })
                 .catch(err => console.log("Error de conexión ping global nativo:", err));
+            } else if (tipo && tipo.toString().startsWith('inicio_')) {
+                if (window.recibirUbicacionNativaInicio) {
+                    window.recibirUbicacionNativaInicio(lat, lon);
+                }
             } else {
                 const idVisita = tipo;
                 const inputCoords = document.getElementById(`coords-${idVisita}`);
@@ -837,6 +858,11 @@
         function iniciarRastreoGlobal() {
             if (window.AndroidBridge) {
                 function enviarPingGlobalNativo() {
+                    const txtEstado = document.getElementById('txt-estado-jornada');
+                    if (txtEstado && txtEstado.classList.contains('descanso')) {
+                        console.log("El técnico está en descanso. Saltando ping global nativo.");
+                        return;
+                    }
                     window.AndroidBridge.requestSingleLocation("global");
                 }
                 enviarPingGlobalNativo();
@@ -846,6 +872,11 @@
 
             if (navigator.geolocation) {
                 function enviarPingGlobal() {
+                    const txtEstado = document.getElementById('txt-estado-jornada');
+                    if (txtEstado && txtEstado.classList.contains('descanso')) {
+                        console.log("El técnico está en descanso. Saltando ping global web.");
+                        return;
+                    }
                     navigator.geolocation.getCurrentPosition(
                         function (position) {
                             console.log("Enviando ping global:", position.coords.latitude, position.coords.longitude);
@@ -883,15 +914,43 @@
                     wakeLockContainer.style.display = 'none';
                 }
 
-                const tieneVisitasEnRuta = document.querySelector('.visita-en-ruta') !== null;
-                if (!tieneVisitasEnRuta) {
-                    console.log("📲 No hay visitas en ruta activa. Deteniendo servicio nativo de ubicación.");
+                const tieneVisitasActivas = document.querySelector('.visita-en-ruta') !== null || document.querySelector('.visita-en-progreso') !== null;
+                if (!tieneVisitasActivas) {
+                    console.log("📲 No hay visitas activas (ruta o progreso). Deteniendo servicio nativo de ubicación.");
                     window.AndroidBridge.stopTracking();
                 }
             }
         });
 
         // --- 1.4.5. GESTIÓN DE DESCANSOS (ALMUERZO) ---
+        function aplicarAccionLocalDescanso(esInicioDescanso) {
+            if (esInicioDescanso) {
+                console.log("⏸️ Deteniendo todo el rastreo por inicio de descanso.");
+                if (intervaloRastreoGlobal) {
+                    clearInterval(intervaloRastreoGlobal);
+                    intervaloRastreoGlobal = null;
+                }
+                if (intervaloRastreo) {
+                    clearInterval(intervaloRastreo);
+                    intervaloRastreo = null;
+                }
+                if (window.AndroidBridge) {
+                    console.log("📲 Deteniendo rastreador nativo Android por Descanso.");
+                    window.AndroidBridge.stopTracking();
+                }
+            } else {
+                console.log("▶️ Reactivando rastreo por fin de descanso.");
+                iniciarRastreoGlobal();
+                const activeCard = document.querySelector('.visita-en-ruta, .visita-en-progreso');
+                if (activeCard) {
+                    const activeVisitaId = activeCard.getAttribute('data-id');
+                    if (activeVisitaId) {
+                        iniciarRastreoSilencioso(activeVisitaId);
+                    }
+                }
+            }
+        }
+
         function toggleDescanso() {
             const btn = document.getElementById('btn-toggle-descanso');
             const txt = document.getElementById('txt-estado-jornada');
@@ -916,11 +975,15 @@
                         txt.innerHTML = '<i class="fa-solid fa-mug-hot"></i> En Descanso';
                         btn.className = 'btn-break terminar';
                         btn.innerHTML = '<i class="fa-solid fa-play"></i> Terminar Descanso';
+                        
+                        aplicarAccionLocalDescanso(true);
                     } else {
                         txt.className = 'break-status-badge disponible';
                         txt.innerHTML = '<i class="fa-solid fa-circle-play"></i> Disponible';
                         btn.className = 'btn-break iniciar';
                         btn.innerHTML = '<i class="fa-solid fa-mug-hot"></i> Iniciar Descanso';
+                        
+                        aplicarAccionLocalDescanso(false);
                     }
                 } else {
                     alert(data.message || 'Error al cambiar estado de descanso');
@@ -948,6 +1011,9 @@
                 btn.style.borderColor = '#d97706';
                 btn.style.color = '#fff';
                 btn.innerHTML = estaEnDescanso ? '<i class="fa-solid fa-wifi-slash"></i> Pendiente Terminar (Offline)' : '<i class="fa-solid fa-wifi-slash"></i> Pendiente Iniciar (Offline)';
+                
+                // Aplicar detención/reactivación local de inmediato
+                aplicarAccionLocalDescanso(!estaEnDescanso);
                 
                 actualizarBannerOffline();
             });
@@ -1183,6 +1249,12 @@
         // --- 2. RASTREADOR GPS EN SEGUNDO PLANO (Rastreo en vivo) ---
         let intervaloRastreo = null;
         function iniciarRastreoSilencioso(idVisita) {
+            const txtEstado = document.getElementById('txt-estado-jornada');
+            if (txtEstado && txtEstado.classList.contains('descanso')) {
+                console.log("El técnico está en descanso. No se inicia rastreo de la visita.");
+                return;
+            }
+
             if (window.AndroidBridge) {
                 console.log("📲 Iniciando rastreo satelital nativo Android para visita:", idVisita);
                 window.AndroidBridge.startTracking(idVisita.toString(), window.location.origin);
@@ -1192,6 +1264,11 @@
             if (navigator.geolocation) {
                 // Función interna que captura y envía
                 function enviarPing() {
+                    const txtEstadoInner = document.getElementById('txt-estado-jornada');
+                    if (txtEstadoInner && txtEstadoInner.classList.contains('descanso')) {
+                        console.log("El técnico está en descanso. Saltando ping de visita.");
+                        return;
+                    }
                     navigator.geolocation.getCurrentPosition(
                         function (position) {
                             enviarCoordenadasAlServidor(idVisita, position.coords.latitude, position.coords.longitude);
@@ -1263,6 +1340,125 @@
                 }
             })
             .catch(error => console.log("Error de conexión de red con la PC:", error));
+        }
+
+        // --- 3.5. GPS PARA INICIO DE VISITA ---
+        let formsPendientesInicio = {};
+        function iniciarTrabajoConGPS(event, idVisita, endpoint) {
+            event.preventDefault();
+            const form = event.target;
+            
+            if (formsPendientesInicio[idVisita]) return;
+            formsPendientesInicio[idVisita] = form;
+            
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalBtnHTML = submitBtn ? submitBtn.innerHTML : 'Llegué / Iniciar Trabajo';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Obteniendo GPS de Inicio...';
+            }
+            
+            let finalizado = false;
+            let timeoutId = setTimeout(() => {
+                if (!finalizado) {
+                    finalizado = true;
+                    console.log("Timeout obteniendo GPS para inicio de visita:", idVisita);
+                    enviarFormularioInicio(idVisita, null, null);
+                }
+            }, 8000); // 8 segundos de timeout
+            
+            if (window.AndroidBridge) {
+                window.recibirUbicacionNativaInicio = function(lat, lon) {
+                    if (!finalizado) {
+                        finalizado = true;
+                        clearTimeout(timeoutId);
+                        enviarFormularioInicio(idVisita, lat, lon);
+                    }
+                };
+                window.AndroidBridge.requestSingleLocation("inicio_" + idVisita);
+            } else if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        if (!finalizado) {
+                            finalizado = true;
+                            clearTimeout(timeoutId);
+                            enviarFormularioInicio(idVisita, position.coords.latitude, position.coords.longitude);
+                        }
+                    },
+                    function(error) {
+                        console.log("Error al obtener GPS de inicio:", error);
+                        if (!finalizado) {
+                            finalizado = true;
+                            clearTimeout(timeoutId);
+                            enviarFormularioInicio(idVisita, null, null);
+                        }
+                    },
+                    { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
+                );
+            } else {
+                if (!finalizado) {
+                    finalizado = true;
+                    clearTimeout(timeoutId);
+                    enviarFormularioInicio(idVisita, null, null);
+                }
+            }
+        }
+
+        function enviarFormularioInicio(idVisita, lat, lon) {
+            const form = formsPendientesInicio[idVisita];
+            if (!form) return;
+            delete formsPendientesInicio[idVisita];
+            
+            if (lat !== null && lon !== null) {
+                let latInput = form.querySelector('input[name="latitud_inicio"]');
+                if (!latInput) {
+                    latInput = document.createElement('input');
+                    latInput.type = 'hidden';
+                    latInput.name = 'latitud_inicio';
+                    form.appendChild(latInput);
+                }
+                latInput.value = lat;
+                
+                let lonInput = form.querySelector('input[name="longitud_inicio"]');
+                if (!lonInput) {
+                    lonInput = document.createElement('input');
+                    lonInput.type = 'hidden';
+                    lonInput.name = 'longitud_inicio';
+                    form.appendChild(lonInput);
+                }
+                lonInput.value = lon;
+            }
+            
+            const endpoint = `/api/tecnico/iniciar/${idVisita}`;
+            const data = serializeForm(form);
+            
+            localStorage.setItem('userPrefersWakeLock', 'true');
+            requestWakeLock();
+            
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Iniciando...';
+            }
+            
+            sendFormRequest(endpoint, data)
+                .then(response => {
+                    if (response.ok) {
+                        window.location.reload();
+                    } else {
+                        alert('El servidor respondió con un error. Intente nuevamente.');
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = '<i class="fa-solid fa-play"></i> Llegué / Iniciar Trabajo';
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.log('Error de conexión o de red detectado, guardando en local:', err);
+                    encolarAccionOffline(idVisita, endpoint, data, 'iniciar');
+                    mostrarAccionEncoladaUI(form, submitBtn, 'iniciar');
+                    actualizarBannerOffline();
+                });
         }
 
         // --- 4. NAVEGACIÓN INTELIGENTE (Google Maps) ---

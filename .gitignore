@@ -1,0 +1,22 @@
+# Compiled Python files
+__pycache__/
+*.pyc
+routers/__pycache__/
+
+# Environments
+.venv/
+env/
+venv/
+
+# Scratch and test files
+scratch/
+*.xlsx
+base_clientes.xlsx
+atenciones_diarias.xlsx
+respaldo_visitas.xlsx
+visitas_drive.xlsx
+
+# Uploaded media (local test upload images)
+static/uploads/*
+!static/uploads/default_avatar.png
+!static/uploads/furgoneta_milton.jpeg

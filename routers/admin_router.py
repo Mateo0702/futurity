@@ -1184,6 +1184,8 @@ def preview_reporte_calidad():
                     modelo_onu,
                     modelo_router,
                     coordenadas_tecnico,
+                    latitud_inicio,
+                    longitud_inicio,
                     foto_extra_1,
                     foto_extra_2,
                     foto_extra_3,
@@ -1225,6 +1227,8 @@ def preview_reporte_calidad():
                     modelo_onu,
                     modelo_router,
                     coordenadas_tecnico,
+                    latitud_inicio,
+                    longitud_inicio,
                     foto_extra_1,
                     foto_extra_2,
                     foto_extra_3,
@@ -2206,6 +2210,28 @@ def preview_cuadro_mando():
     finally:
         cursor.close()
         conexion.close()
+
+
+@admin_bp.route('/api/admin/cuadro_mando/share_link', methods=['GET'])
+def get_cuadro_mando_share_link():
+    if 'user_id' not in session:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+        
+    fecha = request.args.get('fecha')
+    if not fecha:
+        return jsonify({"status": "error", "message": "Fecha requerida"}), 400
+        
+    import hashlib
+    from flask import current_app
+    secret = current_app.secret_key or "fallback_secret_salt_futurity_2026"
+    token = hashlib.sha256(f"{fecha}_{secret}".encode('utf-8')).hexdigest()[:16]
+    
+    public_url = f"{request.host_url}publico/cuadro_mando/{fecha}/{token}"
+    
+    return jsonify({
+        "status": "ok",
+        "url": public_url
+    })
 
 
 @admin_bp.route('/api/admin/cuadro_mando/excel', methods=['POST'])

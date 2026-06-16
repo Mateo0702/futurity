@@ -6,6 +6,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Futurity - Acceso al Sistema</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script>
+        (function() {
+            // Limpiar localStorage si el token fue invalidado
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('error_token') === '1') {
+                localStorage.clear();
+                return;
+            }
+            // Auto-login para técnicos
+            const token = localStorage.getItem('session_token');
+            const userId = localStorage.getItem('user_id');
+            const role = localStorage.getItem('user_role');
+            if (token && userId && role === 'TECNICO') {
+                window.location.replace(`/login/token?user_id=${userId}&token=${token}`);
+            }
+        })();
+    </script>
 </head>
 
 <body class="login-page">

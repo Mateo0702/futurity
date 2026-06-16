@@ -309,3 +309,50 @@ def metricas_atenciones():
     finally:
         cursor.close()
         conn.close()
+
+@atenciones_bp.route('/api/cliente/atenciones_recientes_contrato', methods=['GET'])
+def atenciones_recientes_contrato():
+    if 'user_id' not in session:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+        
+    contrato = request.args.get('contrato', '').strip()
+    if not contrato:
+        return jsonify({"status": "error", "message": "Contrato vacío"}), 400
+        
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+            SELECT id_atencion, fecha, hora, tipo_atencion, tipo_solicitud, medio_contacto, accion, motivo, agente, observacion
+            FROM atenciones
+            WHERE contrato = %s
+            ORDER BY fecha_hora DESC, id_atencion DESC
+            LIMIT 5
+        """
+        cursor.execute(query, (contrato,))
+        atenciones = cursor.fetchall()
+        
+        for at in atenciones:
+            if isinstance(at['fecha'], (datetime, date)):
+                at['fecha'] = at['fecha'].isoformat()
+            if isinstance(at['hora'], timedelta):
+                total_seconds = int(at['hora'].total_seconds())
+                hours = total_seconds // 3600
+                minutes = (total_seconds % 3600) // 60
+                seconds = total_seconds % 60
+                at['hora'] = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            elif hasattr(at['hora'], 'strftime'):
+                at['hora'] = at['hora'].strftime('%H:%M:%S')
+            else:
+                at['hora'] = str(at['hora'])
+                
+        return jsonify({"status": "success", "atenciones": atenciones})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+

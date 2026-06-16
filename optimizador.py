@@ -114,11 +114,17 @@ def optimizar_ruta_tecnico(visitas, starting_lat=None, starting_lon=None):
     
     while pending_with_coords:
         best_idx = 0
-        best_dist = 999999.0
+        best_score = 99999999.0
         for idx, v in enumerate(pending_with_coords):
             dist = calcular_distancia(current_pt[0], current_pt[1], v['lat_float'], v['lon_float'])
-            if dist < best_dist:
-                best_dist = dist
+            
+            v_start = v.get('ventana_inicio_min')
+            if v_start is None:
+                v_start = 480
+                
+            score = (v_start * 10) + dist
+            if score < best_score:
+                best_score = score
                 best_idx = idx
                  
         next_visit = pending_with_coords.pop(best_idx)
@@ -133,6 +139,9 @@ def optimizar_ruta_tecnico(visitas, starting_lat=None, starting_lon=None):
         if 'lat_float' in p: del p['lat_float']
         if 'lon_float' in p: del p['lon_float']
         
+    # Sort pending without coordinates by time window start
+    pending_without_coords.sort(key=lambda x: x.get('ventana_inicio_min') if x.get('ventana_inicio_min') is not None else 480)
+    
     # Append pending without coordinates at the end of pending
     sequenced_pending.extend(pending_without_coords)
     

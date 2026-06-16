@@ -137,6 +137,20 @@ def en_camino_visita(id_visita):
     token_seguro = secrets.token_urlsafe(16)
     
     try:
+        # Resetear cualquier otra visita activa de este técnico a PENDIENTE para evitar duplicados en ruta
+        tecnico_nombre = session.get('user_name')
+        if tecnico_nombre:
+            cursor.execute("""
+                UPDATE visitas_tecnicas 
+                SET estado = 'PENDIENTE', 
+                    token_rastreo = NULL 
+                WHERE (tecnico_principal = %s OR tecnico_apoyo = %s) 
+                  AND estado IN ('EN_RUTA', 'EN_PROGRESO')
+                  AND id_visita != %s
+                  AND fecha_programada = %s
+            """, (tecnico_nombre, tecnico_nombre, id_visita, date.today().isoformat()))
+            conexion.commit()
+
         query = """
             UPDATE visitas_tecnicas 
             SET estado = 'EN_RUTA', 
@@ -176,7 +190,40 @@ def iniciar_visita(id_visita):
     """El técnico llegó al domicilio y empieza a trabajar."""
     conexion = get_db_connection()
     cursor = conexion.cursor()
+    
+    # Capturar latitud_inicio y longitud_inicio de forma flexible
+    if request.is_json:
+        datos = request.get_json() or {}
+    else:
+        datos = request.form
+        
+    lat_ini = datos.get('latitud_inicio')
+    lon_ini = datos.get('longitud_inicio')
+    
     try:
+        lat_val = float(lat_ini) if lat_ini else None
+    except ValueError:
+        lat_val = None
+    try:
+        lon_val = float(lon_ini) if lon_ini else None
+    except ValueError:
+        lon_val = None
+
+    try:
+        # Resetear cualquier otra visita activa de este técnico a PENDIENTE para evitar duplicados
+        tecnico_nombre = session.get('user_name')
+        if tecnico_nombre:
+            cursor.execute("""
+                UPDATE visitas_tecnicas 
+                SET estado = 'PENDIENTE', 
+                    token_rastreo = NULL 
+                WHERE (tecnico_principal = %s OR tecnico_apoyo = %s) 
+                  AND estado IN ('EN_RUTA', 'EN_PROGRESO')
+                  AND id_visita != %s
+                  AND fecha_programada = %s
+            """, (tecnico_nombre, tecnico_nombre, id_visita, date.today().isoformat()))
+            conexion.commit()
+
         # Generar token de rastreo si no existe para la firma remota
         cursor.execute("SELECT token_rastreo FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
         row = cursor.fetchone()
@@ -186,8 +233,15 @@ def iniciar_visita(id_visita):
             cursor.execute("UPDATE visitas_tecnicas SET token_rastreo = %s WHERE id_visita = %s", (token_seguro, id_visita))
             conexion.commit()
 
-        query = "UPDATE visitas_tecnicas SET estado = 'EN_PROGRESO', hora_inicio_visita = NOW() WHERE id_visita = %s"
-        cursor.execute(query, (id_visita,))
+        query = """
+            UPDATE visitas_tecnicas 
+            SET estado = 'EN_PROGRESO', 
+                hora_inicio_visita = NOW(),
+                latitud_inicio = %s,
+                longitud_inicio = %s
+            WHERE id_visita = %s
+        """
+        cursor.execute(query, (lat_val, lon_val, id_visita))
         conexion.commit()
 
         # Actualizar estado de actividad global del técnico

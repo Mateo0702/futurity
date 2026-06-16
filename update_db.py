@@ -130,6 +130,24 @@ def update():
                 conn.commit()
                 print(f"Columna {col_name} añadida con éxito.")
             
+        # Verificar y agregar latitud_inicio en visitas_tecnicas
+        cursor.execute("SHOW COLUMNS FROM visitas_tecnicas LIKE 'latitud_inicio'")
+        if cursor.fetchone():
+            print("La columna latitud_inicio ya existe en visitas_tecnicas.")
+        else:
+            cursor.execute("ALTER TABLE visitas_tecnicas ADD COLUMN latitud_inicio DOUBLE DEFAULT NULL;")
+            conn.commit()
+            print("Columna latitud_inicio añadida con éxito.")
+
+        # Verificar y agregar longitud_inicio en visitas_tecnicas
+        cursor.execute("SHOW COLUMNS FROM visitas_tecnicas LIKE 'longitud_inicio'")
+        if cursor.fetchone():
+            print("La columna longitud_inicio ya existe en visitas_tecnicas.")
+        else:
+            cursor.execute("ALTER TABLE visitas_tecnicas ADD COLUMN longitud_inicio DOUBLE DEFAULT NULL;")
+            conn.commit()
+            print("Columna longitud_inicio añadida con éxito.")
+            
             
     except Exception as e:
         print(f"Error: {e}")

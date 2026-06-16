@@ -13,31 +13,62 @@ def normalizar_horario_texto(texto_preferencia):
 
     texto = texto_preferencia.lower().strip()
 
-    # 1. Palabras clave (mañana / tarde)
+    # 1. Palabras clave específicas
+    if "medio dia" in texto or "medio día" in texto:
+        return 720, 840  # 12:00 PM a 02:00 PM
+
+    # 2. Búsqueda de horas exactas con formato de dos puntos (Ej: "8:30" o "15:00")
+    coincidencia_colon = re.search(r'(\d{1,2}):(\d{2})', texto)
+    if coincidencia_colon:
+        horas = int(coincidencia_colon.group(1))
+        minutos = int(coincidencia_colon.group(2))
+        
+        # Convertir formato 12h a 24h asumiendo horario laboral
+        if horas < 8 and "pm" in texto: 
+            horas += 12
+        elif horas == 12 and "am" in texto:
+            horas = 0
+            
+        minutos_totales = (horas * 60) + minutos
+        return minutos_totales, minutos_totales + 60
+
+    # 3. Buscar formato tipo "13h30" o "13 h 30"
+    coincidencia_h_min = re.search(r'(\d{1,2})\s*h\s*(\d{2})', texto)
+    if coincidencia_h_min:
+        horas = int(coincidencia_h_min.group(1))
+        minutos = int(coincidencia_h_min.group(2))
+        minutos_totales = (horas * 60) + minutos
+        return minutos_totales, minutos_totales + 60
+
+    # 4. Buscar formato tipo "13h" o "13 h"
+    coincidencia_h = re.search(r'(\d{1,2})\s*h\b', texto)
+    if coincidencia_h:
+        horas = int(coincidencia_h.group(1))
+        if horas < 8 and "pm" in texto:
+            horas += 12
+        minutos_totales = horas * 60
+        return minutos_totales, minutos_totales + 60
+
+    # 5. Buscar formato tipo "3pm", "3 pm", "3 am", "3am" (sin minutos)
+    coincidencia_ampm = re.search(r'(\d{1,2})\s*(pm|am|p\.m\.|a\.m\.)', texto)
+    if coincidencia_ampm:
+        horas = int(coincidencia_ampm.group(1))
+        periodo = coincidencia_ampm.group(2).replace('.', '').strip()
+        if periodo == "pm" and horas < 12:
+            horas += 12
+        elif periodo == "am" and horas == 12:
+            horas = 0
+        minutos_totales = horas * 60
+        return minutos_totales, minutos_totales + 60
+
+    # 6. Palabras clave generales (mañana / tarde)
     if "mañana" in texto:
         return 480, 780   # 08:00 AM a 01:00 PM
     elif "tarde" in texto:
         return 780, 1080  # 01:00 PM a 06:00 PM
     elif "coordinar" in texto or "llamar" in texto:
-        return inicio_default, fin_default # Todo el día, prioridad baja
+        return inicio_default, fin_default
 
-    # 2. Búsqueda de horas exactas (Ej: "8:30" o "15:00")
-    # Busca patrones de números separados por dos puntos
-    coincidencia = re.search(r'(\d{1,2}):(\d{2})', texto)
-    if coincidencia:
-        horas = int(coincidencia.group(1))
-        minutos = int(coincidencia.group(2))
-        
-        # Convertir formato 12h a 24h asumiendo horario laboral
-        if horas < 8 and "pm" in texto: 
-            horas += 12
-            
-        minutos_totales = (horas * 60) + minutos
-        
-        # Damos una ventana de 1 hora desde la hora solicitada
-        return minutos_totales, minutos_totales + 60
-
-    # Si no entiende qué pusieron, le da todo el día para no romper el algoritmo
     return inicio_default, fin_default
 
 def parsear_informacion_tecnica(visitas):

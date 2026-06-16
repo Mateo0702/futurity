@@ -47,6 +47,10 @@
                     style="padding: 10px 20px; display: flex; align-items: center; gap: 8px; background-color: #64748b; border-color: #64748b; color: white;">
                     <i class="fa-solid fa-arrows-rotate"></i> Actualizar Vista
                 </button>
+                <button type="button" onclick="generarLinkCuadroMando()" class="btn" id="btn-compartir-reporte"
+                    style="padding: 10px 20px; display: none; align-items: center; gap: 8px; background-color: #4f46e5; border-color: #4f46e5; color: white; font-weight: bold; box-shadow: 0 4px 6px rgba(79, 70, 229, 0.2);">
+                    <i class="fa-solid fa-share-nodes"></i> Compartir Link
+                </button>
                 <button type="button" onclick="descargarExcelReporte()" class="btn" id="btn-descarga-reporte"
                     style="padding: 10px 25px; display: flex; align-items: center; gap: 8px; background-color: #16a34a; border-color: #16a34a; color: white; font-weight: bold; box-shadow: 0 4px 6px rgba(22, 163, 74, 0.2);">
                     <i class="fa-solid fa-file-excel"></i> Descargar Reporte Excel
@@ -594,6 +598,7 @@
 
         const cardConfig = document.getElementById('card-config-cuadro-mando');
         const btnDescarga = document.getElementById('btn-descarga-reporte');
+        const btnCompartir = document.getElementById('btn-compartir-reporte');
         const titleText = document.getElementById('reporte-title-text');
         const toggleContainer = document.getElementById('calidad-view-toggle-container');
 
@@ -618,6 +623,7 @@
         if (wrapCuadroMando) wrapCuadroMando.style.display = 'none';
 
         if (cardConfig) cardConfig.style.display = 'none';
+        if (btnCompartir) btnCompartir.style.display = 'none';
 
         // Toggle container visibility
         if (toggleContainer) {
@@ -683,6 +689,7 @@
             }
             if (wrapCuadroMando) wrapCuadroMando.style.display = 'block';
             if (cardConfig) cardConfig.style.display = 'block';
+            if (btnCompartir) btnCompartir.style.display = 'flex';
 
             if (btnDescarga) {
                 btnDescarga.style.backgroundColor = '#1f497d';
@@ -959,10 +966,17 @@
                             <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-top: 5px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.8rem;">
                                 <div><strong>ONU Instalada:</strong> <br><span style="color: #64748b; font-weight: 500;">${v.modelo_onu || 'N/A'}</span></div>
                                 <div><strong>Router Instalado:</strong> <br><span style="color: #64748b; font-weight: 500;">${v.modelo_router || 'N/A'}</span></div>
-                                <div style="grid-column: span 2; border-top: 1px solid #e2e8f0; padding-top: 6px; margin-top: 2px;">
-                                    <strong>📍 Coordenadas de Cierre:</strong> <br>
-                                    <span style="color: #64748b; font-weight: 500; font-family: monospace;">${v.coordenadas_tecnico || 'Sin GPS'}</span>
-                                    ${v.coordenadas_tecnico ? `<a href="https://maps.google.com/?q=${v.coordenadas_tecnico}" target="_blank" style="margin-left: 6px; color: #0284c7; text-decoration: none; font-weight: bold;"><i class="fa-solid fa-location-dot"></i> Ver Mapa</a>` : ''}
+                                <div style="grid-column: span 2; border-top: 1px solid #e2e8f0; padding-top: 6px; margin-top: 2px; display: flex; flex-direction: column; gap: 4px;">
+                                    <div>
+                                        <strong>📍 Coordenadas de Inicio:</strong> <br>
+                                        <span style="color: #64748b; font-weight: 500; font-family: monospace;">${v.latitud_inicio && v.longitud_inicio ? (v.latitud_inicio + ', ' + v.longitud_inicio) : 'Sin GPS'}</span>
+                                        ${v.latitud_inicio && v.longitud_inicio ? `<a href="https://maps.google.com/?q=${v.latitud_inicio},${v.longitud_inicio}" target="_blank" style="margin-left: 6px; color: #0284c7; text-decoration: none; font-weight: bold;"><i class="fa-solid fa-location-dot"></i> Ver Mapa</a>` : ''}
+                                    </div>
+                                    <div style="border-top: 1px dashed #e2e8f0; padding-top: 4px; margin-top: 2px;">
+                                        <strong>📍 Coordenadas de Cierre:</strong> <br>
+                                        <span style="color: #64748b; font-weight: 500; font-family: monospace;">${v.coordenadas_tecnico || 'Sin GPS'}</span>
+                                        ${v.coordenadas_tecnico ? `<a href="https://maps.google.com/?q=${v.coordenadas_tecnico}" target="_blank" style="margin-left: 6px; color: #0284c7; text-decoration: none; font-weight: bold;"><i class="fa-solid fa-location-dot"></i> Ver Mapa</a>` : ''}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1587,6 +1601,62 @@
             })
             .catch(err => {
                 alert("❌ " + err.message);
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            });
+    }
+
+    function generarLinkCuadroMando() {
+        const inputFecha = document.getElementById('reporte_fecha');
+        if (!inputFecha) return;
+        const fecha = inputFecha.value;
+
+        const btn = document.getElementById('btn-compartir-reporte');
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generando...`;
+
+        fetch(`/api/admin/cuadro_mando/share_link?fecha=${fecha}`)
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error("No se pudo obtener el enlace de compartición.");
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.status === 'ok') {
+                    const agente_a = document.getElementById('cm_agente_a').value;
+                    const agente_b = document.getElementById('cm_agente_b').value;
+                    const agente_c = document.getElementById('cm_agente_c').value;
+                    const soporte_a = document.getElementById('cm_soporte_a').value;
+                    const soporte_b = document.getElementById('cm_soporte_b').value;
+                    const soporte_c = document.getElementById('cm_soporte_c').value;
+
+                    const finalUrl = `${data.url}?agente_a=${encodeURIComponent(agente_a)}&agente_b=${encodeURIComponent(agente_b)}&agente_c=${encodeURIComponent(agente_c)}&soporte_a=${encodeURIComponent(soporte_a)}&soporte_b=${encodeURIComponent(soporte_b)}&soporte_c=${encodeURIComponent(soporte_c)}`;
+                    console.log("SHARED_URL:", finalUrl);
+
+                    navigator.clipboard.writeText(finalUrl)
+                        .then(() => {
+                            alert("✅ ¡Enlace del reporte copiado al portapapeles con éxito! Ya puedes enviarlo a WhatsApp.");
+                        })
+                        .catch(err => {
+                            console.error("No se pudo copiar al portapapeles:", err);
+                            const tempInput = document.createElement("input");
+                            tempInput.value = finalUrl;
+                            document.body.appendChild(tempInput);
+                            tempInput.select();
+                            document.execCommand("copy");
+                            document.body.removeChild(tempInput);
+                            alert("✅ ¡Enlace del reporte copiado al portapapeles! Ya puedes enviarlo a WhatsApp.");
+                        });
+                } else {
+                    alert("❌ Error: " + data.message);
+                }
+            })
+            .catch(err => {
+                alert("❌ Error: " + err.message);
             })
             .finally(() => {
                 btn.disabled = false;

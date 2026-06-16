@@ -368,7 +368,32 @@
                                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; background: #ffffff; padding: 10px; border-radius: 4px; border: 1px solid #e2e8f0;">
                                                 <div><strong>ONU Instalada:</strong> <span style="color: #475569;">{{ visita.modelo_onu or 'N/A' }}</span></div>
                                                 <div><strong>Router Instalado:</strong> <span style="color: #475569;">{{ visita.modelo_router or 'N/A' }}</span></div>
-                                                <div style="grid-column: span 2;"><strong>📍 Coordenadas de Cierre:</strong> <span style="color: #475569;">{{ visita.coordenadas_tecnico or 'Sin GPS' }}</span></div>
+                                                <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid #f1f5f9; padding-top: 6px;">
+                                                    <div>
+                                                        <strong>📍 Coordenadas de Inicio:</strong> 
+                                                        <span style="color: #475569;">
+                                                            {% if visita.latitud_inicio and visita.longitud_inicio %}
+                                                                {{ visita.latitud_inicio }}, {{ visita.longitud_inicio }}
+                                                                <a href="https://maps.google.com/?q={{ visita.latitud_inicio }},{{ visita.longitud_inicio }}" target="_blank" style="margin-left: 6px; color: #0284c7; text-decoration: none; font-weight: bold;">
+                                                                    <i class="fa-solid fa-location-dot"></i> Ver Mapa
+                                                                </a>
+                                                            {% else %}
+                                                                Sin GPS de Inicio
+                                                            {% endif %}
+                                                        </span>
+                                                    </div>
+                                                    <div>
+                                                        <strong>📍 Coordenadas de Cierre:</strong> 
+                                                        <span style="color: #475569;">
+                                                            {{ visita.coordenadas_tecnico or 'Sin GPS' }}
+                                                            {% if visita.coordenadas_tecnico %}
+                                                                <a href="https://maps.google.com/?q={{ visita.coordenadas_tecnico }}" target="_blank" style="margin-left: 6px; color: #0284c7; text-decoration: none; font-weight: bold;">
+                                                                    <i class="fa-solid fa-location-dot"></i> Ver Mapa
+                                                                </a>
+                                                            {% endif %}
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             <!-- Fotos de Equipos y Firma de Cierre -->

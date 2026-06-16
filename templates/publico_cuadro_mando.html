@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Futurity - Reporte Operativo Diario</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #090d16 0%, #111827 100%);
+            min-height: 100vh;
+            color: #f1f5f9;
+            padding: 16px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .header-card {
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            flex-wrap: wrap;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 6px 15px rgba(220, 38, 38, 0.3);
+        }
+
+        .logo-icon i {
+            font-size: 1.25rem;
+            color: white;
+        }
+
+        .logo-text h1 {
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(to right, #ffffff, #cbd5e1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-text p {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .date-badge {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #f8fafc;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .error-card {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            margin: auto 0;
+        }
+
+        .error-card i {
+            font-size: 3rem;
+            color: #ef4444;
+            margin-bottom: 15px;
+        }
+
+        .error-card h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: #f8fafc;
+        }
+
+        .error-card p {
+            font-size: 0.95rem;
+            color: #94a3b8;
+        }
+
+        /* GRID LAYOUT FOR SECTIONS */
+        .report-grid {
+            display: grid;
+            grid-template-columns: 1.25fr 1fr;
+            gap: 20px;
+            width: 100%;
+        }
+
+        @media (max-width: 768px) {
+            .report-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: rgba(17, 24, 39, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-header {
+            padding: 14px 20px;
+            font-size: 0.9rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            text-align: center;
+            color: white;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        th, td {
+            padding: 10px 12px;
+            text-align: center;
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        th:last-child, td:last-child {
+            border-right: none;
+        }
+
+        /* Call Center Styles */
+        .th-main {
+            background: #1e3a8a;
+            color: white;
+            font-weight: 700;
+        }
+
+        .th-header {
+            font-weight: 700;
+            font-size: 0.8rem;
+            border-bottom: 1.5px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .td-label {
+            font-weight: 700;
+            text-align: left;
+            background: rgba(128, 100, 162, 0.2);
+            color: #e9d5ff;
+            width: 38%;
+        }
+
+        .cc-total-row {
+            background: #000000;
+            color: #ffffff;
+            font-weight: 800;
+        }
+
+        /* KPIs de Campo */
+        .kpi-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .kpi-box {
+            padding: 12px;
+            text-align: center;
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .kpi-box:last-child {
+            border-right: none;
+        }
+
+        .kpi-title {
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: #94a3b8;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1.2;
+            text-transform: uppercase;
+        }
+
+        .kpi-value {
+            font-size: 1.4rem;
+            font-weight: 800;
+            margin-top: 4px;
+        }
+
+        .kpi-damage-detail {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .kpi-damage-box {
+            padding: 12px;
+            text-align: center;
+        }
+
+        .kpi-damage-box.left {
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(30, 58, 138, 0.25);
+        }
+
+        .kpi-damage-box.right {
+            background: rgba(20, 83, 45, 0.2);
+        }
+
+        .kpi-damage-title {
+            font-size: 0.65rem;
+            font-weight: 700;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1.2;
+            text-transform: uppercase;
+        }
+
+        .kpi-damage-box.left .kpi-damage-title {
+            color: #93c5fd;
+        }
+
+        .kpi-damage-box.right .kpi-damage-title {
+            color: #86efac;
+        }
+
+        .kpi-damage-box.left .kpi-value {
+            color: #60a5fa;
+        }
+
+        .kpi-damage-box.right .kpi-value {
+            color: #4ade80;
+        }
+
+        /* Soluciones & Problemas lists */
+        .detail-row {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: background 0.2s;
+        }
+
+        .detail-row:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .detail-name {
+            padding: 8px 12px;
+            text-align: left;
+            color: #cbd5e1;
+            font-size: 0.8rem;
+        }
+
+        .detail-val {
+            padding: 8px 12px;
+            font-weight: 700;
+            width: 60px;
+        }
+
+        .detail-sol-val {
+            color: #60a5fa;
+        }
+
+        .detail-prob-val {
+            color: #4ade80;
+        }
+
+        .empty-row {
+            padding: 15px;
+            text-align: center;
+            color: #64748b;
+            font-size: 0.8rem;
+            font-style: italic;
+        }
+
+        /* Charts section */
+        .charts-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .chart-card {
+            background: rgba(17, 24, 39, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+
+        .chart-card h3 {
+            font-size: 0.85rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: #94a3b8;
+            margin-bottom: 15px;
+            letter-spacing: 0.05em;
+        }
+
+        .chart-wrapper {
+            height: 220px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 10px 0 30px 0;
+            font-size: 0.75rem;
+            color: #475569;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    {% if error %}
+    <div class="error-card">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <h2>Acceso Denegado</h2>
+        <p>{{ error }}</p>
+    </div>
+    {% else %}
+    <!-- HEADER -->
+    <div class="header-card">
+        <div class="logo-section">
+            <div class="logo-icon">
+                <i class="fa-solid fa-gauge-high"></i>
+            </div>
+            <div class="logo-text">
+                <h1>FUTURITY</h1>
+                <p>Reporte Diario Call Center & Campo</p>
+            </div>
+        </div>
+        <div class="date-badge">
+            <i class="fa-regular fa-calendar-days"></i>
+            <span id="display-date">{{ fecha }}</span>
+        </div>
+    </div>
+
+    <!-- MAIN TABLES GRID -->
+    <div class="report-grid">
+        <!-- Call Center Card -->
+        <div class="card">
+            <div class="card-header" style="background: #1e3a8a;">
+                Atenciones Diarias por Call Center
+            </div>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr class="th-header" style="background: rgba(255, 255, 255, 0.02);">
+                            <th style="text-align: left; width: 38%;">Horario / Agente</th>
+                            <th style="background: rgba(96, 165, 250, 0.08); color: #93c5fd; font-size: 0.75rem;">7 AM - 4 PM<br><span style="font-weight: 500;">A</span></th>
+                            <th style="background: rgba(74, 222, 128, 0.08); color: #86efac; font-size: 0.75rem;">2 PM - 9 PM<br><span style="font-weight: 500;">B</span></th>
+                            <th style="background: rgba(251, 146, 60, 0.08); color: #ffedd5; font-size: 0.75rem;">10 AM - 8 PM<br><span style="font-weight: 500;">C</span></th>
+                            <th style="font-size: 0.78rem; font-weight: 700; background: rgba(255, 255, 255, 0.04);">Total CC</th>
+                        </tr>
+                        <tr class="th-header" style="background: rgba(255, 255, 255, 0.04); font-size: 0.75rem;">
+                            <th style="text-align: left; color: #cbd5e1; font-weight: 700;">AGENTE DE TURNO</th>
+                            <th style="color: #60a5fa; font-weight: 700;">{{ agente_a }}</th>
+                            <th style="color: #4ade80; font-weight: 700;">{{ agente_b }}</th>
+                            <th style="color: #fb923c; font-weight: 700;">{{ agente_c }}</th>
+                            <th style="font-size: 0.95rem; font-weight: 900; color: white;">{{ total_cc_general }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows_atenciones %}
+                        <tr>
+                            <td class="td-label">{{ row.label }}</td>
+                            <td style="color: #cbd5e1; font-weight: 600;">{{ row.vals[0] }}</td>
+                            <td style="color: #cbd5e1; font-weight: 600;">{{ row.vals[1] }}</td>
+                            <td style="color: #cbd5e1; font-weight: 600;">{{ row.vals[2] }}</td>
+                            <td style="font-weight: 700; color: #38bdf8; background: rgba(56, 189, 248, 0.03);">{{ row.total }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="cc-total-row">
+                            <td style="text-align: left; font-weight: 800; padding: 10px 12px; background: rgba(255, 255, 255, 0.1);">TOTAL DE GESTIONES AL DÍA</td>
+                            <td style="color: #60a5fa;">{{ agente_totals[0] }}</td>
+                            <td style="color: #4ade80;">{{ agente_totals[1] }}</td>
+                            <td style="color: #fb923c;">{{ agente_totals[2] }}</td>
+                            <td style="background: #1e3a8a; color: white;">{{ total_cc_general }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Field Tech KPIs Card -->
+        <div class="card">
+            <div class="card-header" style="background: #1f2937;">
+                Desempeño Operador de Campo (VT)
+            </div>
+            
+            <div class="kpi-container">
+                <div class="kpi-box">
+                    <span class="kpi-title">Pendientes<br>Anteriores</span>
+                    <div class="kpi-value" style="color: #cbd5e1;">{{ kpis.pendientes_anteriores }}</div>
+                </div>
+                <div class="kpi-box">
+                    <span class="kpi-title">Generadas<br>Hoy</span>
+                    <div class="kpi-value" style="color: #cbd5e1;">{{ kpis.generadas_hoy }}</div>
+                </div>
+                <div class="kpi-box">
+                    <span class="kpi-title">Carga Total<br>Visitas</span>
+                    <div class="kpi-value" style="color: #38bdf8;">{{ kpis.total_carga }}</div>
+                </div>
+            </div>
+
+            <div class="kpi-damage-detail">
+                <div class="kpi-damage-box left">
+                    <span class="kpi-damage-title">Resueltas Hoy<br>+ Cambios FO</span>
+                    <div class="kpi-value">{{ kpis.atendidas_hoy }}</div>
+                </div>
+                <div class="kpi-damage-box right">
+                    <span class="kpi-damage-title">Pendientes<br>Mañana</span>
+                    <div class="kpi-value">{{ kpis.pendientes_manana }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PROBLEMS AND SOLUTIONS EXPANSIONS -->
+    <div class="report-grid">
+        <!-- Today's Solutions -->
+        <div class="card">
+            <div class="card-header" style="background: #1e3a8a; font-size: 0.82rem; padding: 10px;">
+                <i class="fa-solid fa-circle-check" style="margin-right: 6px;"></i> Soluciones Realizadas Hoy
+            </div>
+            <div style="flex: 1; max-height: 250px; overflow-y: auto;">
+                <table style="font-size: 0.8rem;">
+                    <tbody>
+                        {% if soluciones %}
+                            {% for name, val in soluciones.items() %}
+                            <tr class="detail-row">
+                                <td class="detail-name">{{ name }}</td>
+                                <td class="detail-val detail-sol-val">{{ val }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="2" class="empty-row">No hay soluciones registradas hoy</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tomorrow's Problems -->
+        <div class="card">
+            <div class="card-header" style="background: #14532d; font-size: 0.82rem; padding: 10px;">
+                <i class="fa-solid fa-clock" style="margin-right: 6px;"></i> Visitas Pendientes para Mañana
+            </div>
+            <div style="flex: 1; max-height: 250px; overflow-y: auto;">
+                <table style="font-size: 0.8rem;">
+                    <tbody>
+                        {% if problemas %}
+                            {% for name, val in problemas.items() %}
+                            <tr class="detail-row">
+                                <td class="detail-name">{{ name }}</td>
+                                <td class="detail-val detail-prob-val">{{ val }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="2" class="empty-row">No hay visitas agendadas para mañana</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHARTS SECTION -->
+    <div class="charts-container">
+        <!-- Chart: Gestión por Agente -->
+        <div class="chart-card">
+            <h3>Gestión por Agente</h3>
+            <div class="chart-wrapper">
+                <canvas id="cmChartAgente"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart: Tipo de Atención -->
+        <div class="chart-card">
+            <h3>Tipo de Atención</h3>
+            <div class="chart-wrapper">
+                <canvas id="cmChartTipo"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        Futurity Routing Optimizer © 2026
+    </div>
+    {% endif %}
+</div>
+
+<!-- SCRIPTS FOR CHARTS -->
+{% if not error %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        // Datos para Gráficos pre-inyectados
+        const nameA = "{{ agente_a }}";
+        const nameB = "{{ agente_b }}";
+        const nameC = "{{ agente_c }}";
+        
+        const totA = {{ agente_totals[0] }};
+        const totB = {{ agente_totals[1] }};
+        const totC = {{ agente_totals[2] }};
+
+        // 1. Gráfico por Agente
+        const ctxAgente = document.getElementById('cmChartAgente').getContext('2d');
+        new Chart(ctxAgente, {
+            type: 'pie',
+            plugins: [ChartDataLabels],
+            data: {
+                labels: [nameA, nameB, nameC],
+                datasets: [{
+                    data: [totA, totB, totC],
+                    backgroundColor: ['#4f46e5', '#10b981', '#fb923c'],
+                    borderWidth: 1.5,
+                    borderColor: '#111827'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#cbd5e1',
+                            font: { size: 10, family: 'Outfit' }
+                        }
+                    },
+                    datalabels: {
+                        color: '#ffffff',
+                        font: { weight: 'bold', size: 12, family: 'Outfit' },
+                        formatter: (value) => {
+                            return value > 0 ? value : '';
+                        }
+                    }
+                }
+            }
+        });
+
+        // 2. Gráfico por Tipo de Atención
+        // Agrupar los tipos de atención
+        const categories = {
+            "Visitas Coord.": 0,
+            "Llamadas": 0,
+            "Mensajes": 0,
+            "Oficina": 0,
+            "Soporte Técnico": 0,
+            "Otros": 0
+        };
+
+        {% for row in rows_atenciones %}
+            if ("{{ row.label }}" === "VISITAS COORDINADAS") categories["Visitas Coord."] = {{ row.total }};
+            else if ("{{ row.label }}" === "SOLVENTADO POR LLAMADA") categories["Llamadas"] = {{ row.total }};
+            else if ("{{ row.label }}" === "SOLVENTADO POR MENSAJES") categories["Mensajes"] = {{ row.total }};
+            else if ("{{ row.label }}" === "SOLVENTADO EN OFICINA") categories["Oficina"] = {{ row.total }};
+            else if ("{{ row.label }}" === "SOPORTE A TÉCNICOS VT / INST") categories["Soporte Técnico"] = {{ row.total }};
+            else if ("{{ row.label }}" === "INFO / TRANSFERENCIAS - OTROS") categories["Otros"] = {{ row.total }};
+        {% endfor %}
+
+        const labelsTipo = Object.keys(categories);
+        const dataTipo = Object.values(categories);
+
+        const ctxTipo = document.getElementById('cmChartTipo').getContext('2d');
+        new Chart(ctxTipo, {
+            type: 'pie',
+            plugins: [ChartDataLabels],
+            data: {
+                labels: labelsTipo,
+                datasets: [{
+                    data: dataTipo,
+                    backgroundColor: ['#6366f1', '#3b82f6', '#10b981', '#a855f7', '#f43f5e', '#64748b'],
+                    borderWidth: 1.5,
+                    borderColor: '#111827'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#cbd5e1',
+                            font: { size: 9, family: 'Outfit' },
+                            boxWidth: 12
+                        }
+                    },
+                    datalabels: {
+                        color: '#ffffff',
+                        font: { weight: 'bold', size: 11, family: 'Outfit' },
+                        formatter: (value) => {
+                            return value > 0 ? value : '';
+                        }
+                    }
+                }
+            }
+        });
+
+        // Formatear fecha del reporte amigablemente
+        try {
+            const dateStr = "{{ fecha }}";
+            const parts = dateStr.split('-');
+            if(parts.length === 3) {
+                const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+                const formatted = `${parts[2]} de ${months[parseInt(parts[1]) - 1]} de ${parts[0]}`;
+                document.getElementById('display-date').innerText = formatted;
+            }
+        } catch(e) {
+            console.error(e);
+        }
+    });
+</script>
+{% endif %}
+
+</body>
+</html>
