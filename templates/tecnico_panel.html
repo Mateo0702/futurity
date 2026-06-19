@@ -756,7 +756,7 @@
             } else if (tel.length === 9 && tel.startsWith('9')) {
                 tel = '593' + tel;
             }
-            window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`, '_blank');
+            window.open(`https://api.whatsapp.com/send/?phone=${tel}&text=${encodeURIComponent(mensaje)}`, '_blank');
         }
 
         function mostrarModalContacto(titulo, contactos, callbackSelect) {

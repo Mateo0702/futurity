@@ -523,6 +523,27 @@ def dashboard():
     labels_tiempos = [d['solucion_tecnico'] for d in datos_tiempos]
     valores_tiempos = [float(d['tiempo_promedio'] or 0) for d in datos_tiempos]
 
+    # Consultar recordatorios y bloqueos activos para la fecha actual de búsqueda
+    cursor.execute("""
+        SELECT r.*, t.nombre as tecnico_nombre 
+        FROM recordatorios_bloqueos r
+        LEFT JOIN tecnicos t ON r.tecnico_id = t.id_tecnico
+        WHERE r.fecha = %s AND r.activo = 1
+        ORDER BY r.hora_inicio ASC
+    """, (fecha_busqueda,))
+    recordatorios_hoy = cursor.fetchall()
+    for r in recordatorios_hoy:
+        if r['hora_inicio']:
+            tot_sec = int(r['hora_inicio'].total_seconds())
+            r['hora_inicio_str'] = f"{tot_sec // 3600:02d}:{(tot_sec % 3600) // 60:02d}"
+        else:
+            r['hora_inicio_str'] = None
+        if r['hora_fin']:
+            tot_sec = int(r['hora_fin'].total_seconds())
+            r['hora_fin_str'] = f"{tot_sec // 3600:02d}:{(tot_sec % 3600) // 60:02d}"
+        else:
+            r['hora_fin_str'] = None
+
     # Pasamos las nuevas variables al template
     return render_template('index.html', 
                            visitas=visitas, 
@@ -533,6 +554,7 @@ def dashboard():
                            tecnicos=obtener_tecnicos_activos(session.get('active_area')),
                            problemas=obtener_problemas_activos(),
                            asesor=session.get('user_name', 'Asesor'),
+                           recordatorios_hoy=recordatorios_hoy,
                            # Variables para gráficos:
                            labels_barras=labels_barras, val_barras=valores_barras,
                            labels_prob=labels_prob, val_prob=valores_prob,

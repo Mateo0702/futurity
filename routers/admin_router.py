@@ -3287,4 +3287,217 @@ def metricas_tiempos():
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()
+        conexion.close()
+
+
+# ==========================================
+# RUTAS DE GESTIÓN DE RECORDATORIOS Y BLOQUEOS
+# ==========================================
+
+@admin_bp.route('/api/admin/recordatorios', methods=['GET'])
+def obtener_recordatorios():
+    if 'user_id' not in session:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+        
+    fecha_filtro = request.args.get('fecha')
+    
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        if fecha_filtro:
+            query = """
+                SELECT r.*, t.nombre as tecnico_nombre 
+                FROM recordatorios_bloqueos r
+                LEFT JOIN tecnicos t ON r.tecnico_id = t.id_tecnico
+                WHERE r.fecha = %s AND r.activo = 1
+                ORDER BY r.hora_inicio ASC
+            """
+            cursor.execute(query, (fecha_filtro,))
+        else:
+            query = """
+                SELECT r.*, t.nombre as tecnico_nombre 
+                FROM recordatorios_bloqueos r
+                LEFT JOIN tecnicos t ON r.tecnico_id = t.id_tecnico
+                WHERE r.activo = 1
+                ORDER BY r.fecha DESC, r.hora_inicio ASC
+            """
+            cursor.execute(query)
+            
+        rows = cursor.fetchall()
+        
+        # Formatear timedelta / date a string para JSON
+        for r in rows:
+            r['fecha'] = r['fecha'].isoformat()
+            if r['hora_inicio']:
+                tot_sec = int(r['hora_inicio'].total_seconds())
+                r['hora_inicio'] = f"{tot_sec // 3600:02d}:{(tot_sec % 3600) // 60:02d}"
+            if r['hora_fin']:
+                tot_sec = int(r['hora_fin'].total_seconds())
+                r['hora_fin'] = f"{tot_sec // 3600:02d}:{(tot_sec % 3600) // 60:02d}"
+            if r['fecha_creacion']:
+                r['fecha_creacion'] = r['fecha_creacion'].isoformat()
+                
+        return jsonify({"status": "ok", "recordatorios": rows})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+@admin_bp.route('/api/admin/recordatorios', methods=['POST'])
+def crear_recordatorio():
+    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+        
+    datos = request.get_json() or {}
+    titulo = datos.get('titulo', '').strip()
+    descripcion = datos.get('descripcion', '').strip()
+    tipo = datos.get('tipo')
+    fecha = datos.get('fecha')
+    hora_inicio = datos.get('hora_inicio') or None
+    hora_fin = datos.get('hora_fin') or None
+    tecnico_id = datos.get('tecnico_id') or None
+    
+    if not titulo or not tipo or not fecha:
+        return jsonify({"status": "error", "message": "Título, tipo y fecha son obligatorios."}), 400
+        
+    if tecnico_id == "" or tecnico_id == "null" or tecnico_id is None:
+        tecnico_id = None
+    else:
+        try:
+            tecnico_id = int(tecnico_id)
+        except ValueError:
+            tecnico_id = None
+        
+    creado_por = session.get('user_name', 'Admin')
+    
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    try:
+        cursor = conexion.cursor()
+        query = """
+            INSERT INTO recordatorios_bloqueos 
+            (titulo, descripcion, tipo, fecha, hora_inicio, hora_fin, tecnico_id, creado_por)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        cursor.execute(query, (titulo, descripcion, tipo, fecha, hora_inicio, hora_fin, tecnico_id, creado_por))
+        conexion.commit()
+        return jsonify({"status": "ok", "message": "Recordatorio/Bloqueo registrado con éxito."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+@admin_bp.route('/api/admin/recordatorios/<int:id_recordatorio>', methods=['DELETE'])
+def eliminar_recordatorio(id_recordatorio):
+    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+        
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    try:
+        cursor = conexion.cursor()
+        cursor.execute("UPDATE recordatorios_bloqueos SET activo = 0 WHERE id_recordatorio = %s", (id_recordatorio,))
+        conexion.commit()
+        return jsonify({"status": "ok", "message": "Recordatorio/Bloqueo eliminado con éxito."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+@admin_bp.route('/api/admin/recordatorios/verificar', methods=['GET'])
+def verificar_conflictos_agenda():
+    if 'user_id' not in session:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+        
+    fecha = request.args.get('fecha')
+    tecnico = request.args.get('tecnico', '').strip()
+    preferencia = request.args.get('preferencia', '').strip().lower()
+    
+    if not fecha:
+        return jsonify({"status": "error", "message": "Falta la fecha de consulta."}), 400
+        
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        # Traer todos los recordatorios activos para esa fecha
+        cursor.execute("""
+            SELECT r.*, t.nombre as tecnico_nombre 
+            FROM recordatorios_bloqueos r
+            LEFT JOIN tecnicos t ON r.tecnico_id = t.id_tecnico
+            WHERE r.fecha = %s AND r.activo = 1
+        """, (fecha,))
+        recordatorios = cursor.fetchall()
+        
+        conflictos = []
+        
+        # Función auxiliar para convertir preferencia horaria a minutos del día
+        from utils import normalizar_horario_texto
+        pref_inicio, pref_fin = normalizar_horario_texto(preferencia)
+        
+        for r in recordatorios:
+            # Convertir hora_inicio y hora_fin a minutos
+            rec_inicio_min = None
+            rec_fin_min = None
+            
+            if r['hora_inicio']:
+                tot_sec = int(r['hora_inicio'].total_seconds())
+                rec_inicio_min = tot_sec // 60
+            if r['hora_fin']:
+                tot_sec = int(r['hora_fin'].total_seconds())
+                rec_fin_min = tot_sec // 60
+                
+            # Determinar si hay solapamiento horario si el recordatorio tiene horas
+            solapamiento = True
+            if rec_inicio_min is not None and rec_fin_min is not None and pref_inicio is not None and pref_fin is not None:
+                # Caso de no solapamiento: (fin_rec <= inicio_pref) o (inicio_rec >= fin_pref)
+                if rec_fin_min <= pref_inicio or rec_inicio_min >= pref_fin:
+                    solapamiento = False
+                    
+            if not solapamiento:
+                continue
+                
+            # Reglas de filtrado
+            tipo = r['tipo']
+            tipo_label = {
+                'INVENTARIO': 'Inventario General',
+                'REUNION': 'Reunión General',
+                'BLOQUEO_GENERAL': 'Bloqueo General',
+                'RECORDATORIO_TECNICO': 'Recordatorio Técnico'
+            }.get(tipo, tipo)
+            
+            hora_str = ""
+            if r['hora_inicio'] and r['hora_fin']:
+                ts_ini = int(r['hora_inicio'].total_seconds())
+                ts_fin = int(r['hora_fin'].total_seconds())
+                hora_str = f" ({ts_ini//3600:02d}:{(ts_ini%3600)//60:02d} - {ts_fin//3600:02d}:{(ts_fin%3600)//60:02d})"
+            
+            desc_str = f": {r['descripcion']}" if r['descripcion'] else ""
+            
+            # A. Si es un bloqueo general (Inventario / Reunión / Bloqueo General) -> Aplica a todos
+            if tipo in ['INVENTARIO', 'REUNION', 'BLOQUEO_GENERAL']:
+                conflictos.append(f"<strong>[{tipo_label}]</strong> {r['titulo']}{hora_str}{desc_str}")
+            
+            # B. Si es recordatorio de técnico -> Solo aplica a ese técnico
+            elif tipo == 'RECORDATORIO_TECNICO' and r['tecnico_nombre'] and tecnico:
+                if r['tecnico_nombre'].upper() == tecnico.upper():
+                    conflictos.append(f"<strong>[{tipo_label}]</strong> Técnico {r['tecnico_nombre']} tiene: {r['titulo']}{hora_str}{desc_str}")
+                    
+        return jsonify({"status": "ok", "conflictos": conflictos})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
         conexion.close()

@@ -75,6 +75,42 @@ def importar_atenciones():
         cursor.execute("DELETE FROM atenciones WHERE DATE(fecha_registro) = CURDATE()")
         print(f"Limpieza completada. Se eliminaron {cursor.rowcount} registros anteriores.")
 
+        # Cargar registros existentes en memoria para evitar duplicados de otros días
+        print("Cargando registros existentes en memoria para evitar duplicados...")
+        existing_records = set()
+        cursor.execute("SELECT fecha, hora, contrato, cliente, agente, accion FROM atenciones")
+        from datetime import timedelta
+        for row in cursor.fetchall():
+            f_db = row[0].isoformat() if row[0] else None
+            h_db = row[1]
+            h_str = None
+            if h_db is not None:
+                if isinstance(h_db, timedelta):
+                    total_seconds = int(h_db.total_seconds())
+                    hours = total_seconds // 3600
+                    minutes = (total_seconds % 3600) // 60
+                    seconds = total_seconds % 60
+                    h_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                elif hasattr(h_db, 'strftime'):
+                    h_str = h_db.strftime('%H:%M:%S')
+                else:
+                    h_str = str(h_db)
+            
+            c_db = row[2]
+            cl_db = row[3]
+            ag_db = row[4]
+            ac_db = row[5]
+            
+            existing_records.add((
+                f_db,
+                h_str,
+                c_db.strip() if c_db else None,
+                cl_db.strip().upper() if cl_db else None,
+                ag_db.strip() if ag_db else None,
+                ac_db.strip().upper() if ac_db else None
+            ))
+        print(f"Se cargaron {len(existing_records)} registros únicos existentes.")
+
         query_insert = """
             INSERT INTO atenciones (
                 fecha, hora, fecha_hora, contrato, cliente, fecha_instalacion, 
@@ -86,6 +122,7 @@ def importar_atenciones():
         print("Iniciando la inyección masiva en la tabla 'atenciones'...")
         
         contador_insertados = 0
+        contador_duplicados = 0
         
         for index in range(start_idx, len(df)):
             row = df.iloc[index]
@@ -242,6 +279,19 @@ def importar_atenciones():
             router = None
             timer_minutos = None
             
+            # --- VERIFICACIÓN DE DUPLICADOS ---
+            key = (
+                fecha_prog,
+                hora_prog,
+                contrato.strip() if contrato else None,
+                cliente.strip().upper() if cliente else None,
+                agente.strip() if agente else None,
+                accion.strip().upper() if accion else None
+            )
+            if key in existing_records:
+                contador_duplicados += 1
+                continue
+
             # Ejecutar inserción
             datos_atencion = (
                 fecha_prog, hora_prog, fecha_hora, contrato, cliente, fecha_instalacion,
@@ -251,6 +301,7 @@ def importar_atenciones():
             
             try:
                 cursor.execute(query_insert, datos_atencion)
+                existing_records.add(key)
                 contador_insertados += 1
             except mysql.connector.Error as err:
                 print(f"\n[ERROR] Falla al insertar fila index {index} en Excel.")
@@ -259,6 +310,7 @@ def importar_atenciones():
 
         conexion.commit()
         print(f"Exito absoluto! Se importaron {contador_insertados} atenciones a la tabla 'atenciones'.")
+        print(f"Se omitieron {contador_duplicados} registros duplicados por ya existir en la base de datos.")
 
     except mysql.connector.Error as err:
         print(f"Error crítico de MySQL: {err}")

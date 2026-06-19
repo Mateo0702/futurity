@@ -61,6 +61,9 @@
                             principalInput.value = '';
                             apoyoInput.value = '';
                         }
+                        if (typeof verificarConflictosAgenda === 'function') {
+                            verificarConflictosAgenda();
+                        }
                     }
                 </script>
             {% else %}
@@ -175,7 +178,7 @@
                 </div>
                 <div class="form-group" style="grid-column: span 2;">
                     <label>Preferencia Horaria (Cliente):</label>
-                    <input type="text" name="preferencia_horaria" placeholder="Ej. tarde, mañana, 8:30" required
+                    <input type="text" name="preferencia_horaria" id="registro-preferencia-horaria" placeholder="Ej. tarde, mañana, 8:30" required
                         class="form-control">
                 </div>
             </div>
@@ -279,6 +282,21 @@
                             <input type="text" name="info_pas" class="form-control" placeholder="Contraseña">
                         </div>
                         {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contenedor dinámico de advertencias de agenda (reuniones, inventarios, bloqueos o recordatorios) -->
+            <div id="contenedor-alertas-agenda" style="display: none; margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border-left: 5px solid #d97706; border-radius: 8px; box-shadow: var(--shadow-sm); font-size: 0.9rem; color: #78350f;">
+                <div style="display: flex; gap: 10px; align-items: flex-start;">
+                    <div style="color: #d97706; flex-shrink: 0; margin-top: 1px;">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    </div>
+                    <div style="flex-grow: 1;">
+                        <strong style="display: block; margin-bottom: 5px; color: #92400e;">⚠️ Conflicto detectado en la Agenda:</strong>
+                        <ul id="lista-alertas-agenda" style="margin: 0; padding-left: 20px; list-style-type: disc; line-height: 1.5;">
+                            <!-- Dinámico -->
+                        </ul>
                     </div>
                 </div>
             </div>
@@ -566,6 +584,62 @@
                 contenedor.style.display = 'none';
                 contenedor.style.backgroundColor = '#f0fdf4'; // Restaurar color original
             }, 800);
+            
+            // También verificar conflictos de agenda al asignar recomendación
+            verificarConflictosAgenda();
         }
     }
+
+    function verificarConflictosAgenda() {
+        const fecha = document.getElementById('fecha_programada').value;
+        const tecnico = document.getElementById('registro-tecnico-asignado').value;
+        const preferencia = document.getElementById('registro-preferencia-horaria').value;
+
+        const contenedor = document.getElementById('contenedor-alertas-agenda');
+        const lista = document.getElementById('lista-alertas-agenda');
+
+        if (!fecha) {
+            contenedor.style.display = 'none';
+            return;
+        }
+
+        const url = `/api/admin/recordatorios/verificar?fecha=${encodeURIComponent(fecha)}&tecnico=${encodeURIComponent(tecnico)}&preferencia=${encodeURIComponent(preferencia)}`;
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok' && data.conflictos && data.conflictos.length > 0) {
+                    lista.innerHTML = '';
+                    data.conflictos.forEach(conf => {
+                        const li = document.createElement('li');
+                        li.innerHTML = conf;
+                        lista.appendChild(li);
+                    });
+                    contenedor.style.display = 'block';
+                } else {
+                    contenedor.style.display = 'none';
+                    lista.innerHTML = '';
+                }
+            })
+            .catch(err => {
+                console.error("Error al verificar conflictos de agenda:", err);
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const inputFecha = document.getElementById('fecha_programada');
+        const inputTecnico = document.getElementById('registro-tecnico-asignado');
+        const inputPref = document.getElementById('registro-preferencia-horaria');
+
+        if (inputFecha) {
+            inputFecha.addEventListener('change', verificarConflictosAgenda);
+        }
+        if (inputTecnico) {
+            inputTecnico.addEventListener('change', verificarConflictosAgenda);
+        }
+        if (inputPref) {
+            inputPref.addEventListener('input', verificarConflictosAgenda);
+            inputPref.addEventListener('change', verificarConflictosAgenda);
+        }
+    });
 </script>

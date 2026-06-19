@@ -148,6 +148,25 @@ def update():
             conn.commit()
             print("Columna longitud_inicio añadida con éxito.")
             
+        # Crear tabla recordatorios_bloqueos si no existe
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS recordatorios_bloqueos (
+                id_recordatorio INT AUTO_INCREMENT PRIMARY KEY,
+                titulo VARCHAR(150) NOT NULL,
+                descripcion TEXT,
+                tipo VARCHAR(50) NOT NULL, -- 'RECORDATORIO_TECNICO', 'BLOQUEO_GENERAL', 'REUNION', 'INVENTARIO'
+                fecha DATE NOT NULL,
+                hora_inicio TIME DEFAULT NULL,
+                hora_fin TIME DEFAULT NULL,
+                tecnico_id INT DEFAULT NULL,
+                creado_por VARCHAR(100) NOT NULL,
+                fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+                activo BOOLEAN DEFAULT TRUE,
+                FOREIGN KEY (tecnico_id) REFERENCES tecnicos(id_tecnico) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        """)
+        conn.commit()
+        print("Tabla recordatorios_bloqueos verificada/creada con éxito.")
             
     except Exception as e:
         print(f"Error: {e}")
