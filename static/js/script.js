@@ -296,3 +296,76 @@ function dibujarRutas(rutas) {
 
     contenedor.innerHTML = html;
 }
+
+// --- GLOBAL TOAST NOTIFICATION SYSTEM ---
+function mostrarToast(mensaje, esError = false) {
+    let container = document.getElementById('global-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'global-toast-container';
+        container.style.position = 'fixed';
+        container.style.bottom = '30px';
+        container.style.right = '30px';
+        container.style.zIndex = '99999';
+        container.style.display = 'flex';
+        container.style.flexDirection = 'column';
+        container.style.gap = '10px';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'custom-transition';
+    toast.style.minWidth = '300px';
+    toast.style.background = document.body.classList.contains('dark-mode') ? '#1e293b' : '#ffffff';
+    toast.style.color = document.body.classList.contains('dark-mode') ? '#f8fafc' : '#0f172a';
+    toast.style.padding = '15px 20px';
+    toast.style.borderRadius = '12px';
+    toast.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15)';
+    toast.style.border = '1px solid ' + (document.body.classList.contains('dark-mode') ? '#334155' : '#e2e8f0');
+    toast.style.borderLeft = `5px solid ${esError ? '#ef4444' : '#10b981'}`;
+    toast.style.display = 'flex';
+    toast.style.alignItems = 'center';
+    toast.style.gap = '12px';
+    toast.style.animation = 'slideInRight 0.3s ease-out';
+
+    // Add CSS animations if not defined
+    if (!document.getElementById('toast-animation-styles')) {
+        const style = document.createElement('style');
+        style.id = 'toast-animation-styles';
+        style.innerHTML = `
+            @keyframes slideInRight {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes fadeOut {
+                to { opacity: 0; transform: translateY(10px); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    const icon = document.createElement('i');
+    icon.className = esError ? 'fa-solid fa-circle-xmark' : 'fa-solid fa-circle-check';
+    icon.style.color = esError ? '#ef4444' : '#10b981';
+    icon.style.fontSize = '1.2rem';
+
+    const text = document.createElement('span');
+    text.style.fontWeight = '600';
+    text.style.fontSize = '0.9rem';
+    text.innerText = mensaje;
+
+    toast.appendChild(icon);
+    toast.appendChild(text);
+    container.appendChild(toast);
+
+    // Auto-remove toast after 4 seconds
+    setTimeout(() => {
+        toast.style.animation = 'fadeOut 0.4s ease-out forwards';
+        setTimeout(() => {
+            toast.remove();
+            if (container.children.length === 0) {
+                container.remove();
+            }
+        }, 400);
+    }, 4000);
+}

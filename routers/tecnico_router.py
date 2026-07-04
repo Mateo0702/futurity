@@ -52,21 +52,37 @@ def panel_tecnico(nombre_tecnico):
     
     hoy = date.today().isoformat()
     
-    # 1. Traemos las visitas del técnico de hoy
-    query = """
+    # 1. Obtener estado de actividad, área de trabajo, coordenadas y pánico del técnico
+    cursor.execute("SELECT estado_actividad, area_trabajo, alerta_panico, mensaje_panico, latitud_actual, longitud_actual FROM tecnicos WHERE nombre = %s", (nombre_real,))
+    tec_estado_row = cursor.fetchone()
+    estado_actividad = tec_estado_row['estado_actividad'] if tec_estado_row else 'Disponible'
+    area_trabajo = tec_estado_row['area_trabajo'] if (tec_estado_row and tec_estado_row['area_trabajo']) else 'SOPORTE'
+    alerta_panico = tec_estado_row['alerta_panico'] if tec_estado_row else 0
+    mensaje_panico = tec_estado_row['mensaje_panico'] if tec_estado_row else None
+    lat_act = float(tec_estado_row['latitud_actual']) if tec_estado_row and tec_estado_row['latitud_actual'] is not None else None
+    lon_act = float(tec_estado_row['longitud_actual']) if tec_estado_row and tec_estado_row['longitud_actual'] is not None else None
+    
+    es_instalacion_val = 1 if area_trabajo == 'INSTALACIONES' else 0
+    
+    # 2. Traemos TODAS las visitas de hoy para calcular los índices globales correctos
+    query_all = """
         SELECT * FROM visitas_tecnicas 
         WHERE fecha_programada = %s 
-        AND (tecnico_principal = %s OR tecnico_apoyo = %s)
-        AND estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA')
+        AND es_instalacion = %s
     """
-    cursor.execute(query, (hoy, nombre_real, nombre_real))
-    visitas_del_tecnico = cursor.fetchall()
+    cursor.execute(query_all, (hoy, es_instalacion_val))
+    todas_las_visitas = cursor.fetchall()
     
-    # 2. Consultar las coordenadas en vivo del técnico desde la BD
-    cursor.execute("SELECT latitud_actual, longitud_actual FROM tecnicos WHERE nombre = %s", (nombre_real,))
-    tec_coords_row = cursor.fetchone()
-    lat_act = float(tec_coords_row['latitud_actual']) if tec_coords_row and tec_coords_row['latitud_actual'] is not None else None
-    lon_act = float(tec_coords_row['longitud_actual']) if tec_coords_row and tec_coords_row['longitud_actual'] is not None else None
+    # Asignar índice global numero_parada
+    for idx, v in enumerate(todas_las_visitas, start=1):
+        v['numero_parada'] = idx
+        
+    # Filtrar solo las visitas asignadas a este técnico
+    visitas_del_tecnico = [
+        v for v in todas_las_visitas 
+        if (v.get('tecnico_principal') == nombre_real or v.get('tecnico_apoyo') == nombre_real)
+        and v.get('estado') not in ('CANCELADA', 'SOLVENTADA_REMOTA')
+    ]
     
     # 3. Optimizar las visitas de este técnico geográficamente
     from optimizador import optimizar_ruta_tecnico
@@ -83,14 +99,6 @@ def panel_tecnico(nombre_tecnico):
     
     cursor.execute("SELECT nombre FROM catalogo_modelos_router WHERE activo = 1 ORDER BY nombre ASC")
     catalogo_router = cursor.fetchall()
-
-    # Obtener estado de actividad, área de trabajo y pánico del técnico
-    cursor.execute("SELECT estado_actividad, area_trabajo, alerta_panico, mensaje_panico FROM tecnicos WHERE nombre = %s", (nombre_real,))
-    tec_estado_row = cursor.fetchone()
-    estado_actividad = tec_estado_row['estado_actividad'] if tec_estado_row else 'Disponible'
-    area_trabajo = tec_estado_row['area_trabajo'] if (tec_estado_row and tec_estado_row['area_trabajo']) else 'SOPORTE'
-    alerta_panico = tec_estado_row['alerta_panico'] if tec_estado_row else 0
-    mensaje_panico = tec_estado_row['mensaje_panico'] if tec_estado_row else None
     
     cursor.close()
     conexion.close()

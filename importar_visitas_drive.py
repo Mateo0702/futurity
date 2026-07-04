@@ -62,13 +62,13 @@ def importar_visitas_drive(archivo_excel=None):
         'database': 'optimizador_rutas'
     }
 
-    # Si no se provee el archivo, buscamos por defecto visitas_drive.xlsx en la carpeta actual
+    # Si no se provee el archivo, buscamos por defecto ASIGNACIONES PRINCIPAL (1).xlsx en la carpeta actual
     if not archivo_excel:
-        archivo_excel = "visitas_drive.xlsx"
+        archivo_excel = "ASIGNACIONES PRINCIPAL (1).xlsx"
         
     if not os.path.exists(archivo_excel):
         print(f"Error: No se encontró el archivo '{archivo_excel}' en esta carpeta.")
-        print("Por favor, descarga el Excel de Google Drive y guárdalo en esta misma carpeta con el nombre 'visitas_drive.xlsx' antes de ejecutar el script.")
+        print("Por favor, asegúrate de colocar el archivo 'ASIGNACIONES PRINCIPAL (1).xlsx' en esta misma carpeta antes de ejecutar.")
         return
 
     if not os.path.exists(archivo_excel):
@@ -89,8 +89,19 @@ def importar_visitas_drive(archivo_excel=None):
     try:
         conexion = mysql.connector.connect(**config_db)
         cursor = conexion.cursor(dictionary=True)
+        
+        # Limpiar registros históricos previos (rango 5844 a 9999 y mayores o iguales a 10505) para evitar duplicidad
+        print("Eliminando visitas históricas anteriores (rango 5844-9999 y >= 10505)...")
+        cursor.execute("DELETE FROM visitas_tecnicas WHERE id_visita BETWEEN 5844 AND 9999 OR id_visita >= 10505")
+        deleted_count = cursor.rowcount
+        print(f"Limpieza completada. Se eliminaron {deleted_count} visitas históricas.")
+        
+        # Restablecer el AUTO_INCREMENT para que la importación empiece limpia desde 10505
+        cursor.execute("ALTER TABLE visitas_tecnicas AUTO_INCREMENT = 10505")
+        print("Auto-increment restablecido a 10505.")
+        conexion.commit()
     except Exception as e:
-        print(f"Error al conectar con la base de datos: {e}")
+        print(f"Error al conectar con la base de datos o al limpiar la tabla: {e}")
         return
 
     total_insertados = 0
@@ -98,17 +109,11 @@ def importar_visitas_drive(archivo_excel=None):
 
     try:
         for sheet_name in sheet_names:
-            fecha_prog = parse_sheet_name_to_date(sheet_name)
-            if not fecha_prog:
-                print(f"Omitiendo hoja (no se pudo determinar la fecha): {sheet_name}")
-                continue
-                
-            fecha_dt = date.fromisoformat(fecha_prog)
-            if fecha_dt.year != 2026 or fecha_dt.month not in [5, 6]:
-                print(f"Omitiendo hoja {sheet_name} (no es de Mayo o Junio 2026: {fecha_prog})")
+            if sheet_name.strip() != '2026':
+                print(f"Omitiendo hoja (solo se procesa la de 2026): {sheet_name}")
                 continue
 
-            print(f"\n--- Importando hoja: {sheet_name} (Fecha programada: {fecha_prog}) ---")
+            print(f"\n--- Importando hoja: {sheet_name} ---")
             
             # Cargar hoja sin cabeceras
             df = pd.read_excel(archivo_excel, sheet_name=sheet_name, header=None)
@@ -195,9 +200,6 @@ def importar_visitas_drive(archivo_excel=None):
                 else:
                     tecnico_apoyo = tecnico_apoyo[:100]
 
-                # Fecha programada (definida por el nombre de la hoja)
-                fecha_programada = fecha_prog
-
                 # Fecha de registro (Col 4)
                 fecha_val = row[4]
                 fecha_registro = None
@@ -212,10 +214,36 @@ def importar_visitas_drive(archivo_excel=None):
                         else:
                             parsed_dt = pd.to_datetime(fecha_val)
                             fecha_registro = parsed_dt.to_pydatetime() if hasattr(parsed_dt, 'to_pydatetime') else parsed_dt
-                    except:
-                        fecha_registro = datetime.combine(fecha_dt, time.min)
+                    except Exception as e:
+                        print(f"Error parseando fecha_registro en fila {index}: {e}")
+                        continue
                 else:
-                    fecha_registro = datetime.combine(fecha_dt, time.min)
+                    print(f"Omitiendo fila {index} por falta de fecha_registro (Columna 4)")
+                    continue
+
+                # Fecha de realización / Hora Fin (Col 23)
+                fecha_realizada_val = row[23]
+                fecha_realizada = None
+                if pd.notna(fecha_realizada_val):
+                    try:
+                        if hasattr(fecha_realizada_val, 'to_pydatetime'):
+                            fecha_realizada = fecha_realizada_val.to_pydatetime()
+                        elif isinstance(fecha_realizada_val, datetime):
+                            fecha_realizada = fecha_realizada_val
+                        elif isinstance(fecha_realizada_val, date):
+                            fecha_realizada = datetime.combine(fecha_realizada_val, time.min)
+                        else:
+                            parsed_dt = pd.to_datetime(fecha_realizada_val)
+                            fecha_realizada = parsed_dt.to_pydatetime() if hasattr(parsed_dt, 'to_pydatetime') else parsed_dt
+                    except Exception as e:
+                        # Si hay un error parsing, no pasa nada, se queda en None
+                        pass
+
+                # Determinar fecha programada
+                if fecha_realizada:
+                    fecha_programada = fecha_realizada.date().isoformat()
+                else:
+                    fecha_programada = fecha_registro.date().isoformat()
 
 
                 # Preferencia horaria (Col 5)
@@ -338,24 +366,30 @@ def importar_visitas_drive(archivo_excel=None):
                         pass
 
                 # Determinar estado
-                estado = "FINALIZADA"
-                if solucion_tecnico:
-                    sol_upper = solucion_tecnico.upper()
-                    if ("CANCELADA" in sol_upper or "RECHAZA" in sol_upper or 
-                        "NO DESEA" in sol_upper or "NO SE PUEDE" in sol_upper or 
-                        "SIN RESPUESTA" in sol_upper or "GENERAR CAMBIO" in sol_upper or
-                        "GENERAR ARREGLO" in sol_upper or "GESTIONAR ARREGLO" in sol_upper):
-                        estado = "CANCELADA"
-                    elif "REAGENDADA" in sol_upper or "REPROGRAMADA" in sol_upper:
-                        estado = "REAGENDADA"
+                if fecha_realizada:
+                    estado = "FINALIZADA"
+                    if solucion_tecnico:
+                        sol_upper = solucion_tecnico.upper()
+                        if ("CANCELADA" in sol_upper or "RECHAZA" in sol_upper or 
+                            "NO DESEA" in sol_upper or "NO SE PUEDE" in sol_upper or 
+                            "SIN RESPUESTA" in sol_upper or "GENERAR CAMBIO" in sol_upper or
+                            "GENERAR ARREGLO" in sol_upper or "GESTIONAR ARREGLO" in sol_upper):
+                            estado = "CANCELADA"
+                        elif "REAGENDADA" in sol_upper or "REPROGRAMADA" in sol_upper:
+                            estado = "REAGENDADA"
                 else:
-                    if not tecnico_principal or tecnico_principal.upper() in ["NO TECNICO", "SIN ASIGNAR", "NONE", "NAN", ""]:
-                        estado = "CANCELADA"
+                    # Si no tiene fecha de realización, no se cerró.
+                    # Si es futura/hoy, es PENDIENTE
+                    fecha_prog_dt = date.fromisoformat(fecha_programada)
+                    if fecha_prog_dt >= date.today():
+                        estado = "PENDIENTE"
                     else:
-                        if fecha_dt >= date.today():
-                            estado = "PENDIENTE"
-                        else:
-                            estado = "FINALIZADA"
+                        # Si es pasada y no tiene fecha de realización, es CANCELADA o REAGENDADA
+                        estado = "CANCELADA"
+                        if solucion_tecnico:
+                            sol_upper = solucion_tecnico.upper()
+                            if "REAGENDADA" in sol_upper or "REPROGRAMADA" in sol_upper:
+                                estado = "REAGENDADA"
 
                 # Calcular campos adicionales para el optimizador
                 preferencia_horaria = preferencia if preferencia else "Todo el día"
@@ -365,17 +399,42 @@ def importar_visitas_drive(archivo_excel=None):
                 if servicio and ("INSTALACION" in servicio or "INSTALACIÓN" in servicio):
                     es_instalacion = 1
 
-                # --- EVITAR DUPLICADOS ---
+                # --- EVITAR DUPLICADOS CON RANGO LIVE (ID >= 10000) ---
+                # Buscamos si existe ya en producción por contrato, cliente y fecha_registro exacta
+                if contrato is None:
+                    cursor.execute("""
+                        SELECT COUNT(*) as c FROM visitas_tecnicas 
+                        WHERE id_visita >= 10000 AND contrato IS NULL AND cliente = %s AND fecha_registro = %s
+                          AND (tecnico_principal = %s OR (tecnico_principal IS NULL AND %s IS NULL))
+                          AND (problema = %s OR (problema IS NULL AND %s IS NULL))
+                    """, (cliente, fecha_registro, tecnico_principal, tecnico_principal, problema, problema))
+                else:
+                    cursor.execute("""
+                        SELECT COUNT(*) as c FROM visitas_tecnicas 
+                        WHERE id_visita >= 10000 AND contrato = %s AND cliente = %s AND fecha_registro = %s
+                          AND (tecnico_principal = %s OR (tecnico_principal IS NULL AND %s IS NULL))
+                          AND (problema = %s OR (problema IS NULL AND %s IS NULL))
+                    """, (contrato, cliente, fecha_registro, tecnico_principal, tecnico_principal, problema, problema))
+                if cursor.fetchone()['c'] > 0:
+                    print(f"Fila {index}: Omitiendo porque ya existe como visita en vivo en producción (contrato={contrato}, cliente={cliente})")
+                    total_duplicados += 1
+                    continue
+
+                # --- EVITAR DUPLICADOS DENTRO DE LA IMPORTACIÓN ACTUAL ---
                 if contrato is None:
                     cursor.execute("""
                         SELECT COUNT(*) as c FROM visitas_tecnicas 
                         WHERE contrato IS NULL AND fecha_programada = %s AND es_instalacion = %s AND cliente = %s
-                    """, (fecha_programada, es_instalacion, cliente))
+                          AND (tecnico_principal = %s OR (tecnico_principal IS NULL AND %s IS NULL))
+                          AND (problema = %s OR (problema IS NULL AND %s IS NULL))
+                    """, (fecha_programada, es_instalacion, cliente, tecnico_principal, tecnico_principal, problema, problema))
                 else:
                     cursor.execute("""
                         SELECT COUNT(*) as c FROM visitas_tecnicas 
                         WHERE contrato = %s AND fecha_programada = %s AND es_instalacion = %s AND cliente = %s
-                    """, (contrato, fecha_programada, es_instalacion, cliente))
+                          AND (tecnico_principal = %s OR (tecnico_principal IS NULL AND %s IS NULL))
+                          AND (problema = %s OR (problema IS NULL AND %s IS NULL))
+                    """, (contrato, fecha_programada, es_instalacion, cliente, tecnico_principal, tecnico_principal, problema, problema))
                 if cursor.fetchone()['c'] > 0:
                     total_duplicados += 1
                     continue

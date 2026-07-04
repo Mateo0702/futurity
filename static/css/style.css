@@ -474,11 +474,14 @@ tr:hover {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
+  height: auto;
+  overflow-y: auto;
   margin: 0;
   font-family: 'Inter', system-ui, sans-serif;
   background: linear-gradient(-45deg, #0f172a, #1e293b, #dc2626, #7f1d1d);
   background-size: 400% 400%;
   animation: gradientBG 15s ease infinite;
+  padding: 24px 16px;
 }
 
 @keyframes gradientBG {
@@ -501,6 +504,7 @@ tr:hover {
   overflow: hidden;
   transform: translateY(0);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
+  margin: auto;
 }
 
 .login-glass-card:hover {
@@ -2426,7 +2430,7 @@ body.dark-mode .fila-blanca {
 @media (max-width: 480px) {
   .login-glass-card {
     padding: 30px 20px;
-    margin: 16px;
+    margin: auto;
     border-radius: 20px;
     box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
   }
@@ -2539,4 +2543,118 @@ body.dark-mode .leaflet-bar a {
 }
 body.dark-mode .leaflet-bar a:hover {
   background-color: #334155 !important;
+}
+
+/* ==========================================
+   ESTILOS PREMIUM: SCROLLBARS, TRANSICIONES Y BADGES
+   ========================================== */
+
+/* --- Barra de desplazamiento global --- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+/* Modo Claro (Light Mode) */
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* Modo Oscuro (Dark Mode) */
+body.dark-mode ::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+body.dark-mode ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+body.dark-mode ::-webkit-scrollbar-thumb:hover {
+  background: #14b8a6;
+}
+
+/* --- Transición suave utilitaria --- */
+.custom-transition {
+  transition: all 0.2s ease-in-out;
+}
+
+/* --- Badges generales de estado --- */
+.badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Estilos de badges para Modo Claro */
+.badge-success { background-color: #dcfce7; color: #15803d; border: 1px solid rgba(21, 128, 61, 0.1); }
+.badge-warning { background-color: #fef3c7; color: #b45309; border: 1px solid rgba(180, 83, 9, 0.1); }
+.badge-danger  { background-color: #fee2e2; color: #b91c1c; border: 1px solid rgba(185, 28, 28, 0.1); }
+.badge-info    { background-color: #e0f2fe; color: #0369a1; border: 1px solid rgba(3, 105, 161, 0.1); }
+
+/* Estilos de badges para Modo Oscuro (Colores semitransparentes elegantes) */
+body.dark-mode .badge-success { background-color: rgba(16, 185, 129, 0.15) !important; color: #34d399 !important; border: 1px solid rgba(52, 211, 153, 0.2) !important; }
+body.dark-mode .badge-warning { background-color: rgba(245, 158, 11, 0.15) !important; color: #fbbf24 !important; border: 1px solid rgba(251, 191, 36, 0.2) !important; }
+body.dark-mode .badge-danger  { background-color: rgba(244, 63, 94, 0.15) !important; color: #fca5a5 !important; border: 1px solid rgba(253, 164, 175, 0.2) !important; }
+body.dark-mode .badge-info    { background-color: rgba(56, 189, 248, 0.15) !important; color: #38bdf8 !important; border: 1px solid rgba(56, 189, 248, 0.2) !important; }
+
+/* --- Resplandores Coloreados (Colored Shadows / Glows) --- */
+.glow-primary {
+  box-shadow: 0 4px 20px rgba(225, 29, 72, 0.08);
+}
+.glow-primary:hover {
+  box-shadow: 0 4px 20px rgba(225, 29, 72, 0.15);
+}
+
+body.dark-mode .glow-primary {
+  box-shadow: 0 4px 20px rgba(225, 29, 72, 0.15) !important;
+}
+body.dark-mode .glow-primary:hover {
+  box-shadow: 0 4px 25px rgba(225, 29, 72, 0.25) !important;
+}
+
+.glow-teal {
+  box-shadow: 0 4px 20px rgba(20, 184, 166, 0.08);
+}
+.glow-teal:hover {
+  box-shadow: 0 4px 20px rgba(20, 184, 166, 0.15);
+}
+
+body.dark-mode .glow-teal {
+  box-shadow: 0 4px 20px rgba(20, 184, 166, 0.15) !important;
+}
+body.dark-mode .glow-teal:hover {
+  box-shadow: 0 4px 25px rgba(20, 184, 166, 0.25) !important;
+}
+
+/* Custom scrollbars and transitions */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #14b8a6;
+}
+
+.custom-transition {
+  transition: all 0.2s ease-in-out;
 }

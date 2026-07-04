@@ -65,10 +65,12 @@ def check_single_session():
             cursor.close()
             conexion.close()
 
-            # Si el token en la BD cambió, significa que alguien inició sesión en otro lugar
+            # Si el token en la BD cambió o se invalidó (is None)
             if not usuario_db or usuario_db['session_token'] != current_token:
                 session.clear()
-                flash('Tu sesión fue cerrada porque se inició sesión desde otro dispositivo.', 'warning')
+                # Solo mostrar la alerta si el token en la base de datos no es nulo (es decir, no fue logout manual)
+                if usuario_db and usuario_db['session_token'] is not None:
+                    flash('Tu sesión fue cerrada porque se inició sesión desde otro dispositivo.', 'warning')
                 return redirect(url_for('login'))
 
 
@@ -235,6 +237,9 @@ def login():
 def logout():
     tecnico_nombre = session.get('user_name')
     rol = session.get('user_role')
+    user_id = session.get('user_id')
+    
+    # 1. Si es técnico, actualizar su estado en la tabla de técnicos
     if rol == 'TECNICO' and tecnico_nombre:
         conexion = get_db_connection()
         if conexion:
@@ -251,6 +256,24 @@ def logout():
                 conexion.commit()
             except Exception as e:
                 print(f"Error updating status during logout: {e}")
+            finally:
+                cursor.close()
+                conexion.close()
+
+    # 2. Invalidar el token de sesión en la base de datos para cualquier usuario (Admin, Asesor, Bodega, Técnico)
+    if user_id:
+        conexion = get_db_connection()
+        if conexion:
+            cursor = conexion.cursor()
+            try:
+                cursor.execute("""
+                    UPDATE usuarios_callcenter 
+                    SET session_token = NULL 
+                    WHERE id_usuario = %s
+                """, (user_id,))
+                conexion.commit()
+            except Exception as e:
+                print(f"Error invalidating session token during logout: {e}")
             finally:
                 cursor.close()
                 conexion.close()
@@ -394,7 +417,6 @@ def dashboard():
                 LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
                 WHERE v.fecha_programada = %s 
                 AND v.es_instalacion = %s
-                AND v.estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA')
                 AND (v.cliente LIKE %s OR (v.contrato = %s AND v.empresa = 'FIBRACOM'))
             """
         else:
@@ -405,7 +427,6 @@ def dashboard():
                 LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
                 WHERE v.fecha_programada = %s 
                 AND v.es_instalacion = %s
-                AND v.estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA')
                 AND (v.cliente LIKE %s OR (v.contrato = %s AND (v.empresa != 'FIBRACOM' OR v.empresa IS NULL)))
             """
         params = (fecha_busqueda, es_instalacion_val, f"%{texto_busqueda}%", contrato_base)
@@ -416,7 +437,6 @@ def dashboard():
             LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
             WHERE v.fecha_programada = %s 
             AND v.es_instalacion = %s
-            AND v.estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA')
         """
         params = (fecha_busqueda, es_instalacion_val)
 
@@ -608,8 +628,8 @@ def obtener_color_reporte(visita):
     solucion = visita.get('solucion_tecnico') or visita.get('resolucion_final') or ''
     solucion = str(solucion).upper()
 
-    # 1. Rojo (No desea / Sin respuesta)
-    if 'NO DESEA VISITA' in solucion or 'SIN RESPUESTA' in solucion:
+    # 1. Rojo (No desea / Sin respuesta o Cancelada)
+    if 'NO DESEA VISITA' in solucion or 'SIN RESPUESTA' in solucion or estado == 'CANCELADA':
         return 'fila-roja'
     
     # 2. Celeste (Reagendada)

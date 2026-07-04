@@ -164,14 +164,26 @@ def atenciones_recientes():
     cursor = conn.cursor(dictionary=True)
     try:
         agente = session.get('user_name', 'Call Center').strip()
-        query = """
-            SELECT id_atencion, fecha, hora, contrato, cliente, sector, tipo_atencion, tipo_solicitud, medio_contacto, accion, motivo, timer_minutos, observacion
-            FROM atenciones
-            WHERE agente = %s AND fecha = CURDATE()
-            ORDER BY id_atencion DESC
-            LIMIT 10
-        """
-        cursor.execute(query, (agente,))
+        fecha_req = request.args.get('fecha', '').strip()
+        
+        if fecha_req:
+            query = """
+                SELECT id_atencion, fecha, hora, contrato, cliente, sector, tipo_atencion, tipo_solicitud, medio_contacto, accion, motivo, timer_minutos, observacion
+                FROM atenciones
+                WHERE agente = %s AND fecha = %s
+                ORDER BY id_atencion DESC
+                LIMIT 50
+            """
+            cursor.execute(query, (agente, fecha_req))
+        else:
+            query = """
+                SELECT id_atencion, fecha, hora, contrato, cliente, sector, tipo_atencion, tipo_solicitud, medio_contacto, accion, motivo, timer_minutos, observacion
+                FROM atenciones
+                WHERE agente = %s AND fecha = CURDATE()
+                ORDER BY id_atencion DESC
+                LIMIT 50
+            """
+            cursor.execute(query, (agente,))
         atenciones = cursor.fetchall()
         
         for at in atenciones:
@@ -201,87 +213,104 @@ def metricas_atenciones():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas de atenciones."}), 403
+
+    # Obtener parámetros de filtros (hoy y hace 3 meses por defecto si no se especifican)
+    hoy_dt = date.today()
+    hace_tres_meses = (hoy_dt - timedelta(days=90)).isoformat()
+    hoy_str = hoy_dt.isoformat()
+
+    fecha_inicio = request.args.get('fecha_inicio', hace_tres_meses)
+    if not fecha_inicio:
+        fecha_inicio = hace_tres_meses
+    fecha_fin = request.args.get('fecha_fin', hoy_str)
+    if not fecha_fin:
+        fecha_fin = hoy_str
+
     conn = get_db_connection()
     if not conn:
         return jsonify({"status": "error", "message": "No se pudo conectar a la base de datos"}), 500
         
     cursor = conn.cursor(dictionary=True)
     try:
-        # 1. Total atenciones (últimos 3 meses)
-        query_kpis = """
+        # Cláusula WHERE común
+        where_clause = "WHERE fecha >= %s AND fecha <= %s"
+        params = [fecha_inicio, fecha_fin]
+
+        # 1. Total atenciones
+        query_kpis = f"""
             SELECT COUNT(*) as total_atenciones
             FROM atenciones
-            WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+            {where_clause}
         """
-        cursor.execute(query_kpis)
+        cursor.execute(query_kpis, params)
         kpis = cursor.fetchone()
         
         total = kpis['total_atenciones'] or 0
         
         # Obtener el motivo principal (Top 1)
-        query_motivo = """
+        query_motivo = f"""
             SELECT motivo, COUNT(*) as cantidad
             FROM atenciones
-            WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+            {where_clause}
               AND motivo IS NOT NULL AND motivo != ''
             GROUP BY motivo
             ORDER BY cantidad DESC
             LIMIT 1
         """
-        cursor.execute(query_motivo)
+        cursor.execute(query_motivo, params)
         motivo_row = cursor.fetchone()
         motivo_principal = motivo_row['motivo'] if motivo_row else '-'
         
         # 2. Distribución por Medio de Contacto
-        query_medios = """
+        query_medios = f"""
             SELECT medio_contacto, COUNT(*) as cantidad
             FROM atenciones
-            WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+            {where_clause}
               AND medio_contacto IS NOT NULL AND medio_contacto != ''
             GROUP BY medio_contacto
             ORDER BY cantidad DESC
         """
-        cursor.execute(query_medios)
+        cursor.execute(query_medios, params)
         medios_raw = cursor.fetchall()
         
         # 3. Distribución por Tipo de Solicitud (Top 5)
-        query_solicitudes = """
+        query_solicitudes = f"""
             SELECT tipo_solicitud, COUNT(*) as cantidad
             FROM atenciones
-            WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+            {where_clause}
               AND tipo_solicitud IS NOT NULL AND tipo_solicitud != ''
             GROUP BY tipo_solicitud
             ORDER BY cantidad DESC
             LIMIT 5
         """
-        cursor.execute(query_solicitudes)
+        cursor.execute(query_solicitudes, params)
         solicitudes_raw = cursor.fetchall()
         
         # 4. Distribución por Acción (Top 5)
-        query_acciones = """
+        query_acciones = f"""
             SELECT accion, COUNT(*) as cantidad
             FROM atenciones
-            WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+            {where_clause}
               AND accion IS NOT NULL AND accion != ''
             GROUP BY accion
             ORDER BY cantidad DESC
             LIMIT 5
         """
-        cursor.execute(query_acciones)
+        cursor.execute(query_acciones, params)
         acciones_raw = cursor.fetchall()
         
         # 5. Evolución semanal de atenciones
-        query_evolucion = """
+        query_evolucion = f"""
             SELECT 
                 DATE_FORMAT(fecha, '%Y-%u') as semana,
                 MIN(fecha) as inicio_semana,
                 COUNT(*) as cantidad
             FROM atenciones
-            WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+            {where_clause}
             GROUP BY semana
             ORDER BY inicio_semana ASC
         """
-        cursor.execute(query_evolucion)
+        cursor.execute(query_evolucion, params)
         evolucion_raw = cursor.fetchall()
         
         evolucion = []

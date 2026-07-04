@@ -5,11 +5,13 @@ from datetime import datetime, date, time
 
 def importar_atenciones():
     # 1. Nombre del archivo de Excel
-    archivo_excel = "atenciones_diarias.xlsx"
+    archivo_excel = "CLIENTES ATENDIDOS DIARIAMENTE.xlsx"
+    if not os.path.exists(archivo_excel):
+        archivo_excel = "atenciones_diarias.xlsx"
     
     if not os.path.exists(archivo_excel):
         print(f"Error: No se encontró el archivo '{archivo_excel}' en esta carpeta.")
-        print("Por favor, guarda tu archivo de Excel de atenciones con el nombre 'atenciones_diarias.xlsx' en este mismo directorio.")
+        print("Por favor, guarda tu archivo de Excel de atenciones con el nombre 'CLIENTES ATENDIDOS DIARIAMENTE.xlsx' o 'atenciones_diarias.xlsx' en este mismo directorio.")
         return
 
     # 2. Configuración de credenciales de la BD
@@ -152,6 +154,16 @@ def importar_atenciones():
                         parsed_time = hora_val.time()
                     else:
                         parsed_time = pd.to_datetime(str(hora_val)).time()
+                    
+                    # Redondear al segundo más cercano para evitar discrepancias con MySQL (que almacena TIME sin milisegundos)
+                    total_seconds = parsed_time.hour * 3600 + parsed_time.minute * 60 + parsed_time.second
+                    if parsed_time.microsecond >= 500000:
+                        total_seconds += 1
+                    
+                    new_hour = (total_seconds // 3600) % 24
+                    new_minute = (total_seconds % 3600) // 60
+                    new_second = total_seconds % 60
+                    parsed_time = time(new_hour, new_minute, new_second)
                     hora_prog = parsed_time.isoformat()
                 except:
                     pass
@@ -202,6 +214,20 @@ def importar_atenciones():
                 sector = None
             else:
                 sector = sector[:100]
+
+            # Intentar rescatar nombre y sector desde directorio_clientes si vienen vacíos en el Excel
+            if contrato and (not cliente or cliente == 'SIN NOMBRE' or not sector):
+                cursor.execute("SELECT nombre_cliente, zona FROM directorio_clientes WHERE contrato = %s", (contrato,))
+                dir_row = cursor.fetchone()
+                if dir_row:
+                    dir_name = dir_row[0]
+                    dir_zone = dir_row[1]
+                    if not cliente or cliente == 'SIN NOMBRE':
+                        if dir_name:
+                            cliente = dir_name.strip().upper()[:150]
+                    if not sector:
+                        if dir_zone:
+                            sector = dir_zone.strip().upper()[:100]
 
             # 8. Tipo Atención (Col 6)
             tipo_atencion = str(row[6]).strip().upper() if pd.notna(row[6]) else None

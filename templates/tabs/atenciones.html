@@ -458,10 +458,16 @@
         </div>
     </div>
 
-    <!-- Tabla inferior de últimas atenciones registradas hoy -->
+    <!-- Tabla inferior de últimas atenciones registradas -->
     <div class="card" style="margin-top: 30px; padding: 25px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 15px; margin-bottom: 20px;">
-            <h3 style="margin: 0; font-size: 1.1rem; color: #0f172a; font-weight: 800;"><i class="fa-solid fa-list-check" style="color: var(--primary); margin-right: 8px;"></i> Mis Atenciones de Hoy</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 15px; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+            <h3 style="margin: 0; font-size: 1.1rem; color: #0f172a; font-weight: 800;"><i class="fa-solid fa-list-check" style="color: var(--primary); margin-right: 8px;"></i> Mis Atenciones</h3>
+            
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <label for="aten_buscar_fecha" style="font-weight: 700; color: #64748b; font-size: 0.85rem;">Fecha:</label>
+                <input type="date" id="aten_buscar_fecha" class="form-control" style="padding: 6px 12px; font-size: 0.85rem; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; width: auto;" onchange="cargarAtencionesHoy()">
+            </div>
+            
             <span class="badge badge-primary" id="aten_contador_hoy">0 registros</span>
         </div>
         <div style="overflow-x: auto;">
@@ -561,39 +567,101 @@
 
     // --- TRANSFERIR A REGISTRO DE VISITAS ---
     function transferirARegistroVisitas() {
+        const form = document.getElementById('form-registro-atencion');
+        if (!form.reportValidity()) {
+            mostrarToast('Por favor completa todos los campos requeridos de la atención', true);
+            return;
+        }
+
+        const btn = document.querySelector('#aten_alerta_visita button');
+        let oldBtnText = '';
+        if (btn) {
+            oldBtnText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registrando...';
+        }
+
         const contrato = document.getElementById('aten_contrato').value.trim();
         const cliente = document.getElementById('aten_cliente').value.trim();
         const sector = document.getElementById('aten_sector').value;
+        const motivo = document.getElementById('aten_motivo').value;
+        const observacion = document.getElementById('aten_observacion').value;
         const tels = [];
         const tel1 = document.getElementById('aten_telefono1').value.trim();
         const tel2 = document.getElementById('aten_telefono2').value.trim();
         if (tel1) tels.push(tel1);
         if (tel2) tels.push(tel2);
         
-        // Ir a la pestaña de Registrar Visita
-        const navRegistro = document.querySelector('.nav-item[data-tab="tab-registro"]');
-        if (navRegistro) {
-            // Llenar campos en el formulario de visitas
-            const inputContrato = document.querySelector('input[name="contrato"]');
-            const inputCliente = document.getElementById('input-cliente-registro');
-            const inputSector = document.querySelector('select[name="sector"]');
-            const inputTelefonos = document.querySelector('input[name="telefonos"]');
-            const inputObs = document.querySelector('textarea[name="observacion_callcenter"]');
-            const selectProblema = document.querySelector('select[name="problema"]');
-            
-            if (inputContrato) inputContrato.value = contrato;
-            if (inputCliente) inputCliente.value = cliente;
-            if (inputSector && sector) inputSector.value = sector;
-            if (inputTelefonos) inputTelefonos.value = tels.join(', ');
-            if (inputObs) inputObs.value = `Visita requerida según atención previa. Observación: ${document.getElementById('aten_observacion').value}`;
-            
-            // Forzar disparo de blur y autocompletado en el formulario de visitas si es necesario
-            if (inputContrato) {
-                inputContrato.dispatchEvent(new Event('blur'));
+        // Guardar la atención en segundo plano antes de transferir
+        const formData = new FormData(form);
+        const data = {};
+        formData.forEach((value, key) => data[key] = value);
+
+        fetch('/api/admin/atenciones', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(res => res.json())
+        .then(resData => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = oldBtnText;
             }
-            
-            navRegistro.click();
-        }
+            if (resData.status === 'success') {
+                // 1. Mostrar toast premium no-bloqueante
+                mostrarToast('✓ Atención registrada automáticamente');
+                
+                // 2. Resetear formulario
+                form.reset();
+                document.getElementById('aten_contrato_ok').style.display = 'none';
+                document.getElementById('aten_alerta_visita').style.display = 'none';
+                
+                // 3. Recargar historial del agente de hoy
+                cargarAtencionesHoy();
+
+                // 4. Ir a la pestaña de Registrar Visita
+                const navRegistro = document.querySelector('.nav-item[data-tab="tab-registro"]');
+                if (navRegistro) {
+                    // Llenar campos en el formulario de visitas
+                    const inputContrato = document.querySelector('input[name="contrato"]');
+                    const inputCliente = document.getElementById('input-cliente-registro');
+                    const inputSector = document.getElementById('registro-sector'); // Corregido selector
+                    const inputTelefonos = document.querySelector('input[name="telefonos"]');
+                    const inputObs = document.querySelector('textarea[name="observacion_callcenter"]');
+                    const inputProblema = document.getElementById('registro-problema');
+                    
+                    if (inputContrato) inputContrato.value = contrato;
+                    if (inputCliente) inputCliente.value = cliente;
+                    if (inputSector && sector) {
+                        inputSector.value = sector;
+                        // Disparar evento para autocompletar coordenadas
+                        inputSector.dispatchEvent(new Event('change'));
+                    }
+                    if (inputTelefonos) inputTelefonos.value = tels.join(', ');
+                    if (inputObs) inputObs.value = `Visita requerida según atención previa. Observación: ${observacion}`;
+                    if (inputProblema && motivo) inputProblema.value = motivo;
+                    
+                    // Forzar disparo de blur y autocompletado en el formulario de visitas si es necesario
+                    if (inputContrato) {
+                        inputContrato.dispatchEvent(new Event('blur'));
+                    }
+                    
+                    navRegistro.click();
+                }
+            } else {
+                mostrarToast('Error al registrar atención: ' + resData.message, true);
+            }
+        })
+        .catch(err => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = oldBtnText;
+            }
+            mostrarToast('Error de red al registrar la atención', true);
+        });
     }
 
     // --- GUARDAR ATENCIÓN (POST AJAX) ---
@@ -613,7 +681,7 @@
         .then(res => res.json())
         .then(resData => {
             if (resData.status === 'success') {
-                alert('✓ Atención registrada con éxito');
+                mostrarToast('✓ Atención registrada con éxito');
                 form.reset();
                 document.getElementById('aten_contrato_ok').style.display = 'none';
                 document.getElementById('aten_alerta_visita').style.display = 'none';
@@ -621,17 +689,27 @@
                 // Recargar historial del agente de hoy
                 cargarAtencionesHoy();
             } else {
-                alert('Error al registrar: ' + resData.message);
+                mostrarToast('Error al registrar: ' + resData.message, true);
             }
         })
         .catch(err => {
-            alert('Error de red al registrar la atención');
+            mostrarToast('Error de red al registrar la atención', true);
         });
     }
 
     // --- CARGAR HISTORIAL DE HOY ---
     function cargarAtencionesHoy() {
-        fetch('/api/admin/atenciones/recientes')
+        let fechaVal = document.getElementById('aten_buscar_fecha').value;
+        if (!fechaVal) {
+            // Inicializar al cargar la página con la fecha actual local
+            const hoy = new Date();
+            const offset = hoy.getTimezoneOffset();
+            const hoyLocal = new Date(hoy.getTime() - (offset*60*1000));
+            fechaVal = hoyLocal.toISOString().split('T')[0];
+            document.getElementById('aten_buscar_fecha').value = fechaVal;
+        }
+
+        fetch(`/api/admin/atenciones/recientes?fecha=${encodeURIComponent(fechaVal)}`)
             .then(res => res.json())
             .then(data => {
                 const tbody = document.getElementById('tabla-atenciones-hoy');

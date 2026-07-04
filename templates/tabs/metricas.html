@@ -608,14 +608,14 @@
 
         const inputDesde = document.getElementById('busqueda_desde');
         const inputHasta = document.getElementById('busqueda_hasta');
-        if (inputDesde && !inputDesde.value) inputDesde.value = formatIsoDate(haceTresMeses);
-        if (inputHasta && !inputHasta.value) inputHasta.value = formatIsoDate(hoy);
+        if (inputDesde) inputDesde.value = formatIsoDate(haceTresMeses);
+        if (inputHasta) inputHasta.value = formatIsoDate(hoy);
 
         // Inicializar filtros del dashboard
         const filtroDesde = document.getElementById('filtro_desde');
         const filtroHasta = document.getElementById('filtro_hasta');
-        if (filtroDesde && !filtroDesde.value) filtroDesde.value = formatIsoDate(haceTresMeses);
-        if (filtroHasta && !filtroHasta.value) filtroHasta.value = formatIsoDate(hoy);
+        if (filtroDesde) filtroDesde.value = formatIsoDate(haceTresMeses);
+        if (filtroHasta) filtroHasta.value = formatIsoDate(hoy);
 
         // Si la pestaña de métricas está activa de inicio, cargar métricas
         const tabMetricas = document.getElementById('tab-metricas');
@@ -644,7 +644,7 @@
         try {
             const [resVisitas, resAtenciones] = await Promise.all([
                 fetch(`/api/admin/metricas_globales?fecha_inicio=${desde}&fecha_fin=${hasta}&tecnico=${tecnico}`),
-                fetch('/api/admin/metricas_atenciones')
+                fetch(`/api/admin/metricas_atenciones?fecha_inicio=${desde}&fecha_fin=${hasta}`)
             ]);
             const data = await resVisitas.json();
             const dataAten = await resAtenciones.json();

@@ -148,9 +148,11 @@ def optimizar_ruta_tecnico(visitas, starting_lat=None, starting_lon=None):
     # Combine all
     sorted_visitas = active + sequenced_pending + finished
     
-    # Re-assign sequential numero_parada
+    # Assign sequential orden_tecnico (technician stop sequence)
     for idx, v in enumerate(sorted_visitas, start=1):
-        v['numero_parada'] = idx
+        v['orden_tecnico'] = idx
+        if 'numero_parada' not in v:
+            v['numero_parada'] = idx
          
     return sorted_visitas
 
@@ -158,6 +160,10 @@ def optimizar_ruta_tecnico(visitas, starting_lat=None, starting_lon=None):
 def optimizar_todas_las_visitas(visitas):
     if not visitas:
         return []
+        
+    # Assign global numero_parada in the order they are loaded
+    for idx, v in enumerate(visitas, start=1):
+        v['numero_parada'] = idx
         
     # Group by technician
     groups = {}
@@ -207,11 +213,11 @@ def optimizar_todas_las_visitas(visitas):
         
     # Sort for display:
     # Put unassigned at the end.
-    # Grouped by technician name, then by numero_parada
+    # Grouped by technician name, then by orden_tecnico
     def display_sort_key(v):
         tec = v.get('tecnico_principal') or 'SIN_ASIGNAR'
         is_unassigned = 1 if tec in ['', 'NO TECNICO', 'SIN ASIGNAR', 'Auto', 'SIN_ASIGNAR'] else 0
-        return (is_unassigned, tec, v.get('numero_parada', 9999))
+        return (is_unassigned, tec, v.get('orden_tecnico', 9999))
         
     optimized_visitas.sort(key=display_sort_key)
     return optimized_visitas

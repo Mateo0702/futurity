@@ -68,7 +68,7 @@
             <button id="theme-toggle-tecnico" class="theme-btn-tecnico theme-dark" title="Alternar Modo Oscuro">
                 <i class="fa-solid fa-moon"></i> <span>Modo Oscuro</span>
             </button>
-            <a href="/logout" onclick="localStorage.clear(); if (window.AndroidBridge) { window.AndroidBridge.stopTracking(); }" class="theme-btn-tecnico theme-logout">
+            <a href="/logout" onclick="localStorage.removeItem('session_token'); localStorage.removeItem('user_id'); localStorage.removeItem('user_role'); localStorage.removeItem('user_name'); if (window.AndroidBridge) { window.AndroidBridge.stopTracking(); }" class="theme-btn-tecnico theme-logout">
                 <i class="fa-solid fa-right-from-bracket"></i> <span>Cerrar Sesión</span>
             </a>
             <div style="margin-top: 20px; padding: 10px 0 0 0; border-top: 1px solid rgba(255, 255, 255, 0.1); text-align: center; font-size: 0.72rem; color: #94a3b8; opacity: 0.6; font-weight: 500;">
