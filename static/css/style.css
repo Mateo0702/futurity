@@ -653,6 +653,309 @@ tr:hover {
 }
 
 /* ==========================================
+   ESTILOS SPLIT-SCREEN LOGIN PREMIUM
+   ========================================== */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.5;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+}
+
+.login-split-card {
+  display: flex;
+  flex-direction: row;
+  background: #ffffff;
+  border-radius: 24px;
+  width: 100%;
+  max-width: 980px;
+  min-height: 600px;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.35);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  margin: auto;
+}
+
+.login-split-left {
+  width: 42%;
+  background: linear-gradient(135deg, #090e1a 0%, #0d1627 55%, #1e1b4b 100%);
+  padding: 48px 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-split-left::before {
+  content: '';
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(225, 29, 72, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.login-split-left::after {
+  content: '';
+  position: absolute;
+  bottom: -60px;
+  left: -60px;
+  width: 260px;
+  height: 260px;
+  background: radial-gradient(circle, rgba(225, 29, 72, 0.16) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.login-left-content {
+  text-align: center;
+  margin-top: auto;
+  margin-bottom: auto;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.login-shield-container {
+  width: 130px;
+  height: 130px;
+  position: relative;
+  margin-bottom: 24px;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.login-shield-container:hover {
+  transform: translateY(-6px) scale(1.04);
+}
+
+.login-shield-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90px;
+  height: 90px;
+  background: rgba(225, 29, 72, 0.3);
+  filter: blur(20px);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: pulseGlow 4s ease-in-out infinite;
+}
+
+.login-shield-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.3));
+}
+
+.login-left-title {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 12px;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.login-left-desc {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  line-height: 1.5;
+  max-width: 290px;
+  margin: 0;
+}
+
+.login-features-grid {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 24px;
+  margin-top: 40px;
+  z-index: 2;
+  gap: 8px;
+}
+
+.login-feature-item {
+  flex: 1;
+  text-align: center;
+  transition: transform 0.2s ease;
+}
+
+.login-feature-item:hover {
+  transform: translateY(-2px);
+}
+
+.login-feature-icon {
+  width: 38px;
+  height: 38px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 8px auto;
+  color: var(--primary);
+  transition: all 0.3s ease;
+}
+
+.login-feature-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.login-feature-item:hover .login-feature-icon {
+  background: rgba(225, 29, 72, 0.1);
+  border-color: rgba(225, 29, 72, 0.25);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(225, 29, 72, 0.2);
+}
+
+.login-feature-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 2px;
+}
+
+.login-feature-desc {
+  font-size: 0.65rem;
+  color: #64748b;
+  line-height: 1.3;
+}
+
+.login-split-right {
+  width: 58%;
+  padding: 56px 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: #ffffff;
+}
+
+.login-right-header {
+  margin-bottom: 30px;
+}
+
+.login-right-header h2 {
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.04em;
+  margin: 0 0 6px 0;
+}
+
+.login-right-header p {
+  font-size: 0.95rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.input-with-icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.input-icon {
+  position: absolute;
+  left: 16px;
+  color: #94a3b8;
+  pointer-events: none;
+  transition: color 0.3s ease;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.input-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.input-with-icon-wrapper .login-input {
+  padding-left: 48px;
+}
+
+.input-with-icon-wrapper .login-input:focus ~ .input-icon {
+  color: var(--primary);
+}
+
+.login-logo-wrapper {
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.login-brand-logo {
+  height: 52px;
+  width: auto;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+@media (max-width: 840px) {
+  .login-split-card {
+    max-width: 720px;
+  }
+  .login-split-left {
+    width: 45%;
+    padding: 36px 24px;
+  }
+  .login-split-right {
+    width: 55%;
+    padding: 40px;
+  }
+}
+
+@media (max-width: 768px) {
+  .login-split-card {
+    flex-direction: column;
+    max-width: 420px;
+    min-height: auto;
+    border-radius: 24px;
+    margin: 16px auto;
+  }
+  .login-split-left {
+    display: none;
+  }
+  .login-split-right {
+    width: 100%;
+    padding: 48px 32px;
+  }
+  .login-logo-wrapper {
+    justify-content: center;
+  }
+  .login-right-header {
+    text-align: center;
+  }
+}
+
+/* ==========================================
    ESTILOS PANEL TÉCNICO (body-tecnico)
    ========================================== */
 .body-tecnico {

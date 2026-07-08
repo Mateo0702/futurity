@@ -27,63 +27,144 @@
 
 <body class="login-page">
 
-    <div class="login-glass-card">
+    <div class="login-split-card">
 
-        <div class="login-header">
-            <div class="login-logo-circle" style="background: transparent; border: none; padding: 0;">
-                <img src="{{ url_for('static', filename='img/logo_futurity.png') }}" alt="Futurity Logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 12px;">
-            </div>
-            <h1>Futurity</h1>
-            <p>Portal de Operaciones y Ruteo</p>
-        </div>
-
-        <div>
-            {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-            {% for category, message in messages %}
-            <div class="login-alert login-alert-{{ category }}">
-                {{ message }}
-            </div>
-            {% endfor %}
-            {% endif %}
-            {% endwith %}
-
-            <form action="{{ url_for('login') }}" method="POST">
-                <div class="login-form-group">
-                    <label for="email">Correo Corporativo</label>
-                    <input type="email" id="email" name="email" required placeholder="ejemplo@futurity.com"
-                        autocomplete="email" class="login-input" autocapitalize="none" autocorrect="off" spellcheck="false">
-                </div>
-
-                <div class="login-form-group">
-                    <label for="password">Contraseña</label>
-                    <div class="password-wrapper">
-                        <input type="password" id="password" name="password" required placeholder="••••••••"
-                            class="login-input" style="padding-right: 40px;" autocapitalize="none" autocorrect="off" spellcheck="false">
-                        <button type="button" id="togglePassword" class="toggle-password-btn" aria-label="Mostrar contraseña" title="Mostrar/Ocultar contraseña">
-                            <svg id="eyeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                <circle cx="12" cy="12" r="3"></circle>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-
-                <button type="submit" class="login-btn">
-                    Ingresar al Sistema
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                        <polyline points="12 5 19 12 12 19"></polyline>
+        <!-- Panel Izquierdo: Visual & Características -->
+        <div class="login-split-left">
+            <div class="login-left-content">
+                <div class="login-shield-container">
+                    <div class="login-shield-glow"></div>
+                    <svg class="login-shield-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Shield path -->
+                        <path d="M50 12 L82 22 C82 52 68 76 50 88 C32 76 18 52 18 22 Z" fill="url(#shield-grad)" stroke="url(#stroke-grad)" stroke-width="2.5" />
+                        <!-- Padlock -->
+                        <rect x="38" y="48" width="24" height="18" rx="4" fill="#ffffff" />
+                        <path d="M43 48 V41 C43 37.1 46.1 34 50 34 C53.9 34 57 37.1 57 41 V48" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
+                        <circle cx="50" cy="56" r="2.5" fill="#e11d48" />
+                        <path d="M50 58.5 V62" stroke="#e11d48" stroke-width="2" stroke-linecap="round" />
+                        <defs>
+                            <linearGradient id="shield-grad" x1="50" y1="12" x2="50" y2="88" gradientUnits="userSpaceOnUse">
+                                <stop offset="0%" stop-color="#fb7185" stop-opacity="0.6"/>
+                                <stop offset="100%" stop-color="#e11d48" stop-opacity="0.15"/>
+                            </linearGradient>
+                            <linearGradient id="stroke-grad" x1="50" y1="12" x2="50" y2="88" gradientUnits="userSpaceOnUse">
+                                <stop offset="0%" stop-color="#fda4af" stop-opacity="0.9"/>
+                                <stop offset="100%" stop-color="#be123c" stop-opacity="0.3"/>
+                            </linearGradient>
+                        </defs>
                     </svg>
-                </button>
-            </form>
+                </div>
+                <h1 class="login-left-title">Bienvenido de nuevo</h1>
+                <p class="login-left-desc">Inicia sesión para continuar y acceder a todas las funciones del portal.</p>
+            </div>
+
+            <!-- Características del sistema al pie -->
+            <div class="login-features-grid">
+                <div class="login-feature-item">
+                    <div class="login-feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                    </div>
+                    <div class="login-feature-title">Seguro</div>
+                    <div class="login-feature-desc">Datos protegidos</div>
+                </div>
+                <div class="login-feature-item">
+                    <div class="login-feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                    </div>
+                    <div class="login-feature-title">Rápido</div>
+                    <div class="login-feature-desc">Acceso en segundos</div>
+                </div>
+                <div class="login-feature-item">
+                    <div class="login-feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                    </div>
+                    <div class="login-feature-title">Confiable</div>
+                    <div class="login-feature-desc">Portal de ruteo</div>
+                </div>
+            </div>
         </div>
 
-        <div style="text-align: center; margin-top: 25px; padding-top: 15px; border-top: 1px solid #e2e8f0; font-size: 0.72rem; color: #94a3b8; font-weight: 500;">
-            Futurity Portal • Versión v{{ app_version }}
-        </div>
+        <!-- Panel Derecho: Formulario de Login -->
+        <div class="login-split-right">
+            
+            <div class="login-right-header">
+                <div class="login-logo-wrapper">
+                    <img src="{{ url_for('static', filename='img/logo_futurity.png') }}" alt="Futurity Logo" class="login-brand-logo">
+                </div>
+                <h2>Conectarse</h2>
+                <p>Accede a tu cuenta para continuar</p>
+            </div>
 
-    </div>
+            <div>
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                {% for category, message in messages %}
+                <div class="login-alert login-alert-{{ category }}">
+                    {{ message }}
+                </div>
+                {% endfor %}
+                {% endif %}
+                {% endwith %}
+
+                <form action="{{ url_for('login') }}" method="POST">
+                    <div class="login-form-group">
+                        <label for="email">Correo Corporativo</label>
+                        <div class="input-with-icon-wrapper">
+                            <input type="email" id="email" name="email" required placeholder="ejemplo@futurity.com"
+                                autocomplete="email" class="login-input" autocapitalize="none" autocorrect="off" spellcheck="false">
+                            <div class="input-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                    <polyline points="22,6 12,13 2,6"></polyline>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="login-form-group">
+                        <label for="password">Contraseña</label>
+                        <div class="input-with-icon-wrapper password-wrapper">
+                            <input type="password" id="password" name="password" required placeholder="••••••••"
+                                class="login-input" style="padding-right: 45px;" autocapitalize="none" autocorrect="off" spellcheck="false">
+                            <div class="input-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                </svg>
+                            </div>
+                            <button type="button" id="togglePassword" class="toggle-password-btn" aria-label="Mostrar contraseña" title="Mostrar/Ocultar contraseña">
+                                <svg id="eyeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="login-btn">
+                        <span>Ingresar al Sistema</span>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                    </button>
+                </form>
+            </div>
+
+            <div style="text-align: center; margin-top: 35px; padding-top: 15px; border-top: 1px solid #f1f5f9; font-size: 0.72rem; color: #94a3b8; font-weight: 500;">
+                Futurity Portal • Versión v{{ app_version }}
+            </div>
+
+        </div>
 
     <script>
         const togglePassword = document.querySelector('#togglePassword');
