@@ -576,7 +576,7 @@ def reporte_pdf():
     try:
         # 1. Obtener datos del cliente de directorio_clientes
         cursor.execute("""
-            SELECT nombre_cliente AS cliente, zona AS sector, '-' as direccion FROM directorio_clientes WHERE contrato = %s
+            SELECT nombre_cliente AS cliente, zona AS sector, COALESCE(direccion, '-') as direccion FROM directorio_clientes WHERE contrato = %s
         """, (contrato_directorio,))
         cliente_data = cursor.fetchone()
         

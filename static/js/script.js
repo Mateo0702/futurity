@@ -64,8 +64,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const inputContrato = document.querySelector('input[name="contrato"]');
     const inputNombre = document.querySelector('input[name="cliente"]');
     const inputTelefonos = document.querySelector('input[name="telefonos"]');
-    const selectSector = document.querySelector('select[name="sector"]');
+    const selectSector = document.querySelector('select[name="sector"], input[name="sector"]');
     const inputFecha = document.querySelector('input[name="fecha_programada"]');
+    const inputDireccion = document.querySelector('input[name="direccion"]');
 
     if (inputContrato) {
         // Escucha cuando el asesor sale del campo contrato (presiona Tab o hace clic fuera)
@@ -104,15 +105,25 @@ document.addEventListener('DOMContentLoaded', () => {
                             inputTelefonos.value = data.telefonos;
                         }
 
-                        // Seleccionar Sector automáticamente si coincide
+                        // Seleccionar/Escribir Sector automáticamente si coincide
                         if (selectSector && data.zona_excel) {
                             const zonaBD = data.zona_excel.trim().toUpperCase();
-                            const opciones = Array.from(selectSector.options);
-                            const opcionEncontrada = opciones.find(opt => opt.value.toUpperCase() === zonaBD);
-
-                            if (opcionEncontrada) {
-                                selectSector.value = opcionEncontrada.value;
+                            if (selectSector.tagName === 'SELECT') {
+                                const opciones = Array.from(selectSector.options);
+                                const opcionEncontrada = opciones.find(opt => opt.value.toUpperCase() === zonaBD);
+                                if (opcionEncontrada) {
+                                    selectSector.value = opcionEncontrada.value;
+                                }
+                            } else {
+                                // Es un input (con datalist en registro.html)
+                                selectSector.value = data.zona_excel;
+                                selectSector.dispatchEvent(new Event('change'));
                             }
+                        }
+
+                        // Pre-llenar Dirección
+                        if (inputDireccion && inputDireccion.value === "") {
+                            inputDireccion.value = data.direccion || "";
                         }
                     })
                     .catch(error => {

@@ -195,11 +195,21 @@ CREATE TABLE turnos_tecnicos (
 DROP TABLE IF EXISTS directorio_clientes;
 CREATE TABLE directorio_clientes (
     contrato VARCHAR(20) PRIMARY KEY,
-    fecha_instalacion VARCHAR(50), 
-    nombre_cliente VARCHAR(150) NOT NULL,
-    zona VARCHAR(100),
+    empresa VARCHAR(50) DEFAULT 'SERVICABLE',
+    fecha_instalacion VARCHAR(50),
+    producto VARCHAR(500) DEFAULT NULL,
+    estado VARCHAR(50) DEFAULT NULL,
+    antiguedad INT DEFAULT NULL,
+    forma_pago VARCHAR(255) DEFAULT NULL,
+    nombre_cliente VARCHAR(255) NOT NULL,
+    direccion VARCHAR(500) DEFAULT NULL,
+    zona VARCHAR(255),
     telefono1 VARCHAR(50),
-    telefono2 VARCHAR(50)
+    telefono2 VARCHAR(50),
+    telefono3 VARCHAR(50) DEFAULT NULL,
+    tv_adicionales INT DEFAULT NULL,
+    total_mensual DECIMAL(10,2) DEFAULT NULL,
+    numero_serie VARCHAR(100) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

@@ -179,7 +179,7 @@ def buscar_cliente(contrato):
         else:
             query_contrato = contrato_clean
 
-        query = "SELECT nombre_cliente, zona, telefono1, telefono2 FROM directorio_clientes WHERE contrato = %s"
+        query = "SELECT nombre_cliente, zona, telefono1, telefono2, telefono3, COALESCE(direccion, '') AS direccion FROM directorio_clientes WHERE contrato = %s"
         cursor.execute(query, (query_contrato,))
         cliente = cursor.fetchone()
         
@@ -196,17 +196,29 @@ def buscar_cliente(contrato):
             if tel2.lower() in ['nan', 'none']:
                 tel2 = ""
 
+            tel3 = str(cliente['telefono3']).strip() if cliente['telefono3'] else ""
+            if tel3.endswith('.0') or tel3.endswith(',0'):
+                tel3 = tel3[:-2]
+            if tel3.lower() in ['nan', 'none']:
+                tel3 = ""
+
             telefonos = tel1
             if tel2 and tel2 != tel1:
                 if telefonos:
                     telefonos += f" / {tel2}"
                 else:
                     telefonos = tel2
+            if tel3 and tel3 != tel2 and tel3 != tel1:
+                if telefonos:
+                    telefonos += f" / {tel3}"
+                else:
+                    telefonos = tel3
 
             return jsonify({
                 "cliente": cliente['nombre_cliente'],
                 "zona_excel": cliente['zona'],
-                "telefonos": telefonos
+                "telefonos": telefonos,
+                "direccion": cliente['direccion']
             })
         else:
             return jsonify({"error": "No encontrado"}), 404
