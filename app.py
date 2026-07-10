@@ -1,8 +1,13 @@
+import os
 from flask import Flask, render_template, session, redirect, url_for, request, flash, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 import uuid
 import re
 from datetime import date, timedelta
+from dotenv import load_dotenv
+
+# Cargar variables de entorno del archivo .env
+load_dotenv()
 
 from routers.visitas_router import visitas_bp
 from routers.tecnico_router import tecnico_bp
@@ -21,7 +26,7 @@ OFICINA_LON = -78.975419
 
 app = Flask(__name__)
 # Pega aquí el código que generaste en la terminal:
-app.secret_key = '8b093e226bd1155f8527a13430d48a4048023c69e7cde5dcc37224407f0ac1c2' 
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', '8b093e226bd1155f8527a13430d48a4048023c69e7cde5dcc37224407f0ac1c2') 
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)
 
 app.register_blueprint(visitas_bp)
@@ -677,5 +682,7 @@ def obtener_problemas_activos():
 
 
 if __name__ == '__main__':
-    # El host '0.0.0.0' le dice a Flask: "Acepta conexiones de celulares en la misma red"
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Obtener el puerto desde las variables de entorno o usar 5000 por defecto
+    port = int(os.environ.get('PORT', 5000))
+    # El host '0.0.0.0' le dice a Flask: "Acepta conexiones en toda la red"
+    app.run(host='0.0.0.0', port=port, debug=True)

@@ -7,6 +7,10 @@ routers/__pycache__/
 .venv/
 env/
 venv/
+.env
+.env.local
+.env.production
+.env.development
 
 # Scratch and test files
 scratch/
@@ -20,3 +24,4 @@ visitas_drive.xlsx
 static/uploads/*
 !static/uploads/default_avatar.png
 !static/uploads/furgoneta_milton.jpeg
+

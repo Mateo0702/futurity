@@ -7,6 +7,7 @@ import re
 
 # Importamos la función de normalización del proyecto
 from utils import normalizar_horario_texto
+from db_config import get_db_connection
 
 def clean_excel_columns(df):
     """
@@ -24,13 +25,7 @@ def clean_excel_columns(df):
     return cols
 
 def importar_visitas_diarias():
-    # 1. Configuración de credenciales de la BD
-    config_db = {
-        'host': 'localhost',
-        'user': 'root',
-        'password': 'Sama/2001',
-        'database': 'optimizador_rutas'
-    }
+    # Configuración de credenciales centralizada
 
     # 2. Carpeta de descargas del usuario donde están los archivos del Drive
     downloads_dir = r"C:\Users\mateo\Downloads"
@@ -47,11 +42,14 @@ def importar_visitas_diarias():
 
     # Conectar a la base de datos
     print("\nConectando a la base de datos MySQL...")
+    conexion = get_db_connection()
+    if not conexion:
+        print("Error: No se pudo conectar a la base de datos.")
+        return
     try:
-        conexion = mysql.connector.connect(**config_db)
         cursor = conexion.cursor(dictionary=True)
     except Exception as e:
-        print(f"Error de conexión a la base de datos: {e}")
+        print(f"Error al obtener cursor de la base de datos: {e}")
         return
 
     total_procesados = 0

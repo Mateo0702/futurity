@@ -7,6 +7,7 @@ import re
 
 # Importamos la función de normalización del proyecto
 from utils import normalizar_horario_texto
+from db_config import get_db_connection
 
 def parse_sheet_name_to_date(sheet_name, default_year=2026):
     sheet_name = sheet_name.upper().strip()
@@ -54,13 +55,7 @@ def parse_sheet_name_to_date(sheet_name, default_year=2026):
         return None
 
 def importar_visitas_drive(archivo_excel=None):
-    # 1. Configuración de credenciales de la BD
-    config_db = {
-        'host': 'localhost',
-        'user': 'root',
-        'password': 'Sama/2001',
-        'database': 'optimizador_rutas'
-    }
+    # Configuración de credenciales centralizada
 
     # Si no se provee el archivo, buscamos por defecto ASIGNACIONES PRINCIPAL (1).xlsx en la carpeta actual
     if not archivo_excel:
@@ -86,8 +81,11 @@ def importar_visitas_drive(archivo_excel=None):
         return
 
     print("\nConectando a MySQL...")
+    conexion = get_db_connection()
+    if not conexion:
+        print("Error: No se pudo conectar a la base de datos.")
+        return
     try:
-        conexion = mysql.connector.connect(**config_db)
         cursor = conexion.cursor(dictionary=True)
         
         # Limpiar registros históricos previos (rango 5844 a 9999 y mayores o iguales a 10505) para evitar duplicidad

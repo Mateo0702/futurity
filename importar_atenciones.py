@@ -2,6 +2,7 @@ import os
 import mysql.connector
 import pandas as pd
 from datetime import datetime, date, time
+from db_config import get_db_connection
 
 def importar_atenciones():
     # 1. Nombre del archivo de Excel
@@ -14,13 +15,7 @@ def importar_atenciones():
         print("Por favor, guarda tu archivo de Excel de atenciones con el nombre 'CLIENTES ATENDIDOS DIARIAMENTE.xlsx' o 'atenciones_diarias.xlsx' en este mismo directorio.")
         return
 
-    # 2. Configuración de credenciales de la BD
-    config_db = {
-        'host': 'localhost',
-        'user': 'root',
-        'password': 'Sama/2001',
-        'database': 'optimizador_rutas'
-    }
+    # Configuración de credenciales centralizada
 
     print(f"Leyendo los datos de '{archivo_excel}'...")
     
@@ -69,7 +64,10 @@ def importar_atenciones():
         df[0] = df[0].ffill().bfill()
         
         print("Conectando a MySQL...")
-        conexion = mysql.connector.connect(**config_db)
+        conexion = get_db_connection()
+        if not conexion:
+            print("Error: No se pudo conectar a la base de datos.")
+            return
         cursor = conexion.cursor()
 
         # Limpiar registros previamente importados el día de hoy para evitar duplicados
