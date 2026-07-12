@@ -35,37 +35,25 @@
                 <!-- No priority field for installations, we default it to MEDIA internally via a hidden input -->
                 <input type="hidden" name="prioridad" value="MEDIA">
 
-                <!-- Crew selection instead of individual technicians -->
-                <div class="form-group" style="grid-column: span 2;">
-                    <label style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Cuadrilla Asignada:</label>
-                    <select id="registro-cuadrilla" class="form-control" required onchange="actualizarTecnicosCuadrilla(this.value)">
-                        <option value="">-- Seleccione la Cuadrilla Responsable --</option>
-                        <option value="CUADRILLA_1">CUADRILLA 1 (Henry Cuenca / Eduardo Cruz)</option>
-                        <option value="CUADRILLA_2">CUADRILLA 2 (Jooel Arroyo / Oswaldo Bermeo)</option>
+                <div class="form-group">
+                    <label style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Técnico Principal:</label>
+                    <select name="tecnico_asignado" id="registro-tecnico-asignado" class="form-control" required>
+                        <option value="">-- Seleccione el Técnico Responsable --</option>
+                        {% for tecnico in tecnicos %}
+                        <option value="{{ tecnico.nombre }}">{{ tecnico.nombre }}</option>
+                        {% endfor %}
                     </select>
-                    <!-- Hidden inputs to submit expected technician names to backend -->
-                    <input type="hidden" name="tecnico_asignado" id="registro-tecnico-asignado" value="">
-                    <input type="hidden" name="tecnico_apoyo" id="registro-tecnico-apoyo" value="">
                 </div>
-                <script>
-                    function actualizarTecnicosCuadrilla(val) {
-                        const principalInput = document.getElementById('registro-tecnico-asignado');
-                        const apoyoInput = document.getElementById('registro-tecnico-apoyo');
-                        if (val === 'CUADRILLA_1') {
-                            principalInput.value = 'HENRY CUENCA';
-                            apoyoInput.value = 'EDUARDO CRUZ';
-                        } else if (val === 'CUADRILLA_2') {
-                            principalInput.value = 'JOOEL ARROYO';
-                            apoyoInput.value = 'OSWALDO BERMEO';
-                        } else {
-                            principalInput.value = '';
-                            apoyoInput.value = '';
-                        }
-                        if (typeof verificarConflictosAgenda === 'function') {
-                            verificarConflictosAgenda();
-                        }
-                    }
-                </script>
+
+                <div class="form-group">
+                    <label style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Técnico de Apoyo (Opcional):</label>
+                    <select name="tecnico_apoyo" id="registro-tecnico-apoyo" class="form-control">
+                        <option value="">-- Sin Apoyo --</option>
+                        {% for tecnico in tecnicos %}
+                        <option value="{{ tecnico.nombre }}">{{ tecnico.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             {% else %}
                 <div class="form-group">
                     <label>Prioridad de Atención:</label>

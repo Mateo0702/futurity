@@ -87,7 +87,7 @@
 
         // Función que consulta el servidor
         function actualizarUbicacion() {
-            fetch(`/api/rastreo_ubicacion/${token}`)
+            fetch(`/api/rastreo_ubicacion/${token}?t=${new Date().getTime()}`)
                 .then(response => response.json())
                 .then(data => {
                     // Si la visita está FINALIZADA, redirigimos a la encuesta y apagamos el bucle
@@ -104,10 +104,8 @@
                         return; 
                     }
                         
-                    // CAMBIO 2: Escudo para evitar que el JS explote si no hay coordenadas aún
-                    if (data.status === 'ok' && data.lat && data.lon) {
-                        const nuevaUbicacion = [data.lat, data.lon];
-                        
+                    // CAMBIO 2: Carga de fotos y datos independiente de si hay GPS o no
+                    if (data.status === 'ok') {
                         // Actualizar fotos y placa si vienen en la respuesta
                         if (data.tecnico_foto) {
                             const imgTec = document.getElementById('img-tecnico');
@@ -138,16 +136,17 @@
                             nombreTecnicoEl.innerText = data.tecnico;
                         }
 
-                        if (primeraVez) {
-                            marcador = L.marker(nuevaUbicacion, {icon: iconoTecnico}).addTo(mapa);
-                            mapa.setView(nuevaUbicacion, 16);
-                            primeraVez = false;
-                        } else {
-                            marcador.setLatLng(nuevaUbicacion);
+                        // Solo actualizar ubicación en el mapa si las coordenadas son válidas
+                        if (data.lat && data.lon) {
+                            const nuevaUbicacion = [data.lat, data.lon];
+                            if (primeraVez) {
+                                marcador = L.marker(nuevaUbicacion, {icon: iconoTecnico}).addTo(mapa);
+                                mapa.setView(nuevaUbicacion, 16);
+                                primeraVez = false;
+                            } else {
+                                marcador.setLatLng(nuevaUbicacion);
+                            }
                         }
-                    } else {
-                        // Mensaje de fallback si la ruta aún no tiene coordenadas válidas
-                        document.getElementById('vehiculo-placa').innerText = "Esperando inicio de ruta...";
                     }
                 })
                 .catch(err => console.log("Esperando conexión del técnico..."));

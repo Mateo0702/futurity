@@ -105,6 +105,24 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                // Si es un enlace de Google Maps, lo abrimos en la app nativa del teléfono
+                if (url.contains("maps.google") || url.contains("google.com/maps")) {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        intent.setPackage("com.google.android.apps.maps");
+                        startActivity(intent);
+                        return true;
+                    } catch (Exception e) {
+                        try {
+                            Intent fallback = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                            startActivity(fallback);
+                            return true;
+                        } catch (Exception ex) {
+                            Log.e(TAG, "Error al abrir enlace de mapa: " + url, ex);
+                        }
+                    }
+                }
+
                 if (url.startsWith("http://") || url.startsWith("https://")) {
                     return false; // Load in WebView
                 }

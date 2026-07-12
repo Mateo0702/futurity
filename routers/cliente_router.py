@@ -75,7 +75,7 @@ def api_rastreo_ubicacion(token):
         archivo_vehiculo = visita['foto_vehiculo_principal'] if visita.get('foto_vehiculo_principal') else 'furgoneta_milton.jpeg'
         archivo_perfil_apoyo = visita['foto_perfil_apoyo'] if visita.get('foto_perfil_apoyo') else None
         
-        return jsonify({
+        resp = jsonify({
             "status": "ok",
             "lat": float(visita['latitud_gps_vivo']) if visita['latitud_gps_vivo'] else None,
             "lon": float(visita['longitud_gps_vivo']) if visita['longitud_gps_vivo'] else None,
@@ -88,6 +88,10 @@ def api_rastreo_ubicacion(token):
             "vehiculo_foto": url_for('static', filename='uploads/' + archivo_vehiculo),
             "placa": visita['placa_vehiculo_principal'] if visita.get('placa_vehiculo_principal') else 'S/P'
         })
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+        return resp
         
     return jsonify({"status": "error", "message": "Token no válido"}), 404
 

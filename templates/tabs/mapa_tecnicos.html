@@ -283,54 +283,6 @@
     }
 
     function actualizarMapaYLista(ubicaciones) {
-        const activeArea = "{{ session.get('active_area', 'SOPORTE') }}";
-        if (activeArea === 'INSTALACIONES') {
-            const crew1Techs = ['HENRY CUENCA', 'EDUARDO CRUZ'];
-            const crew2Techs = ['JOOEL ARROYO', 'OSWALDO BERMEO'];
-
-            let crew1Candidates = ubicaciones.filter(u => crew1Techs.includes(u.tecnico.toUpperCase()));
-            let crew2Candidates = ubicaciones.filter(u => crew2Techs.includes(u.tecnico.toUpperCase()));
-
-            let crew1Data = null;
-            if (crew1Candidates.length > 0) {
-                let conectados = crew1Candidates.filter(c => c.conectado === 1);
-                if (conectados.length > 0) {
-                    conectados.sort((a, b) => new Date(b.ultima_actualizacion) - new Date(a.ultima_actualizacion));
-                    crew1Data = { ...conectados[0] };
-                } else {
-                    crew1Candidates.sort((a, b) => new Date(b.ultima_actualizacion || 0) - new Date(a.ultima_actualizacion || 0));
-                    crew1Data = { ...crew1Candidates[0] };
-                }
-                crew1Data.tecnico = "CUADRILLA 1 (Henry C. / Eduardo C.)";
-                crew1Data.foto_perfil = "default_avatar.png";
-            }
-
-            let crew2Data = null;
-            if (crew2Candidates.length > 0) {
-                let conectados = crew2Candidates.filter(c => c.conectado === 1);
-                if (conectados.length > 0) {
-                    conectados.sort((a, b) => new Date(b.ultima_actualizacion) - new Date(a.ultima_actualizacion));
-                    crew2Data = { ...conectados[0] };
-                } else {
-                    crew2Candidates.sort((a, b) => new Date(b.ultima_actualizacion || 0) - new Date(a.ultima_actualizacion || 0));
-                    crew2Data = { ...crew2Candidates[0] };
-                }
-                crew2Data.tecnico = "CUADRILLA 2 (Jooel A. / Oswaldo B.)";
-                crew2Data.foto_perfil = "default_avatar.png";
-            }
-
-            const otherTechs = ubicaciones.filter(u => 
-                !crew1Techs.includes(u.tecnico.toUpperCase()) && 
-                !crew2Techs.includes(u.tecnico.toUpperCase())
-            );
-
-            const groupedUbicaciones = [];
-            if (crew1Data) groupedUbicaciones.push(crew1Data);
-            if (crew2Data) groupedUbicaciones.push(crew2Data);
-            otherTechs.forEach(o => groupedUbicaciones.push(o));
-            ubicaciones = groupedUbicaciones;
-        }
-
         const listaContainer = document.getElementById('lista-tecnicos-mapa');
         const contadorEl = document.getElementById('contador-tecnicos');
 

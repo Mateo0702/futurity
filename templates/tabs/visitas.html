@@ -333,21 +333,6 @@
                                     </div>
 
                                     <div id="form-reasignar-{{ visita.id_visita }}" style="display: none; margin-top: 10px; background-color: #e0e7ff; padding: 15px; border-radius: 8px; border: 1px solid #c7d2fe;">
-                                        {% if session.get('active_area') == 'INSTALACIONES' %}
-                                        <form action="/api/visitas/{{ visita.id_visita }}/reasignar" method="POST" style="display: flex; flex-direction: column; gap: 10px; align-items: stretch; text-align: left;">
-                                            <div>
-                                                <label style="font-size: 0.8rem; font-weight: bold; color: #3730a3;">Cuadrilla Asignada:</label>
-                                                <select id="reasignar-cuadrilla-{{ visita.id_visita }}" class="form-control" style="padding: 6px;" onchange="actualizarReasignarCuadrilla({{ visita.id_visita }}, this.value)">
-                                                    <option value="">-- Seleccionar Cuadrilla --</option>
-                                                    <option value="CUADRILLA_1" {% if visita.tecnico_principal == 'HENRY CUENCA' and visita.tecnico_apoyo == 'EDUARDO CRUZ' %}selected{% endif %}>CUADRILLA 1 (Henry Cuenca / Eduardo Cruz)</option>
-                                                    <option value="CUADRILLA_2" {% if visita.tecnico_principal == 'JOOEL ARROYO' and visita.tecnico_apoyo == 'OSWALDO BERMEO' %}selected{% endif %}>CUADRILLA 2 (Jooel Arroyo / Oswaldo Bermeo)</option>
-                                                </select>
-                                                <input type="hidden" name="tecnico_principal" id="reasignar-principal-{{ visita.id_visita }}" value="{{ visita.tecnico_principal or '' }}">
-                                                <input type="hidden" name="tecnico_apoyo" id="reasignar-apoyo-{{ visita.id_visita }}" value="{{ visita.tecnico_apoyo or '' }}">
-                                            </div>
-                                            <button type="submit" class="btn" style="background-color: #4338ca; padding: 8px 15px; align-self: flex-end;">Actualizar Cuadrilla</button>
-                                        </form>
-                                        {% else %}
                                         <form action="/api/visitas/{{ visita.id_visita }}/reasignar" method="POST" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: flex-end;">
                                             <div>
                                                 <label style="font-size: 0.8rem; font-weight: bold; color: #3730a3;">Técnico Principal:</label>
@@ -368,7 +353,6 @@
                                             </div>
                                             <button type="submit" class="btn" style="background-color: #4338ca; padding: 8px 15px;">Actualizar</button>
                                         </form>
-                                        {% endif %}
                                     </div>
 
                                     <div id="form-cancelar-{{ visita.id_visita }}"
@@ -620,20 +604,7 @@
     actualizarCronometrosVisitas();
     setInterval(actualizarCronometrosVisitas, 1000);
 
-    function actualizarReasignarCuadrilla(id, val) {
-        const principalInput = document.getElementById('reasignar-principal-' + id);
-        const apoyoInput = document.getElementById('reasignar-apoyo-' + id);
-        if (val === 'CUADRILLA_1') {
-            principalInput.value = 'HENRY CUENCA';
-            apoyoInput.value = 'EDUARDO CRUZ';
-        } else if (val === 'CUADRILLA_2') {
-            principalInput.value = 'JOOEL ARROYO';
-            apoyoInput.value = 'OSWALDO BERMEO';
-        } else {
-            principalInput.value = '';
-            apoyoInput.value = '';
-        }
-    }
+
 
     function enviarNotificacionProgramacion(cliente, telefonos, fechaStr, preferencia, tecnico, apoyo, placa, esInstalacion) {
         let tel = telefonos.split('/')[0].replace(/\D/g, '');

@@ -25,3 +25,7 @@ static/uploads/*
 !static/uploads/default_avatar.png
 !static/uploads/furgoneta_milton.jpeg
 
+# Executables and logs
+cloudflared-windows-amd64.exe
+request_debug.log
+

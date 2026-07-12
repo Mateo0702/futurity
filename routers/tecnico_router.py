@@ -38,6 +38,17 @@ def panel_tecnico(nombre_tecnico):
     rol = session.get('user_role')
     nombre_usuario = session.get('user_name', '')
     
+    # DEBUG LOG
+    try:
+        with open("request_debug.log", "a", encoding="utf-8") as f:
+            f.write(f"--- ACCESS --- \n")
+            f.write(f"nombre_tecnico URL: {nombre_tecnico}\n")
+            f.write(f"session user_id: {session.get('user_id')}\n")
+            f.write(f"session user_name: {session.get('user_name')}\n")
+            f.write(f"session user_role: {session.get('user_role')}\n")
+    except Exception as log_err:
+        pass
+    
     nombre_real = nombre_tecnico.replace('_', ' ')
     
     # Si es rol TECNICO, solo puede ver su propio panel
@@ -77,10 +88,12 @@ def panel_tecnico(nombre_tecnico):
     for idx, v in enumerate(todas_las_visitas, start=1):
         v['numero_parada'] = idx
         
-    # Filtrar solo las visitas asignadas a este técnico
+    # Filtrar solo las visitas asignadas a este técnico (de forma insensible a mayúsculas/minúsculas)
+    nombre_real_upper = nombre_real.upper()
     visitas_del_tecnico = [
         v for v in todas_las_visitas 
-        if (v.get('tecnico_principal') == nombre_real or v.get('tecnico_apoyo') == nombre_real)
+        if ((v.get('tecnico_principal') or '').upper() == nombre_real_upper or 
+            (v.get('tecnico_apoyo') or '').upper() == nombre_real_upper)
         and v.get('estado') not in ('CANCELADA', 'SOLVENTADA_REMOTA')
     ]
     
@@ -105,6 +118,14 @@ def panel_tecnico(nombre_tecnico):
 
     # Parsear información técnica (Caja, Hilo, IP, etc.) para visualización del técnico
     visitas_del_tecnico = parsear_informacion_tecnica(visitas_del_tecnico)
+
+    # DEBUG LOG
+    try:
+        with open("request_debug.log", "a", encoding="utf-8") as f:
+            f.write(f"Count of visits found: {len(visitas_del_tecnico)}\n")
+            f.write(f"Visits IDs: {[v['id_visita'] for v in visitas_del_tecnico]}\n\n")
+    except Exception as log_err:
+        pass
 
     # Mandamos al HTML la lista filtrada ('visitas_del_tecnico')
     return render_template('tecnico_panel.html', 
@@ -428,10 +449,10 @@ def finalizar_visita(id_visita):
             """, ("Disponible", tecnico_nombre))
             
         conexion.commit()
-        print(f"✅ Visita #{id_visita} finalizada e insumos actualizados.")
+        print(f"[Cierre] Visita #{id_visita} finalizada e insumos actualizados.")
     except Exception as e:
         conexion.rollback()
-        print(f"Error al finalizar visita con materiales: {e}")
+        print(f"[Cierre] Error al finalizar visita con materiales: {e}")
     finally:
         if 'conexion' in locals() and conexion.is_connected():
             cursor.close()
@@ -444,7 +465,7 @@ def finalizar_visita(id_visita):
 @tecnico_bp.route('/api/tecnico/rastreo_vivo/<int:id_visita>', methods=['POST'])
 def rastreo_vivo(id_visita):
     """Recibe la latitud y longitud del celular del técnico y fuerza su guardado."""
-    print(f"📡 ¡Alerta! Petición recibida para la visita #{id_visita}") # Ver en la terminal de la PC
+    print(f"[GPS] Alerta! Peticion recibida para la visita #{id_visita}") # Ver en la terminal de la PC
     
     # Manejo ultra flexible por si viene como JSON o Formulario clásico
     if request.is_json:
@@ -455,7 +476,7 @@ def rastreo_vivo(id_visita):
     lat = datos.get('latitud')
     lon = datos.get('longitud')
     
-    print(f"📍 Datos recibidos del celular -> Lat: {lat}, Lon: {lon}")
+    print(f"[GPS] Datos recibidos del celular -> Lat: {lat}, Lon: {lon}")
 
     if lat and lon:
         conexion = get_db_connection()
@@ -488,15 +509,15 @@ def rastreo_vivo(id_visita):
                 """, (lat, lon, tecnico_nombre))
 
             conexion.commit()
-            print("💾 ¡Ubicación guardada con éxito en MySQL!")
+            print("[GPS] Ubicacion guardada con exito en MySQL!")
         except Exception as e:
-            print(f"❌ Error crítico en la consulta MySQL: {e}")
+            print(f"[GPS] Error critico en la consulta MySQL: {e}")
         finally:
             if 'conexion' in locals() and conexion.is_connected():
                 cursor.close()
                 conexion.close()
     else:
-        print("⚠️ Advertencia: Llegó la petición pero los valores lat/lon vinieron vacíos.")
+        print("[GPS] Advertencia: Llego la peticion pero los valores lat/lon vinieron vacios.")
                 
     return jsonify({"status": "ok"})
 
@@ -548,11 +569,11 @@ def cerrar_visita_proceso(id_visita):
             """, ("Disponible", tecnico_nombre))
                     
         conexion.commit()
-        print(f"✅ Visita #{id_visita} cerrada y materiales registrados exitosamente.")
+        print(f"[Cierre] Visita #{id_visita} cerrada y materiales registrados exitosamente.")
         
     except Exception as e:
         conexion.rollback()
-        print(f"❌ Error al cerrar visita con materiales: {e}")
+        print(f"[Cierre] Error al cerrar visita con materiales: {e}")
     finally:
         cursor.close()
         conexion.close()

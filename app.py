@@ -5,6 +5,9 @@ import uuid
 import re
 from datetime import date, timedelta
 from dotenv import load_dotenv
+import qrcode
+import io
+import base64
 
 # Cargar variables de entorno del archivo .env
 load_dotenv()
@@ -361,6 +364,40 @@ def cambiar_password():
             conexion.close()
 
     return render_template('cambiar_password.html')
+
+
+# --- RUTAS DE DESCARGA DE LA APP MÓVIL ---
+@app.route('/descargar')
+@app.route('/app')
+def descargar_app():
+    try:
+        # URL de descarga directa basada en cómo se conecta el usuario
+        download_url = request.url_root + "static/app/futurity_nexus.apk"
+        
+        # Generar código QR dinámico
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=10,
+            border=2,
+        )
+        qr.add_data(download_url)
+        qr.make(fit=True)
+
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Guardar en memoria y codificar a Base64
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        qr_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    except Exception as e:
+        import traceback
+        with open("qr_error.log", "w") as f:
+            f.write(f"Error: {str(e)}\n")
+            traceback.print_exc(file=f)
+        qr_base64 = None
+        
+    return render_template('descargar.html', qr_base64=qr_base64)
 
 
 # --- 1. RUTA PRINCIPAL: El Dashboard ---

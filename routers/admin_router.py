@@ -46,11 +46,12 @@ def api_dashboard_calidad():
         
     try:
         cursor = conexion.cursor(dictionary=True)
-        # Capturar parámetros de fecha y cliente, usando hoy por defecto
+        # Capturar parámetros de fecha, cliente y es_instalacion, usando hoy por defecto
         hoy = datetime.now().strftime('%Y-%m-%d')
         fecha_inicio = request.args.get('fecha_inicio', hoy)
         fecha_fin = request.args.get('fecha_fin', hoy)
         cliente_filtro = request.args.get('cliente', '').strip()
+        es_instalacion = request.args.get('es_instalacion', '').strip()
 
         # Construir cláusula WHERE común
         base_where = "WHERE calificacion_estrellas IS NOT NULL AND fecha_programada >= %s AND fecha_programada <= %s"
@@ -59,6 +60,10 @@ def api_dashboard_calidad():
         if cliente_filtro:
             base_where += " AND cliente LIKE %s"
             params.append(f"%{cliente_filtro}%")
+
+        if es_instalacion in ['0', '1']:
+            base_where += " AND es_instalacion = %s"
+            params.append(int(es_instalacion))
         
         # 1. Consulta para los KPIs Generales (incluye promedios de encuesta 1-10)
         cursor.execute(f"""
@@ -1152,6 +1157,7 @@ def preview_reporte_calidad():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha', date.today().isoformat())
+    es_instalacion = request.args.get('es_instalacion', '0').strip()
     
     conexion = get_db_connection()
     if not conexion:
@@ -1203,9 +1209,10 @@ def preview_reporte_calidad():
                       'GENERAR ARREGLO DE INSTALACIÓN',
                       'GESTIONAR ARREGLO DE INSTALACIÓN'
                   )
+                  AND es_instalacion = %s
                 ORDER BY COALESCE(DATE(hora_fin_visita), fecha_programada) ASC, hora_fin_visita ASC
             """
-            cursor.execute(query, (fecha, fecha))
+            cursor.execute(query, (fecha, fecha, int(es_instalacion)))
         else:
             query = """
                 SELECT 
@@ -1246,9 +1253,10 @@ def preview_reporte_calidad():
                       'GENERAR ARREGLO DE INSTALACIÓN',
                       'GESTIONAR ARREGLO DE INSTALACIÓN'
                   )
+                  AND es_instalacion = %s
                 ORDER BY hora_fin_visita ASC
             """
-            cursor.execute(query, (fecha,))
+            cursor.execute(query, (fecha, int(es_instalacion)))
         visitas = cursor.fetchall()
         
         # Serializar objetos datetime a formato legible/ISO para JSON
@@ -1272,6 +1280,7 @@ def download_excel_reporte_calidad():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha', date.today().isoformat())
+    es_instalacion = request.args.get('es_instalacion', '0').strip()
     
     conexion = get_db_connection()
     if not conexion:
@@ -1309,9 +1318,10 @@ def download_excel_reporte_calidad():
                       'GENERAR ARREGLO DE INSTALACIÓN',
                       'GESTIONAR ARREGLO DE INSTALACIÓN'
                   )
+                  AND es_instalacion = %s
                 ORDER BY COALESCE(DATE(hora_fin_visita), fecha_programada) ASC, hora_fin_visita ASC
             """
-            cursor.execute(query, (fecha, fecha))
+            cursor.execute(query, (fecha, fecha, int(es_instalacion)))
         else:
             query = """
                 SELECT 
@@ -1338,9 +1348,10 @@ def download_excel_reporte_calidad():
                       'GENERAR ARREGLO DE INSTALACIÓN',
                       'GESTIONAR ARREGLO DE INSTALACIÓN'
                   )
+                  AND es_instalacion = %s
                 ORDER BY hora_fin_visita ASC
             """
-            cursor.execute(query, (fecha,))
+            cursor.execute(query, (fecha, int(es_instalacion)))
         visitas = cursor.fetchall()
         cursor.close()
         conexion.close()
@@ -1454,6 +1465,7 @@ def preview_reporte_actividades():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha', date.today().isoformat())
+    es_instalacion = request.args.get('es_instalacion', '0').strip()
     
     conexion = get_db_connection()
     if not conexion:
@@ -1479,10 +1491,11 @@ def preview_reporte_actividades():
                   'GENERAR ARREGLO DE INSTALACIÓN',
                   'GESTIONAR ARREGLO DE INSTALACIÓN'
               )
+              AND es_instalacion = %s
             GROUP BY tecnico_principal, tecnico_apoyo, solucion_tecnico
             ORDER BY tecnico_principal, tecnico_apoyo, cantidad DESC
         """
-        cursor.execute(query, (fecha,))
+        cursor.execute(query, (fecha, int(es_instalacion)))
         rows = cursor.fetchall()
         cursor.close()
         conexion.close()
@@ -1527,6 +1540,7 @@ def download_excel_reporte_actividades():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha', date.today().isoformat())
+    es_instalacion = request.args.get('es_instalacion', '0').strip()
     
     conexion = get_db_connection()
     if not conexion:
@@ -1552,10 +1566,11 @@ def download_excel_reporte_actividades():
                   'GENERAR ARREGLO DE INSTALACIÓN',
                   'GESTIONAR ARREGLO DE INSTALACIÓN'
               )
+              AND es_instalacion = %s
             GROUP BY tecnico_principal, tecnico_apoyo, solucion_tecnico
             ORDER BY tecnico_principal, tecnico_apoyo, cantidad DESC
         """
-        cursor.execute(query, (fecha,))
+        cursor.execute(query, (fecha, int(es_instalacion)))
         rows = cursor.fetchall()
         cursor.close()
         conexion.close()
