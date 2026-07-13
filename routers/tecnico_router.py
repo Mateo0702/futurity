@@ -180,15 +180,21 @@ def en_camino_visita(id_visita):
             """, (tecnico_nombre, tecnico_nombre, id_visita, date.today().isoformat()))
             conexion.commit()
 
-        query = """
-            UPDATE visitas_tecnicas 
-            SET estado = 'EN_RUTA', 
-                hora_en_ruta = NOW(), 
-                token_rastreo = %s 
-            WHERE id_visita = %s
-        """
-        cursor.execute(query, (token_seguro, id_visita))
-        conexion.commit()
+        # Solo actualizar a EN_RUTA si la visita está PENDIENTE o REAGENDADA (evita regresiones por sincronización desfasada)
+        cursor.execute("SELECT estado FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        row_est = cursor.fetchone()
+        estado_actual = row_est[0] if row_est else None
+        
+        if estado_actual in ['PENDIENTE', 'REAGENDADA', None]:
+            query = """
+                UPDATE visitas_tecnicas 
+                SET estado = 'EN_RUTA', 
+                    hora_en_ruta = NOW(), 
+                    token_rastreo = %s 
+                WHERE id_visita = %s
+            """
+            cursor.execute(query, (token_seguro, id_visita))
+            conexion.commit()
 
         # Actualizar estado de actividad global del técnico
         cursor.execute("SELECT cliente FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
@@ -262,16 +268,22 @@ def iniciar_visita(id_visita):
             cursor.execute("UPDATE visitas_tecnicas SET token_rastreo = %s WHERE id_visita = %s", (token_seguro, id_visita))
             conexion.commit()
 
-        query = """
-            UPDATE visitas_tecnicas 
-            SET estado = 'EN_PROGRESO', 
-                hora_inicio_visita = NOW(),
-                latitud_inicio = %s,
-                longitud_inicio = %s
-            WHERE id_visita = %s
-        """
-        cursor.execute(query, (lat_val, lon_val, id_visita))
-        conexion.commit()
+        # Solo actualizar a EN_PROGRESO si el estado actual es PENDIENTE, REAGENDADA o EN_RUTA
+        cursor.execute("SELECT estado FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        row_est = cursor.fetchone()
+        estado_actual = row_est[0] if row_est else None
+        
+        if estado_actual in ['PENDIENTE', 'REAGENDADA', 'EN_RUTA', None]:
+            query = """
+                UPDATE visitas_tecnicas 
+                SET estado = 'EN_PROGRESO', 
+                    hora_inicio_visita = NOW(),
+                    latitud_inicio = %s,
+                    longitud_inicio = %s
+                WHERE id_visita = %s
+            """
+            cursor.execute(query, (lat_val, lon_val, id_visita))
+            conexion.commit()
 
         # Actualizar estado de actividad global del técnico
         cursor.execute("SELECT cliente FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
