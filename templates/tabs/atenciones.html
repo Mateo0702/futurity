@@ -706,6 +706,12 @@
             return;
         }
 
+        // Si es Visita Técnica, transferir y registrar automáticamente
+        if (accion === 'VISITA TECNICA' || accion === 'VISITA TECNICA COBRADA') {
+            transferirARegistroVisitas();
+            return;
+        }
+
         const form = document.getElementById('form-registro-atencion');
         const formData = new FormData(form);
         const data = {};
