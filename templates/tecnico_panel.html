@@ -1760,7 +1760,78 @@
             if (tipo === 'finalizar') {
                 const coordsInput = document.getElementById(`coords-${idVisita}`);
                 if (coordsInput && !coordsInput.value) {
-                    alert("Por favor, capture su ubicación GPS antes de finalizar.");
+                    const btnGps = document.getElementById(`btn-gps-${idVisita}`);
+                    if (btnGps) {
+                        btnGps.innerHTML = "⏳ Capturando GPS automático...";
+                        btnGps.disabled = true;
+                    }
+                    
+                    const submitBtn = form.querySelector('button[type="submit"]');
+                    const originalBtnHTML = submitBtn ? submitBtn.innerHTML : 'Guardar y Finalizar';
+                    if (submitBtn) {
+                        submitBtn.disabled = true;
+                        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Obteniendo ubicación GPS...';
+                    }
+                    
+                    const continuarCierre = (lat, lon) => {
+                        coordsInput.value = `${lat}, ${lon}`;
+                        if (btnGps) {
+                            btnGps.innerHTML = "✓ GPS Capturado";
+                            btnGps.style.backgroundColor = "#10b981";
+                        }
+                        // Volver a llamar para continuar el envío ya con las coordenadas cargadas
+                        procesarAccionFormulario(event, idVisita, endpoint, tipo);
+                    };
+
+                    if (window.AndroidBridge) {
+                        const originalRecibir = window.recibirUbicacionNativa;
+                        window.recibirUbicacionNativa = function(tipoVal, lat, lon) {
+                            if (tipoVal.toString() === idVisita.toString()) {
+                                window.recibirUbicacionNativa = originalRecibir;
+                                continuarCierre(lat, lon);
+                            }
+                            if (originalRecibir) originalRecibir(tipoVal, lat, lon);
+                        };
+                        window.AndroidBridge.stopTracking();
+                        window.AndroidBridge.requestSingleLocation(idVisita.toString());
+                        
+                        setTimeout(() => {
+                            if (!coordsInput.value) {
+                                console.warn("GPS nativo tardó demasiado en Guardar y Finalizar, intentando HTML5...");
+                                intentarHtml5Submit();
+                            }
+                        }, 6000);
+                    } else {
+                        intentarHtml5Submit();
+                    }
+                    
+                    function intentarHtml5Submit() {
+                        if (navigator.geolocation) {
+                            navigator.geolocation.getCurrentPosition(
+                                function (position) {
+                                    continuarCierre(position.coords.latitude, position.coords.longitude);
+                                },
+                                function (error) {
+                                    alert("Error al obtener ubicación GPS automática. Por favor, active la ubicación de su teléfono y presione 'Obtener mi ubicación' manualmente.");
+                                    if (submitBtn) {
+                                        submitBtn.disabled = false;
+                                        submitBtn.innerHTML = originalBtnHTML;
+                                    }
+                                    if (btnGps) {
+                                        btnGps.innerHTML = "Obtener mi ubicación";
+                                        btnGps.disabled = false;
+                                    }
+                                },
+                                { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+                            );
+                        } else {
+                            alert("Por favor, capture su ubicación GPS antes de finalizar.");
+                            if (submitBtn) {
+                                submitBtn.disabled = false;
+                                submitBtn.innerHTML = originalBtnHTML;
+                            }
+                        }
+                    }
                     return;
                 }
 
