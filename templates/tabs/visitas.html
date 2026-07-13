@@ -388,6 +388,66 @@
                                         </form>
                                     </div>
 
+                                    {% elif visita.estado in ['EN_RUTA', 'EN_PROGRESO'] %}
+                                    <div style="background-color: #f0fdf4; padding: 15px; border-radius: 8px; border: 1px dashed #bbf7d0; margin-top: 15px; text-align: left;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #dcfce7; padding-bottom: 8px;">
+                                            <span style="font-size: 0.85rem; color: #166534; font-weight: bold; text-transform: uppercase;">Estado de Ruta:</span>
+                                            <span style="background-color: #dcfce7; color: #15803d; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 0.8rem; display: flex; align-items: center; gap: 4px;">
+                                                <i class="fa-solid fa-spinner fa-spin"></i> En Curso
+                                            </span>
+                                        </div>
+                                        <p style="margin: 0; font-size: 0.85rem; color: #166534;">
+                                            Esta visita está siendo atendida en vivo por el técnico principal <strong>{{ visita.tecnico_principal }}</strong>
+                                            {% if visita.tecnico_apoyo %} en compañía de <strong>{{ visita.tecnico_apoyo }}</strong>{% endif %}.
+                                        </p>
+                                        <div style="margin-top: 12px; text-align: right; display: flex; justify-content: flex-end; gap: 8px;">
+                                            <button type="button" class="btn" style="background-color: #ef4444; padding: 6px 12px; font-size: 0.85rem;" onclick="mostrarFormulario('cancelar', {{ visita.id_visita }})">Forzar Cierre / Cancelar</button>
+                                            <button type="button" class="btn" style="background-color: #6366f1; padding: 6px 12px; font-size: 0.85rem;" onclick="mostrarFormulario('reasignar', {{ visita.id_visita }})">Reasignar Técnico</button>
+                                        </div>
+
+                                        <div id="form-reasignar-{{ visita.id_visita }}" style="display: none; margin-top: 10px; background-color: #e0e7ff; padding: 15px; border-radius: 8px; border: 1px solid #c7d2fe;">
+                                            <form action="/api/visitas/{{ visita.id_visita }}/reasignar" method="POST" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: flex-end;">
+                                                <div>
+                                                    <label style="font-size: 0.8rem; font-weight: bold; color: #3730a3;">Técnico Principal:</label>
+                                                    <select name="tecnico_principal" class="form-control" style="padding: 6px;">
+                                                        {% for tec in tecnicos %}
+                                                            <option value="{{ tec.nombre }}" {% if tec.nombre == visita.tecnico_principal %}selected{% endif %}>{{ tec.nombre }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label style="font-size: 0.8rem; font-weight: bold; color: #3730a3;">Apoyo (Cuadrilla):</label>
+                                                    <select name="tecnico_apoyo" class="form-control" style="padding: 6px;">
+                                                        <option value="">-- Sin Apoyo --</option>
+                                                        {% for tec in tecnicos %}
+                                                            <option value="{{ tec.nombre }}" {% if tec.nombre == visita.tecnico_apoyo %}selected{% endif %}>{{ tec.nombre }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <button type="submit" class="btn" style="background-color: #4338ca; padding: 8px 15px;">Actualizar</button>
+                                            </form>
+                                        </div>
+
+                                        <div id="form-cancelar-{{ visita.id_visita }}"
+                                            style="display: none; margin-top: 10px; background-color: #fee2e2; padding: 15px; border-radius: 8px; border: 1px solid #fca5a5;">
+                                            <form action="/api/visitas/{{ visita.id_visita }}/cancelar" method="POST"
+                                                style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+                                                <div style="flex-grow: 1; min-width: 250px;">
+                                                    <label style="font-size: 0.8rem; font-weight: bold; color: #991b1b;">Motivo / Resolución Final:</label>
+                                                    <input type="text" name="motivo" required placeholder="Ej: Cliente canceló / Se arregló remotamente" class="form-control" style="padding: 6px;">
+                                                </div>
+                                                <div>
+                                                    <label style="font-size: 0.8rem; font-weight: bold; color: #991b1b;">Estado:</label>
+                                                    <select name="estado_cancelacion" required class="form-control" style="padding: 6px; width: auto;">
+                                                        <option value="CANCELADA">Cliente cancela visita</option>
+                                                        <option value="SOLVENTADA_REMOTA">Solventado desde Call Center</option>
+                                                    </select>
+                                                </div>
+                                                <button type="submit" class="btn" style="background-color: #b91c1c; padding: 6px 12px; font-size: 0.85rem;">Confirmar Cierre</button>
+                                            </form>
+                                        </div>
+                                    </div>
+
                                     {% else %}
                                     <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; border: 1px dashed #cbd5e1; margin-top: 15px;">
                                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
