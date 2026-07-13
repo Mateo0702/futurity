@@ -151,8 +151,7 @@ def optimizar_ruta_tecnico(visitas, starting_lat=None, starting_lon=None):
     # Assign sequential orden_tecnico (technician stop sequence)
     for idx, v in enumerate(sorted_visitas, start=1):
         v['orden_tecnico'] = idx
-        if 'numero_parada' not in v:
-            v['numero_parada'] = idx
+        v['numero_parada'] = idx # Sobrescribir para mostrar la parada ordenada secuencialmente en el UI
          
     return sorted_visitas
 

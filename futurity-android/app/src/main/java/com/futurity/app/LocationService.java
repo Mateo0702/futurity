@@ -7,7 +7,11 @@ import android.app.Service;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.content.Context;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
@@ -30,7 +34,8 @@ import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class LocationService extends Service {
+public class
+LocationService extends Service {
     private static final String TAG = "LocationService";
     private static final int NOTIFICATION_ID = 1001;
 
@@ -40,6 +45,9 @@ public class LocationService extends Service {
 
     private String idVisita = "";
     private String serverUrl = "";
+
+    private LocationManager locationManager;
+    private LocationListener nativeLocationListener;
 
     @Override
     public void onCreate() {
@@ -56,6 +64,20 @@ public class LocationService extends Service {
                     postLocation(location.getLatitude(), location.getLongitude());
                 }
             }
+        };
+
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        nativeLocationListener = new LocationListener() {
+            @Override
+            public void onLocationChanged(Location location) {
+                if (location != null) {
+                    Log.d(TAG, "Location updated (LocationManager): " + location.getLatitude() + ", " + location.getLongitude());
+                    postLocation(location.getLatitude(), location.getLongitude());
+                }
+            }
+            @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
+            @Override public void onProviderEnabled(String provider) {}
+            @Override public void onProviderDisabled(String provider) {}
         };
 
         createNotificationChannel();
@@ -84,15 +106,47 @@ public class LocationService extends Service {
     }
 
     private void requestLocationUpdates() {
-        LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 15000) // 15 seconds
-                .setMinUpdateIntervalMillis(10000) // fastest interval 10 seconds
-                .setMinUpdateDistanceMeters(10) // distance filter 10 meters
-                .build();
-
         try {
+            LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 15000) // 15 seconds
+                    .setMinUpdateIntervalMillis(10000) // fastest interval 10 seconds
+                    .setMinUpdateDistanceMeters(10) // distance filter 10 meters
+                    .build();
             fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper());
+            Log.d(TAG, "FusedLocationProviderClient updates requested.");
         } catch (SecurityException e) {
             Log.e(TAG, "Permission denied for location updates: " + e.getMessage());
+        } catch (Exception e) {
+            Log.e(TAG, "Error requesting FusedLocationProviderClient updates: " + e.getMessage());
+        }
+
+        // Register LocationManager as a parallel fallback source
+        try {
+            if (locationManager != null) {
+                if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                    locationManager.requestLocationUpdates(
+                            LocationManager.GPS_PROVIDER, 
+                            15000, 
+                            10, 
+                            nativeLocationListener, 
+                            Looper.getMainLooper()
+                    );
+                    Log.d(TAG, "LocationManager GPS_PROVIDER updates requested.");
+                }
+                if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                    locationManager.requestLocationUpdates(
+                            LocationManager.NETWORK_PROVIDER, 
+                            15000, 
+                            10, 
+                            nativeLocationListener, 
+                            Looper.getMainLooper()
+                    );
+                    Log.d(TAG, "LocationManager NETWORK_PROVIDER updates requested.");
+                }
+            }
+        } catch (SecurityException e) {
+            Log.e(TAG, "Permission denied for LocationManager: " + e.getMessage());
+        } catch (Exception e) {
+            Log.e(TAG, "Error requesting LocationManager updates: " + e.getMessage());
         }
     }
 
@@ -172,6 +226,9 @@ public class LocationService extends Service {
         Log.d(TAG, "Stopping location service");
         if (fusedLocationClient != null && locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
+        }
+        if (locationManager != null && nativeLocationListener != null) {
+            locationManager.removeUpdates(nativeLocationListener);
         }
         if (executorService != null) {
             executorService.shutdown();

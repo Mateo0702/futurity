@@ -412,6 +412,15 @@
         </div>
     </div>
 
+    <!-- TABS NAVIGATION -->
+    <div class="tabs" style="display:flex; justify-content:center; gap:8px; margin-top:10px; margin-bottom: 5px;">
+        <button class="tab-btn active" onclick="switchTab(event, 'tab-general')" style="flex:1; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.06); color:#fff; font-weight:700; cursor:pointer; font-size:0.85rem; transition:all 0.3s ease;">📊 Cuadro Mando</button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab-manana')" style="flex:1; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.02); color:#94a3b8; font-weight:700; cursor:pointer; font-size:0.85rem; transition:all 0.3s ease;">📅 Visitas Mañana ({{ visitas_manana|length }})</button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab-actividades')" style="flex:1; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.02); color:#94a3b8; font-weight:700; cursor:pointer; font-size:0.85rem; transition:all 0.3s ease;">🛠️ Actividades ({{ actividades_tecnicos|length }})</button>
+    </div>
+
+    <!-- MAIN CONTENT WRAPPER -->
+    <div id="tab-general" class="tab-content">
     <!-- MAIN TABLES GRID -->
     <div class="report-grid">
         <!-- Call Center Card -->
@@ -564,6 +573,99 @@
             </div>
         </div>
     </div>
+    </div> <!-- END OF TAB GENERAL -->
+
+    <!-- TAB 2: VISITAS MAÑANA -->
+    <div id="tab-manana" class="tab-content" style="display: none;">
+        <div class="card" style="background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 20px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); margin-bottom: 20px;">
+            <div class="card-header" style="background: #1e3a8a; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-calendar-day" style="font-size: 1.1rem; color: #60a5fa;"></i>
+                <h2 style="font-size: 1rem; font-weight: 700; color: #fff;">Visitas Planificadas para el Día Siguiente</h2>
+            </div>
+            
+            {% if visitas_manana %}
+            <div class="table-responsive" style="overflow-x: auto; width: 100%; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; color: #cbd5e1; background: rgba(255,255,255,0.01);">
+                    <thead>
+                        <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 700; color: #f8fafc;">
+                            <th style="padding: 12px 16px;">#</th>
+                            <th style="padding: 12px 16px;">Cliente</th>
+                            <th style="padding: 12px 16px;">Sector / Zona</th>
+                            <th style="padding: 12px 16px;">Daño / Problema</th>
+                            <th style="padding: 12px 16px; text-align: center;">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for v in visitas_manana %}
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='none'">
+                            <td style="padding: 12px 16px; color: #94a3b8; font-weight: 500;">{{ loop.index }}</td>
+                            <td style="padding: 12px 16px; font-weight: 700; color: #fff;">{{ v.cliente }}</td>
+                            <td style="padding: 12px 16px; color: #cbd5e1;">{{ v.sector or 'No registrado' }}</td>
+                            <td style="padding: 12px 16px; color: #cbd5e1;">{{ v.problema or 'No detallado' }}</td>
+                            <td style="padding: 12px 16px; text-align: center;">
+                                <span style="background: #fef3c7; color: #d97706; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">{{ v.estado }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div style="text-align: center; padding: 40px 20px; color: #94a3b8; font-style: italic;">
+                <i class="fa-solid fa-calendar-xmark" style="font-size: 2.5rem; color: rgba(255,255,255,0.1); margin-bottom: 12px; display: block;"></i>
+                No hay visitas agendadas para el día siguiente.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- TAB 3: ACTIVIDADES REALIZADAS -->
+    <div id="tab-actividades" class="tab-content" style="display: none;">
+        <div class="card" style="background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 20px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); margin-bottom: 20px;">
+            <div class="card-header" style="background: #14532d; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-screwdriver-wrench" style="font-size: 1.1rem; color: #4ade80;"></i>
+                <h2 style="font-size: 1rem; font-weight: 700; color: #fff;">Resumen de Actividades de Técnicos Realizadas Hoy</h2>
+            </div>
+            
+            {% if actividades_tecnicos %}
+            <div class="table-responsive" style="overflow-x: auto; width: 100%; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; color: #cbd5e1; background: rgba(255,255,255,0.01);">
+                    <thead>
+                        <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 700; color: #f8fafc;">
+                            <th style="padding: 12px 16px;">Técnico Principal</th>
+                            <th style="padding: 12px 16px;">Técnico Apoyo</th>
+                            <th style="padding: 12px 16px;">Solución Aplicada</th>
+                            <th style="padding: 12px 16px; text-align: center;">Área</th>
+                            <th style="padding: 12px 16px; text-align: center;">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in actividades_tecnicos %}
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='none'">
+                            <td style="padding: 12px 16px; font-weight: 700; color: #fff;">{{ a.tecnico_principal }}</td>
+                            <td style="padding: 12px 16px; color: #94a3b8;">{{ a.tecnico_apoyo or '-' }}</td>
+                            <td style="padding: 12px 16px; color: #cbd5e1; font-weight: 600;">{{ a.solucion_tecnico }}</td>
+                            <td style="padding: 12px 16px; text-align: center;">
+                                {% if a.es_instalacion == 1 %}
+                                <span style="background: rgba(16,185,129,0.15); color: #10b981; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Instalación</span>
+                                {% else %}
+                                <span style="background: rgba(59,130,246,0.15); color: #3b82f6; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Soporte VT</span>
+                                {% endif %}
+                            </td>
+                            <td style="padding: 12px 16px; text-align: center; font-weight: 700; color: #fff; font-size: 0.95rem;">{{ a.cantidad }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div style="text-align: center; padding: 40px 20px; color: #94a3b8; font-style: italic;">
+                <i class="fa-solid fa-list-check" style="font-size: 2.5rem; color: rgba(255,255,255,0.1); margin-bottom: 12px; display: block;"></i>
+                No se registran actividades finalizadas para el día de hoy.
+            </div>
+            {% endif %}
+        </div>
+    </div>
 
     <!-- FOOTER -->
     <div class="footer">
@@ -694,6 +796,25 @@
         } catch(e) {
             console.error(e);
         }
+
+        // Navegación de Pestañas
+        window.switchTab = function(event, tabId) {
+            event.preventDefault();
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+            document.getElementById(tabId).style.display = 'block';
+            
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                btn.style.background = 'rgba(255, 255, 255, 0.02)';
+                btn.style.color = '#94a3b8';
+                btn.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+            });
+            const activeBtn = event.currentTarget;
+            activeBtn.classList.add('active');
+            activeBtn.style.background = 'rgba(255, 255, 255, 0.06)';
+            activeBtn.style.color = '#fff';
+            activeBtn.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+        };
     });
 </script>
 {% endif %}

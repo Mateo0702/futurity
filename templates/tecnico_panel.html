@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Futurity Nexus - Panel Técnico</title>
+    <title>Futurity Atlas - Panel Técnico</title>
     <link rel="shortcut icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -43,9 +43,9 @@
     <div class="panel-container">
 
         <div class="sidebar-tecnico">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 25px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
-                <img src="/static/img/logo_futurity.png" alt="Logo" style="width: 24px; height: 24px; object-fit: contain;">
-                <span style="font-weight: 800; font-size: 0.95rem; color: #fff; letter-spacing: 0.02em;">Futurity Nexus</span>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 25px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); overflow: hidden; white-space: nowrap;">
+                <img src="/static/img/logo_futurity.png" alt="Logo" style="width: 24px; height: 24px; object-fit: contain; flex-shrink: 0;">
+                <span style="font-weight: 800; font-size: 0.95rem; color: #fff; letter-spacing: 0.02em;">Futurity <span style="background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900;">Atlas</span></span>
             </div>
             <h2>Hola, {{ tecnico }}</h2>
             <p>Tus visitas programadas para hoy</p>
@@ -73,11 +73,17 @@
             <button id="theme-toggle-tecnico" class="theme-btn-tecnico theme-dark" title="Alternar Modo Oscuro">
                 <i class="fa-solid fa-moon"></i> <span>Modo Oscuro</span>
             </button>
+            {% if session.get('user_role') in ['ADMIN', 'ASESOR'] %}
+            <a href="/" class="theme-btn-tecnico" style="background-color: #2563eb; color: #fff; border: none; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;">
+                <i class="fa-solid fa-chart-line"></i> <span>Volver al Dashboard</span>
+            </a>
+            {% endif %}
             <a href="/logout" onclick="localStorage.removeItem('session_token'); localStorage.removeItem('user_id'); localStorage.removeItem('user_role'); localStorage.removeItem('user_name'); if (window.AndroidBridge) { window.AndroidBridge.stopTracking(); }" class="theme-btn-tecnico theme-logout">
                 <i class="fa-solid fa-right-from-bracket"></i> <span>Cerrar Sesión</span>
             </a>
-            <div style="margin-top: 20px; padding: 10px 0 0 0; border-top: 1px solid rgba(255, 255, 255, 0.1); text-align: center; font-size: 0.72rem; color: #94a3b8; opacity: 0.6; font-weight: 500;">
-                <i class="fa-solid fa-code-branch"></i> Versión v{{ app_version }}
+            <div style="margin-top: 20px; padding: 10px 0 0 0; border-top: 1px solid rgba(255, 255, 255, 0.1); text-align: center; font-size: 0.72rem; color: #94a3b8; opacity: 0.7; font-weight: 600; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;">
+                <span><i class="fa-solid fa-bolt" style="color: #60a5fa;"></i> Powered by Atlas</span>
+                <span style="font-size: 0.65rem; opacity: 0.7;"><i class="fa-solid fa-code-branch"></i> Versión v{{ app_version }}</span>
             </div>
         </div>
 
@@ -409,29 +415,64 @@
                             </div>
                         </div>
 
-                        <!-- Sección de Firma del Cliente (Remota) -->
+                        <!-- Sección de Firma / Cierre de Conformidad -->
                         <div style="margin-bottom: 16px; background-color: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
-                            <label style="font-weight: 700; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 8px;">✍️ Firma de Conformidad del Cliente (Remota):</label>
+                            <label style="font-weight: 700; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 8px;">✍️ Método de Conformidad / Firma:</label>
                             
-                            <!-- Indicador de Estado en Tiempo Real -->
-                            <div id="status-firma-container-{{ visita.id_visita }}" style="background: #fffbeb; border: 1px solid #fde68a; padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.82rem; font-weight: 700; color: #b45309; margin-bottom: 12px; transition: all 0.3s ease;">
-                                <i class="fa-solid fa-circle-notch fa-spin"></i>
-                                <span id="txt-status-firma-{{ visita.id_visita }}">Esperando firma remota del cliente...</span>
+                            <select id="metodo-firma-{{ visita.id_visita }}" name="metodo_firma" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: #f8fafc; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 12px;" onchange="cambiarMetodoFirma('{{ visita.id_visita }}')">
+                                <option value="REMOTA">Firma Remota del Cliente (QR / WhatsApp)</option>
+                                <option value="DIRECTA">Firma en el Celular del Técnico (Tercera Edad / Discapacidad)</option>
+                                <option value="SIN_FIRMA">Cierre sin Firma (Trabajo Externo / Cliente Ausente)</option>
+                            </select>
+                            
+                            <!-- 1. Contenedor de Firma Remota -->
+                            <div id="container-firma-remota-{{ visita.id_visita }}">
+                                <!-- Indicador de Estado en Tiempo Real -->
+                                <div id="status-firma-container-{{ visita.id_visita }}" style="background: #fffbeb; border: 1px solid #fde68a; padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.82rem; font-weight: 700; color: #b45309; margin-bottom: 12px; transition: all 0.3s ease;">
+                                    <i class="fa-solid fa-circle-notch fa-spin"></i>
+                                    <span id="txt-status-firma-{{ visita.id_visita }}">Esperando firma remota del cliente...</span>
+                                </div>
+                                
+                                <!-- Imagen de la firma ya guardada (inicialmente oculta) -->
+                                <div id="preview-firma-remota-container-{{ visita.id_visita }}" style="display: none; text-align: center; margin-bottom: 12px; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px;">
+                                    <img id="preview-firma-remota-{{ visita.id_visita }}" style="max-height: 80px; max-width: 100%; border-radius: 4px;">
+                                </div>
+
+                                <!-- Botones de Acción -->
+                                <div style="display: flex; gap: 8px;">
+                                    <button type="button" class="btn-wa" style="flex: 1; padding: 10px; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; color: white;" onclick="enviarLinkFirmaWhatsApp('{{ visita.telefonos }}', '{{ tecnico }}', '{{ visita.token_rastreo }}')">
+                                        <i class="fa-brands fa-whatsapp" style="font-size: 1.15rem;"></i> Enviar Enlace
+                                    </button>
+                                    <button type="button" class="btn-gps" style="flex: 1; padding: 10px; font-size: 0.8rem; margin-top: 0; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); border: none; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; color: white;" onclick="mostrarQRDeFirma('{{ visita.token_rastreo }}', '{{ visita.cliente }}')">
+                                        <i class="fa-solid fa-qrcode" style="font-size: 1.15rem;"></i> Código QR
+                                    </button>
+                                </div>
                             </div>
                             
-                            <!-- Imagen de la firma ya guardada (inicialmente oculta) -->
-                            <div id="preview-firma-remota-container-{{ visita.id_visita }}" style="display: none; text-align: center; margin-bottom: 12px; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px;">
-                                <img id="preview-firma-remota-{{ visita.id_visita }}" style="max-height: 80px; max-width: 100%; border-radius: 4px;">
+                            <!-- 2. Contenedor de Firma Directa (Celular del Técnico) -->
+                            <div id="container-firma-directa-{{ visita.id_visita }}" style="display: none; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center;">
+                                <span style="font-size: 0.8rem; font-weight: 700; color: #475569; display: block; margin-bottom: 8px; text-align: left;">✍️ Dibuje la firma del cliente sobre la pantalla:</span>
+                                <canvas id="canvas-firma-{{ visita.id_visita }}" width="300" height="150" style="border: 1px dashed #94a3b8; width: 100%; height: 150px; cursor: crosshair; border-radius: 6px; touch-action: none; background: #fafafa;"></canvas>
+                                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                                    <button type="button" class="btn-gps" style="flex: 1; padding: 8px; font-size: 0.8rem; background: #64748b; margin-top: 0;" onclick="limpiarCanvasFirma('{{ visita.id_visita }}')">
+                                        <i class="fa-solid fa-eraser"></i> Limpiar
+                                    </button>
+                                    <button type="button" class="btn-gps" style="flex: 1; padding: 8px; font-size: 0.8rem; background: #10b981; margin-top: 0;" onclick="guardarFirmaDirecta('{{ visita.id_visita }}', '{{ visita.token_rastreo }}')">
+                                        <i class="fa-solid fa-circle-check"></i> Guardar Firma
+                                    </button>
+                                </div>
                             </div>
 
-                            <!-- Botones de Acción -->
-                            <div style="display: flex; gap: 8px;">
-                                <button type="button" class="btn-wa" style="flex: 1; padding: 10px; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; color: white;" onclick="enviarLinkFirmaWhatsApp('{{ visita.telefonos }}', '{{ tecnico }}', '{{ visita.token_rastreo }}')">
-                                    <i class="fa-brands fa-whatsapp" style="font-size: 1.15rem;"></i> Enviar Enlace
-                                </button>
-                                <button type="button" class="btn-gps" style="flex: 1; padding: 10px; font-size: 0.8rem; margin-top: 0; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); border: none; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; color: white;" onclick="mostrarQRDeFirma('{{ visita.token_rastreo }}', '{{ visita.cliente }}')">
-                                    <i class="fa-solid fa-qrcode" style="font-size: 1.15rem;"></i> Código QR
-                                </button>
+                            <!-- 3. Contenedor de Cierre sin Firma -->
+                            <div id="container-cierre-sin-firma-{{ visita.id_visita }}" style="display: none; background: rgba(255,255,255,0.02); padding: 10px; border-radius: 8px; border: 1px solid var(--border-color);">
+                                <label style="font-weight: 700; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 8px;">⚠️ Motivo de Cierre sin Firma:</label>
+                                <select id="motivo-sin-firma-{{ visita.id_visita }}" name="motivo_sin_firma" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: #f8fafc; font-size: 0.8rem; font-weight: 600; color: #334155;">
+                                    <option value="TRABAJO_EXTERNO">Trabajo Externo (Caja de Distribución / Poste)</option>
+                                    <option value="CLIENTE_AUSENTE">Cliente Ausente / No contesta</option>
+                                    <option value="SOPORTE_REMOTO">Soporte Remoto / Configuración Lógica</option>
+                                    <option value="TERCERA_EDAD_DISCAPACIDAD_SIN_FIRMA">Cliente de Tercera Edad / Discapacidad (No puede firmar)</option>
+                                    <option value="OTROS">Otros (Especificar en observación)</option>
+                                </select>
                             </div>
                             
                             <!-- Campo hidden para registrar si está firmada en el DOM -->
@@ -835,6 +876,11 @@
         // --- 1.4. RASTREO SATELITAL GLOBAL DE LA JORNADA ---
         window.recibirUbicacionNativa = function(tipo, lat, lon) {
             if (tipo === 'global') {
+                // Si recibimos respuesta nativa exitosa, cancelamos el fallback HTML5 programado para este tick
+                if (window.ultimoTimeoutGlobal) {
+                    clearTimeout(window.ultimoTimeoutGlobal);
+                    window.ultimoTimeoutGlobal = null;
+                }
                 const txtEstado = document.getElementById('txt-estado-jornada');
                 if (txtEstado && txtEstado.classList.contains('descanso')) {
                     console.log("El técnico está en descanso. Saltando ping global nativo.");
@@ -866,50 +912,56 @@
 
         let intervaloRastreoGlobal = null;
         function iniciarRastreoGlobal() {
-            if (window.AndroidBridge) {
-                function enviarPingGlobalNativo() {
-                    const txtEstado = document.getElementById('txt-estado-jornada');
-                    if (txtEstado && txtEstado.classList.contains('descanso')) {
-                        console.log("El técnico está en descanso. Saltando ping global nativo.");
-                        return;
-                    }
-                    window.AndroidBridge.requestSingleLocation("global");
+            function ejecutarPingHibrido() {
+                const txtEstado = document.getElementById('txt-estado-jornada');
+                if (txtEstado && txtEstado.classList.contains('descanso')) {
+                    console.log("El técnico está en descanso. Saltando ping.");
+                    return;
                 }
-                enviarPingGlobalNativo();
-                intervaloRastreoGlobal = setInterval(enviarPingGlobalNativo, 20000);
-                return;
+
+                let fallbackTimeout = null;
+
+                if (window.AndroidBridge) {
+                    console.log("Intentando ping global nativo...");
+                    window.AndroidBridge.requestSingleLocation("global");
+                    
+                    // Si en 5 segundos la app nativa no responde, forzamos fallback a HTML5
+                    fallbackTimeout = setTimeout(() => {
+                        console.log("La app nativa no respondió a tiempo para ping global. Usando fallback HTML5.");
+                        solicitarPingHTML5();
+                    }, 5000);
+                    
+                    window.ultimoTimeoutGlobal = fallbackTimeout;
+                } else {
+                    solicitarPingHTML5();
+                }
+
+                function solicitarPingHTML5() {
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                            function (position) {
+                                console.log("Enviando ping global (HTML5 Fallback/Web):", position.coords.latitude, position.coords.longitude);
+                                fetch('/api/tecnico/ping_global', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ latitud: position.coords.latitude, longitud: position.coords.longitude })
+                                })
+                                .catch(err => console.log("Error de conexión ping global HTML5:", err));
+                            },
+                            function (error) {
+                                console.log("Error GPS ping global HTML5:", error.message);
+                            },
+                            { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+                        );
+                    }
+                }
             }
 
-            if (navigator.geolocation) {
-                function enviarPingGlobal() {
-                    const txtEstado = document.getElementById('txt-estado-jornada');
-                    if (txtEstado && txtEstado.classList.contains('descanso')) {
-                        console.log("El técnico está en descanso. Saltando ping global web.");
-                        return;
-                    }
-                    navigator.geolocation.getCurrentPosition(
-                        function (position) {
-                            console.log("Enviando ping global:", position.coords.latitude, position.coords.longitude);
-                            fetch('/api/tecnico/ping_global', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ latitud: position.coords.latitude, longitud: position.coords.longitude })
-                            })
-                            .catch(err => console.log("Error de conexión ping global:", err));
-                        },
-                        function (error) {
-                            console.log("Error GPS ping global:", error.message);
-                        },
-                        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-                    );
-                }
-                
-                // Enviar inmediatamente
-                enviarPingGlobal();
-                
-                // Bucle de ping global cada 20 segundos
-                intervaloRastreoGlobal = setInterval(enviarPingGlobal, 20000);
-            }
+            // Ejecutar inmediatamente
+            ejecutarPingHibrido();
+
+            // Bucle cada 20 segundos
+            intervaloRastreoGlobal = setInterval(ejecutarPingHibrido, 20000);
         }
         
         // Iniciar el rastreo global del técnico al cargar la página
@@ -1302,7 +1354,6 @@
             }
         }
 
-        // --- 3. GPS PARA CIERRE DE VISITA (El que ya tenías) ---
         function capturarGPS(idVisita) {
             const inputCoords = document.getElementById(`coords-${idVisita}`);
             const btn = document.getElementById(`btn-gps-${idVisita}`);
@@ -1310,28 +1361,58 @@
             btn.innerHTML = "⏳ Calculando satélites...";
             btn.disabled = true;
 
+            let timeoutNativo = null;
+
             if (window.AndroidBridge) {
+                // Si en 5 segundos no se ha llenado el campo de coordenadas, usamos el fallback HTML5
+                timeoutNativo = setTimeout(() => {
+                    if (inputCoords.value === "") {
+                        console.warn("⚠️ GPS Nativo tardó demasiado. Iniciando fallback HTML5 Geolocation...");
+                        intentarGPSHtml5();
+                    }
+                }, 5000);
+
                 window.AndroidBridge.stopTracking();
                 window.AndroidBridge.requestSingleLocation(idVisita.toString());
+                
+                // Sobrescribimos temporalmente recibirUbicacionNativa para limpiar el timeout si llega a tiempo
+                const originalRecibir = window.recibirUbicacionNativa;
+                window.recibirUbicacionNativa = function(tipo, lat, lon) {
+                    if (tipo.toString() === idVisita.toString()) {
+                        clearTimeout(timeoutNativo);
+                        // Restauramos original
+                        window.recibirUbicacionNativa = originalRecibir;
+                    }
+                    originalRecibir(tipo, lat, lon);
+                };
                 return;
             }
 
-            if (navigator.geolocation) {
-                if (intervaloRastreo !== null) clearInterval(intervaloRastreo);
+            intentarGPSHtml5();
 
-                navigator.geolocation.getCurrentPosition(
-                    function (position) {
-                        inputCoords.value = `${position.coords.latitude}, ${position.coords.longitude}`;
-                        btn.innerHTML = "✓ GPS Capturado con éxito";
-                        btn.style.backgroundColor = "#10b981";
-                    },
-                    function (error) {
-                        alert("Error al obtener ubicación. Active el GPS.");
-                        btn.innerHTML = textoOriginal;
-                        btn.disabled = false;
-                    },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                );
+            function intentarGPSHtml5() {
+                if (navigator.geolocation) {
+                    if (intervaloRastreo !== null) clearInterval(intervaloRastreo);
+
+                    navigator.geolocation.getCurrentPosition(
+                        function (position) {
+                            inputCoords.value = `${position.coords.latitude}, ${position.coords.longitude}`;
+                            btn.innerHTML = "✓ GPS Capturado con éxito";
+                            btn.style.backgroundColor = "#10b981";
+                            btn.disabled = false;
+                        },
+                        function (error) {
+                            alert("Error al obtener ubicación. Asegúrese de activar el GPS y la ubicación de su teléfono.");
+                            btn.innerHTML = textoOriginal;
+                            btn.disabled = false;
+                        },
+                        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+                    );
+                } else {
+                    alert("Su dispositivo no soporta geolocalización. Intente recargar.");
+                    btn.innerHTML = textoOriginal;
+                    btn.disabled = false;
+                }
             }
         }
 
@@ -1684,9 +1765,10 @@
                 }
 
                 // 1. Validar firma del cliente remota
+                const metodoFirma = document.getElementById(`metodo-firma-${idVisita}`).value;
                 const valFirmaRecibida = document.getElementById(`firma-recibida-val-${idVisita}`);
-                if (!valFirmaRecibida || valFirmaRecibida.value !== '1') {
-                    alert("Por favor, solicite y espere a que el cliente complete la firma remota antes de finalizar.");
+                if (metodoFirma !== 'SIN_FIRMA' && (!valFirmaRecibida || valFirmaRecibida.value !== '1')) {
+                    alert("Por favor, registre la firma de conformidad del cliente antes de finalizar.");
                     return;
                 }
 
@@ -1780,6 +1862,139 @@
             document.getElementById('modalQR').style.display = 'none';
         }
 
+        // --- NUEVAS FUNCIONES DE FIRMA Y CIERRE ---
+        function cambiarMetodoFirma(idVisita) {
+            const metodo = document.getElementById(`metodo-firma-${idVisita}`).value;
+            const remota = document.getElementById(`container-firma-remota-${idVisita}`);
+            const directa = document.getElementById(`container-firma-directa-${idVisita}`);
+            const sinFirma = document.getElementById(`container-cierre-sin-firma-${idVisita}`);
+            const valFirma = document.getElementById(`firma-recibida-val-${idVisita}`);
+
+            if (metodo === 'REMOTA') {
+                remota.style.display = 'block';
+                directa.style.display = 'none';
+                sinFirma.style.display = 'none';
+                consultarFirmaVisita(idVisita);
+            } else if (metodo === 'DIRECTA') {
+                remota.style.display = 'none';
+                directa.style.display = 'block';
+                sinFirma.style.display = 'none';
+                valFirma.value = '0';
+                inicializarCanvasFirma(idVisita);
+            } else if (metodo === 'SIN_FIRMA') {
+                remota.style.display = 'none';
+                directa.style.display = 'none';
+                sinFirma.style.display = 'block';
+                valFirma.value = '1';
+            }
+        }
+
+        function inicializarCanvasFirma(idVisita) {
+            const canvas = document.getElementById(`canvas-firma-${idVisita}`);
+            if (!canvas) return;
+            
+            if (canvas.dataset.initialized === 'true') return;
+            canvas.dataset.initialized = 'true';
+            
+            const ctx = canvas.getContext('2d');
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            
+            let drawing = false;
+            let lastX = 0;
+            let lastY = 0;
+            
+            function getCoordinates(e) {
+                const rect = canvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * (canvas.width / rect.width),
+                    y: (clientY - rect.top) * (canvas.height / rect.height)
+                };
+            }
+            
+            function startDrawing(e) {
+                drawing = true;
+                const coords = getCoordinates(e);
+                lastX = coords.x;
+                lastY = coords.y;
+                e.preventDefault();
+            }
+            
+            function draw(e) {
+                if (!drawing) return;
+                const coords = getCoordinates(e);
+                ctx.beginPath();
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(coords.x, coords.y);
+                ctx.stroke();
+                lastX = coords.x;
+                lastY = coords.y;
+                e.preventDefault();
+            }
+            
+            function stopDrawing() {
+                drawing = false;
+            }
+            
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseleave', stopDrawing);
+            
+            canvas.addEventListener('touchstart', startDrawing, { passive: false });
+            canvas.addEventListener('touchmove', draw, { passive: false });
+            canvas.addEventListener('touchend', stopDrawing);
+        }
+
+        function limpiarCanvasFirma(idVisita) {
+            const canvas = document.getElementById(`canvas-firma-${idVisita}`);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function guardarFirmaDirecta(idVisita, token) {
+            const canvas = document.getElementById(`canvas-firma-${idVisita}`);
+            if (!canvas) return;
+            
+            const dataUrl = canvas.toDataURL('image/png');
+            
+            const btn = event.currentTarget;
+            const origText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+            
+            fetch(`/api/cliente/firmar/${token}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ firma_base64: dataUrl })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    document.getElementById(`firma-recibida-val-${idVisita}`).value = '1';
+                    document.getElementById(`metodo-firma-${idVisita}`).value = 'REMOTA';
+                    cambiarMetodoFirma(idVisita);
+                    alert("Firma del cliente guardada con éxito.");
+                } else {
+                    alert("Error al guardar firma: " + data.message);
+                }
+            })
+            .catch(err => {
+                console.error("Error al enviar firma directa:", err);
+                alert("Error de red al guardar la firma.");
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = origText;
+            });
+        }
+
         function consultarFirmaVisita(idVisita) {
             fetch(`/api/tecnico/verificar_firma/${idVisita}`)
                 .then(res => res.json())
@@ -1822,9 +2037,18 @@
             const valInputs = document.querySelectorAll('input[id^="firma-recibida-val-"]');
             valInputs.forEach(input => {
                 const idVisita = input.id.replace('firma-recibida-val-', '');
-                consultarFirmaVisita(idVisita);
+                
+                const selectMetodo = document.getElementById(`metodo-firma-${idVisita}`);
+                const metodo = selectMetodo ? selectMetodo.value : 'REMOTA';
+                if (metodo === 'REMOTA') {
+                    consultarFirmaVisita(idVisita);
+                }
                 
                 setInterval(() => {
+                    const sel = document.getElementById(`metodo-firma-${idVisita}`);
+                    const m = sel ? sel.value : 'REMOTA';
+                    if (m !== 'REMOTA') return;
+                    
                     const valEl = document.getElementById(`firma-recibida-val-${idVisita}`);
                     const yaFirmado = valEl && valEl.value === '1';
                     if (!yaFirmado) {

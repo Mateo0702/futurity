@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Futurity Nexus - Acceso al Sistema</title>
+    <title>Futurity Atlas - Acceso al Sistema</title>
     <link rel="shortcut icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ app_version }}">
     <script>
         (function() {
             // Limpiar localStorage si el token fue invalidado
@@ -55,7 +55,7 @@
                         </defs>
                     </svg>
                 </div>
-                <h1 class="login-left-title">Futurity Nexus</h1>
+                <h1 class="login-left-title" style="font-weight: 800; color: white;">Futurity <span style="background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900;">Atlas</span></h1>
                 <p class="login-left-desc">Optimización inteligente de rutas, monitoreo en vivo y control de calidad.</p>
             </div>
 
@@ -98,11 +98,12 @@
         <div class="login-split-right">
             
             <div class="login-right-header">
-                <div class="login-logo-wrapper">
-                    <img src="{{ url_for('static', filename='img/logo_futurity.png') }}" alt="Futurity Logo" class="login-brand-logo">
+                <div class="login-logo-wrapper" style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 20px;">
+                    <img src="{{ url_for('static', filename='img/logo_futurity.png') }}" alt="Futurity Logo" style="height: 48px; object-fit: contain;">
+                    <span style="font-size: 1.5rem; font-weight: 800; color: #0f172a;">Futurity <span style="background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900;">Atlas</span></span>
                 </div>
                 <h2>Portal Administrativo</h2>
-                <p>Inicia sesión en Futurity Nexus para continuar</p>
+                <p>Inicia sesión para acceder al centro de control</p>
             </div>
 
             <div>
@@ -167,12 +168,13 @@
                         <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
                         <line x1="12" y1="18" x2="12.01" y2="18"></line>
                     </svg>
-                    Descargar App Futurity Nexus
+                    Descargar App Futurity Atlas
                 </a>
             </div>
 
-            <div style="text-align: center; margin-top: 35px; padding-top: 15px; border-top: 1px solid #f1f5f9; font-size: 0.72rem; color: #94a3b8; font-weight: 500;">
-                Futurity Portal • Versión v{{ app_version }}
+            <div style="text-align: center; margin-top: 35px; padding-top: 15px; border-top: 1px solid #f1f5f9; font-size: 0.72rem; color: #94a3b8; font-weight: 600; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;">
+                <span><i class="fa-solid fa-bolt" style="color: #2563eb;"></i> Powered by Atlas Enterprise</span>
+                <span style="font-size: 0.65rem; opacity: 0.7;">Futurity Portal • Versión v{{ app_version }}</span>
             </div>
 
         </div>

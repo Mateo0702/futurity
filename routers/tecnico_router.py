@@ -306,6 +306,9 @@ def finalizar_visita(id_visita):
     router = request.form.get('modelo_router')
     coordenadas = request.form.get('coordenadas_tecnico')
     
+    metodo_firma = request.form.get('metodo_firma', 'REMOTA')
+    motivo_sin_firma = request.form.get('motivo_sin_firma', '')
+    
     # Captura de fotos y firma
     equipos_juntos = request.form.get('equipos_juntos')  # '1' o '0'
     equipos_juntos_val = 1 if equipos_juntos == '1' else 0
@@ -360,12 +363,23 @@ def finalizar_visita(id_visita):
     conexion = get_db_connection()
     cursor = conexion.cursor(dictionary=True)
     try:
-        # Validar la firma del cliente (enviada ahora o guardada previamente de manera remota)
-        cursor.execute("SELECT firma_cliente FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
-        firma_row = cursor.fetchone()
-        firma_existente = firma_row['firma_cliente'] if (firma_row and firma_row['firma_cliente']) else None
-        
-        firma_final_filename = firma_cliente_filename or firma_existente
+        # Validar la firma del cliente (enviada ahora o guardada de manera remota)
+        if metodo_firma == 'SIN_FIRMA':
+            motivos_map = {
+                'TRABAJO_EXTERNO': 'Trabajo Externo (Caja de Distribución / Poste)',
+                'CLIENTE_AUSENTE': 'Cliente Ausente / No contesta',
+                'SOPORTE_REMOTO': 'Soporte Remoto / Configuración Lógica',
+                'TERCERA_EDAD_DISCAPACIDAD_SIN_FIRMA': 'Cliente de Tercera Edad / Discapacidad (No puede firmar)',
+                'OTROS': 'Otros'
+            }
+            motivo_texto = motivos_map.get(motivo_sin_firma, motivo_sin_firma or 'No especificado')
+            firma_final_filename = f"SIN_FIRMA: {motivo_texto}"
+        else:
+            cursor.execute("SELECT firma_cliente FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+            firma_row = cursor.fetchone()
+            firma_existente = firma_row['firma_cliente'] if (firma_row and firma_row['firma_cliente']) else None
+            firma_final_filename = firma_cliente_filename or firma_existente
+            
         if not firma_final_filename:
             raise Exception("No se puede finalizar la visita sin la firma de conformidad del cliente.")
 

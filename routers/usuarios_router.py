@@ -224,9 +224,8 @@ def toggle_usuario(id_usuario):
 
 @usuarios_bp.route('/api/admin/tecnicos', methods=['GET'])
 def list_tecnicos():
-    is_admin, response, status = check_admin_privileges()
-    if not is_admin:
-        return response, status
+    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para ver la lista de técnicos."}), 403
 
     conn = get_db_connection()
     if not conn:

@@ -2094,17 +2094,9 @@ def preview_cuadro_mando():
         # 4. KPIs de Visitas Técnicas de Campo (derecha)
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE fecha_programada < %s AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA', 'REAGENDADA')
-        """, (fecha,))
+            WHERE fecha_programada = %s AND DATE(fecha_registro) < %s AND (estado != 'CANCELADA' OR estado IS NULL)
+        """, (fecha, fecha))
         kpi_pendientes_anteriores = cursor.fetchone()['total'] or 0
-        
-        cursor.execute("""
-            SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE DATE(fecha_registro) = %s
-        """, (fecha,))
-        kpi_generadas_hoy = cursor.fetchone()['total'] or 0
-        
-        kpi_total_carga = kpi_pendientes_anteriores + kpi_generadas_hoy
         
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
@@ -2126,9 +2118,12 @@ def preview_cuadro_mando():
         manana = (fecha_dt + timedelta(days=1)).isoformat()
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE fecha_programada = %s AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
+            WHERE fecha_programada = %s AND (estado != 'CANCELADA' OR estado IS NULL)
         """, (manana,))
         kpi_pendientes_manana = cursor.fetchone()['total'] or 0
+        
+        kpi_generadas_hoy = max(0, kpi_atendidas_hoy + kpi_pendientes_manana - kpi_pendientes_anteriores)
+        kpi_total_carga = kpi_pendientes_anteriores + kpi_generadas_hoy
         
         # 5. Listados de problemas / soluciones
         cursor.execute("""
@@ -2237,12 +2232,39 @@ def get_cuadro_mando_share_link():
         return jsonify({"status": "error", "message": "Fecha requerida"}), 400
         
     import hashlib
+    import os
+    import glob
+    import re
     from flask import current_app
+    
     secret = current_app.secret_key or "fallback_secret_salt_futurity_2026"
     token = hashlib.sha256(f"{fecha}_{secret}".encode('utf-8')).hexdigest()[:16]
     
-    public_url = f"{request.host_url}publico/cuadro_mando/{fecha}/{token}"
-    
+    # Intentar detectar dinámicamente el dominio activo de Cloudflare en los logs
+    cf_domain = None
+    base_dir = r"C:\Users\Operaciones\.gemini\antigravity-ide\brain"
+    if os.path.exists(base_dir):
+        log_files = glob.glob(os.path.join(base_dir, "*", ".system_generated", "tasks", "*.log"))
+        if log_files:
+            log_files.sort(key=os.path.getmtime, reverse=True)
+            for filepath in log_files:
+                try:
+                    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read()
+                        matches = re.findall(r"https://[a-zA-Z0-9\-]+\.trycloudflare\.com", content)
+                        if matches:
+                            cf_domain = matches[-1]
+                            break
+                except Exception:
+                    continue
+                    
+    if cf_domain:
+        if not cf_domain.endswith("/"):
+            cf_domain += "/"
+        public_url = f"{cf_domain}publico/cuadro_mando/{fecha}/{token}"
+    else:
+        public_url = f"{request.host_url}publico/cuadro_mando/{fecha}/{token}"
+        
     return jsonify({
         "status": "ok",
         "url": public_url
@@ -2341,15 +2363,9 @@ def download_excel_cuadro_mando():
         # 2. KPIs de Visitas Técnicas de Campo
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE fecha_programada < %s AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA', 'REAGENDADA')
-        """, (fecha,))
+            WHERE fecha_programada = %s AND DATE(fecha_registro) < %s AND (estado != 'CANCELADA' OR estado IS NULL)
+        """, (fecha, fecha))
         kpi_pendientes_anteriores = cursor.fetchone()['total'] or 0
-        
-        cursor.execute("""
-            SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE DATE(fecha_registro) = %s
-        """, (fecha,))
-        kpi_generadas_hoy = cursor.fetchone()['total'] or 0
         
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
@@ -2371,9 +2387,12 @@ def download_excel_cuadro_mando():
         manana = (fecha_dt + timedelta(days=1)).isoformat()
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE fecha_programada = %s AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
+            WHERE fecha_programada = %s AND (estado != 'CANCELADA' OR estado IS NULL)
         """, (manana,))
         kpi_pendientes_manana = cursor.fetchone()['total'] or 0
+        
+        kpi_generadas_hoy = max(0, kpi_atendidas_hoy + kpi_pendientes_manana - kpi_pendientes_anteriores)
+        kpi_total_carga = kpi_pendientes_anteriores + kpi_generadas_hoy
         
         # Listados de problemas / soluciones
         cursor.execute("""

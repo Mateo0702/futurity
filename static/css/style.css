@@ -2961,3 +2961,63 @@ body.dark-mode .glow-teal:hover {
 .custom-transition {
   transition: all 0.2s ease-in-out;
 }
+
+/* Botón de panel técnico híbrido en el pie del menú lateral */
+.hybrid-panel-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 15px;
+  border-radius: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, var(--primary) 0%, #1d4ed8 100%);
+  color: white;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+  font-size: 0.85rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.hybrid-panel-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(37, 99, 235, 0.3);
+}
+
+.hybrid-panel-btn i {
+  font-size: 1.1rem;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.hybrid-panel-btn span {
+  transition: opacity 0.2s ease, max-width 0.2s ease;
+  opacity: 1;
+  max-width: 150px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Adaptación del botón cuando el menú lateral está contraído */
+.sidebar.collapsed .hybrid-panel-btn {
+  justify-content: center;
+  padding: 10px 0;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 12px;
+}
+
+.sidebar.collapsed .hybrid-panel-btn span {
+  opacity: 0;
+  max-width: 0;
+  display: none;
+}
+
+/* Ocultar el ícono de ojo revelar contraseña nativo de Edge y otros navegadores */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none !important;
+}

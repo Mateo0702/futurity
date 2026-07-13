@@ -372,7 +372,7 @@ def cambiar_password():
 def descargar_app():
     try:
         # URL de descarga directa basada en cómo se conecta el usuario
-        download_url = request.url_root + "static/app/futurity_nexus.apk"
+        download_url = request.url_root + "static/app/futurity_atlas.apk"
         
         # Generar código QR dinámico
         qr = qrcode.QRCode(
@@ -606,6 +606,19 @@ def dashboard():
         else:
             r['hora_fin_str'] = None
 
+    # Verificar si el usuario actual (ADMIN o ASESOR) es también un técnico activo
+    nombre_usuario = session.get('user_name', '')
+    es_tecnico_activo = False
+    if nombre_usuario:
+        try:
+            cursor_tec = conexion.cursor()
+            cursor_tec.execute("SELECT 1 FROM tecnicos WHERE nombre = %s AND activo = 1", (nombre_usuario,))
+            if cursor_tec.fetchone():
+                es_tecnico_activo = True
+            cursor_tec.close()
+        except Exception as e:
+            print(f"Error checking if user is active tech: {e}")
+
     # Pasamos las nuevas variables al template
     return render_template('index.html', 
                            visitas=visitas, 
@@ -617,6 +630,7 @@ def dashboard():
                            problemas=obtener_problemas_activos(),
                            asesor=session.get('user_name', 'Asesor'),
                            recordatorios_hoy=recordatorios_hoy,
+                           es_tecnico_activo=es_tecnico_activo,
                            # Variables para gráficos:
                            labels_barras=labels_barras, val_barras=valores_barras,
                            labels_prob=labels_prob, val_prob=valores_prob,
