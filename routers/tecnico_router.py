@@ -428,13 +428,13 @@ def finalizar_visita(id_visita):
             # Obtener el nombre del técnico principal de esta visita
             cursor.execute("SELECT tecnico_principal FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
             tec_row = cursor.fetchone()
-            tecnico_nombre = tec_row[0] if tec_row else None
+            tecnico_nombre = tec_row['tecnico_principal'] if tec_row else None
             
             placa_vehiculo = 'S/P'
             if tecnico_nombre:
                 cursor.execute("SELECT placa_vehiculo FROM tecnicos WHERE nombre = %s", (tecnico_nombre,))
                 placa_row = cursor.fetchone()
-                placa_vehiculo = placa_row[0] if (placa_row and placa_row[0]) else 'S/P'
+                placa_vehiculo = placa_row['placa_vehiculo'] if (placa_row and placa_row['placa_vehiculo']) else 'S/P'
             
             query_materiales = """
                 INSERT INTO visitas_materiales (id_visita, id_material, cantidad_usada)
