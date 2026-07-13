@@ -272,6 +272,36 @@
                                 <div
                                     style="margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 15px; text-align: right;">
 
+                                    <button type="button" class="btn"
+                                        style="background-color: #0f172a; padding: 6px 12px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 4px; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold; margin-bottom: 5px; margin-right: 5px;"
+                                        onclick="abrirModalEditar(
+                                            '{{ visita.id_visita }}',
+                                            '{{ (visita.cliente or \"\") | escape }}',
+                                            '{{ (visita.contrato or \"\") | escape }}',
+                                            '{{ (visita.telefonos or \"\") | escape }}',
+                                            '{{ (visita.sector or \"\") | escape }}',
+                                            '{{ (visita.direccion or \"\") | escape }}',
+                                            '{{ (visita.latitud or \"\") }}',
+                                            '{{ (visita.longitud or \"\") }}',
+                                            '{{ (visita.preferencia_horaria or \"\") | escape }}',
+                                            '{{ (visita.servicio or \"\") | escape }}',
+                                            '{{ (visita.velocidad_mbps or \"\") }}',
+                                            '{{ (visita.problema or \"\") | escape }}',
+                                            '{{ (visita.observacion_callcenter or \"\") | escape }}',
+                                            '{{ (visita.info_caja or \"\") | escape }}',
+                                            '{{ (visita.info_hilo or \"\") | escape }}',
+                                            '{{ (visita.info_ip or \"\") | escape }}',
+                                            '{{ (visita.info_vlan or \"\") | escape }}',
+                                            '{{ (visita.info_usr or \"\") | escape }}',
+                                            '{{ (visita.info_pas or \"\") | escape }}',
+                                            '{{ (visita.tecnico_principal or \"\") | escape }}',
+                                            '{{ (visita.tecnico_apoyo or \"\") | escape }}',
+                                            '{{ (visita.estado or \"\") }}',
+                                            '{{ (visita.fecha_programada or \"\") }}'
+                                        )">
+                                        <i class="fa-solid fa-pen-to-square"></i> Editar Visita
+                                    </button>
+
                                     {% if visita.estado in ['PENDIENTE', 'REAGENDADA'] %}
                                     <button type="button" class="btn"
                                         style="background-color: #ef4444; padding: 6px 12px; font-size: 0.85rem;"
@@ -703,4 +733,190 @@
 
         window.open(`https://api.whatsapp.com/send/?phone=${tel}&text=${encodeURIComponent(mensaje)}`, '_blank');
     }
+
+    function abrirModalEditar(id, cliente, contrato, telefonos, sector, direccion, lat, lon, preferencia, servicio, velocidad, problema, obsCall, caja, hilo, ip, vlan, usr, pas, tecnico, apoyo, estado, fecha) {
+        document.getElementById('edit-titulo-id').innerText = id;
+        document.getElementById('edit-id-visita').value = id;
+        document.getElementById('edit-cliente').value = cliente;
+        document.getElementById('edit-contrato').value = contrato;
+        document.getElementById('edit-telefonos').value = telefonos;
+        document.getElementById('edit-sector').value = sector;
+        document.getElementById('edit-direccion').value = direccion;
+        document.getElementById('edit-latitud').value = lat;
+        document.getElementById('edit-longitud').value = lon;
+        document.getElementById('edit-preferencia-horaria').value = preferencia;
+        document.getElementById('edit-servicio').value = servicio;
+        document.getElementById('edit-velocidad-mbps').value = velocidad;
+        document.getElementById('edit-problema').value = problema;
+        document.getElementById('edit-observacion-callcenter').value = obsCall;
+        document.getElementById('edit-info-caja').value = caja;
+        document.getElementById('edit-info-hilo').value = hilo;
+        document.getElementById('edit-info-ip').value = ip;
+        document.getElementById('edit-info-vlan').value = vlan;
+        document.getElementById('edit-info-usr').value = usr;
+        document.getElementById('edit-info-pas').value = pas;
+        document.getElementById('edit-estado').value = estado;
+        document.getElementById('edit-fecha-programada').value = fecha;
+        document.getElementById('edit-tecnico-principal').value = tecnico;
+        
+        document.getElementById('form-editar-visita').action = `/api/admin/visitas/${id}/editar`;
+        document.getElementById('modalEditarVisita').style.display = 'flex';
+    }
+
+    function cerrarModalEditar() {
+        document.getElementById('modalEditarVisita').style.display = 'none';
+    }
 </script>
+
+<!-- Modal para Editar Visita -->
+<div id="modalEditarVisita" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 10000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+    <div style="background-color: var(--card-bg); border-radius: 12px; max-width: 700px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); padding: 25px; display: flex; flex-direction: column; gap: 15px; max-height: 90vh; overflow-y: auto; text-align: left;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+            <h3 style="margin: 0; color: var(--primary); font-size: 1.25rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-pen-to-square"></i> Editar Detalle de Visita #<span id="edit-titulo-id"></span>
+            </h3>
+            <button type="button" onclick="cerrarModalEditar()" style="background: none; border: none; font-size: 2rem; cursor: pointer; color: #94a3b8; line-height: 1; padding: 0;">&times;</button>
+        </div>
+        
+        <form id="form-editar-visita" method="POST" style="display: flex; flex-direction: column; gap: 15px; margin: 0;">
+            <input type="hidden" name="id_visita" id="edit-id-visita">
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Cliente:</label>
+                    <input type="text" name="cliente" id="edit-cliente" class="form-control" required style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Contrato:</label>
+                    <input type="text" name="contrato" id="edit-contrato" class="form-control" style="width: 100%; box-sizing: border-box;">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Teléfonos:</label>
+                    <input type="text" name="telefonos" id="edit-telefonos" class="form-control" style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Sector:</label>
+                    <input type="text" name="sector" id="edit-sector" class="form-control" required style="width: 100%; box-sizing: border-box;">
+                </div>
+            </div>
+
+            <div>
+                <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Dirección:</label>
+                <input type="text" name="direccion" id="edit-direccion" class="form-control" required style="width: 100%; box-sizing: border-box;">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Latitud:</label>
+                    <input type="text" name="latitud" id="edit-latitud" class="form-control" style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Longitud:</label>
+                    <input type="text" name="longitud" id="edit-longitud" class="form-control" style="width: 100%; box-sizing: border-box;">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Preferencia Horaria:</label>
+                    <input type="text" name="preferencia_horaria" id="edit-preferencia-horaria" class="form-control" required style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Servicio:</label>
+                    <select name="servicio" id="edit-servicio" class="form-control" required style="width: 100%; box-sizing: border-box;">
+                        <option value="INSTALACIÓN NUEVA">INSTALACIÓN NUEVA</option>
+                        <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
+                        <option value="CABLE">CABLE</option>
+                        <option value="CABLE_GPON">CABLE_GPON</option>
+                        <option value="COMBO_GPON">COMBO_GPON</option>
+                        <option value="INTERNET_GPON">INTERNET_GPON</option>
+                        <option value="RADIO">RADIO</option>
+                        <option value="INTERNET_UTP">INTERNET_UTP</option>
+                        <option value="SMART HOME">SMART HOME</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Velocidad Mbps:</label>
+                    <input type="number" name="velocidad_mbps" id="edit-velocidad-mbps" class="form-control" style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Problema/Trabajo:</label>
+                    <input type="text" name="problema" id="edit-problema" class="form-control" required style="width: 100%; box-sizing: border-box;">
+                </div>
+            </div>
+
+            <div>
+                <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Observación Callcenter:</label>
+                <textarea name="observacion_callcenter" id="edit-observacion-callcenter" rows="2" class="form-control" style="width: 100%; box-sizing: border-box; resize: vertical;"></textarea>
+            </div>
+
+            <div style="border-top: 1px solid #e2e8f0; padding-top: 15px;">
+                <strong style="font-size: 0.85rem; color: #0f172a; display: block; margin-bottom: 10px; font-weight: 800;">🔌 Datos de Conexión (Poste/Nodo):</strong>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                    <div>
+                        <label style="font-size: 0.75rem; color: #64748b; margin-bottom: 2px; display: block;">CAJA:</label>
+                        <input type="text" name="info_caja" id="edit-info-caja" class="form-control" style="width: 100%; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: #64748b; margin-bottom: 2px; display: block;">HILO:</label>
+                        <input type="text" name="info_hilo" id="edit-info-hilo" class="form-control" style="width: 100%; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: #64748b; margin-bottom: 2px; display: block;">IP:</label>
+                        <input type="text" name="info_ip" id="edit-info-ip" class="form-control" style="width: 100%; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: #64748b; margin-bottom: 2px; display: block;">VLAN:</label>
+                        <input type="text" name="info_vlan" id="edit-info-vlan" class="form-control" style="width: 100%; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: #64748b; margin-bottom: 2px; display: block;">Usuario PPPoE:</label>
+                        <input type="text" name="info_usr" id="edit-info-usr" class="form-control" style="width: 100%; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: #64748b; margin-bottom: 2px; display: block;">Clave PPPoE:</label>
+                        <input type="text" name="info_pas" id="edit-info-pas" class="form-control" style="width: 100%; box-sizing: border-box;">
+                    </div>
+                </div>
+            </div>
+
+            <div style="border-top: 1px solid #e2e8f0; padding-top: 15px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Fecha Programada:</label>
+                    <input type="date" name="fecha_programada" id="edit-fecha-programada" class="form-control" required style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Estado de Visita:</label>
+                    <select name="estado" id="edit-estado" class="form-control" required style="width: 100%; box-sizing: border-box;">
+                        <option value="PENDIENTE">PENDIENTE</option>
+                        <option value="REAGENDADA">REAGENDADA</option>
+                        <option value="EN_RUTA">EN_RUTA</option>
+                        <option value="EN_PROGRESO">EN_PROGRESO</option>
+                        <option value="FINALIZADA">FINALIZADA</option>
+                        <option value="CANCELADA">CANCELADA</option>
+                        <option value="SOLVENTADA_REMOTA">SOLVENTADA_REMOTA</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; color: #475569; display: block; margin-bottom: 4px;">Técnico Principal:</label>
+                    <select name="tecnico_principal" id="edit-tecnico-principal" class="form-control" required style="width: 100%; box-sizing: border-box;">
+                        {% for tec in tecnicos %}
+                            <option value="{{ tec.nombre }}">{{ tec.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+                <button type="button" onclick="cerrarModalEditar()" style="padding: 10px 20px; border: 1px solid #cbd5e1; border-radius: 8px; background-color: white; color: #475569; font-weight: bold; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">Cancelar</button>
+                <button type="submit" style="padding: 10px 20px; border: none; border-radius: 8px; background-color: var(--primary); color: white; font-weight: bold; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">Guardar Cambios</button>
+            </div>
+        </form>
+    </div>
+</div>

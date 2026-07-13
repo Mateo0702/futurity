@@ -3537,4 +3537,101 @@ def verificar_conflictos_agenda():
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()
-        conexion.close()
+        conexion.close()
+
+
+@admin_bp.route('/api/admin/visitas/<int:id_visita>/editar', methods=['POST'])
+def editar_visita(id_visita):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+        flash('No tienes permiso para editar visitas.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    cliente = request.form.get('cliente').strip()
+    contrato = request.form.get('contrato', '').strip() or None
+    telefonos = request.form.get('telefonos', '').strip() or None
+    sector = request.form.get('sector').strip()
+    direccion = request.form.get('direccion').strip()
+    lat = request.form.get('latitud', '').strip() or None
+    lon = request.form.get('longitud', '').strip() or None
+    preferencia = request.form.get('preferencia_horaria').strip()
+    servicio = request.form.get('servicio').strip()
+    
+    velocidad_mbps_raw = request.form.get('velocidad_mbps', '').strip()
+    velocidad_mbps = int(velocidad_mbps_raw) if velocidad_mbps_raw else None
+    
+    problema = request.form.get('problema').strip()
+    obs_call = request.form.get('observacion_callcenter', '').strip() or None
+    fecha_prog = request.form.get('fecha_programada').strip()
+    estado = request.form.get('estado').strip()
+    tecnico = request.form.get('tecnico_principal').strip()
+
+    # Reconstruir información técnica
+    info_parts = []
+    caja = request.form.get('info_caja', '').strip()
+    hilo = request.form.get('info_hilo', '').strip()
+    ip = request.form.get('info_ip', '').strip()
+    vlan = request.form.get('info_vlan', '').strip()
+    usr = request.form.get('info_usr', '').strip()
+    pas = request.form.get('info_pas', '').strip()
+
+    if caja: info_parts.append(f"CAJA: {caja}")
+    if hilo: info_parts.append(f"HILO: {hilo}")
+    if ip: info_parts.append(f"IP: {ip}")
+    if vlan: info_parts.append(f"VLAN: {vlan}")
+    if usr: info_parts.append(f"USR: {usr}")
+    if pas: info_parts.append(f"PAS: {pas}")
+    informacion_tecnico = "\n".join(info_parts) if info_parts else None
+
+    # Normalizar horario texto a minutos para el optimizador
+    from utils import normalizar_horario_texto
+    ventana_inicio, ventana_fin = normalizar_horario_texto(preferencia)
+
+    conexion = get_db_connection()
+    cursor = conexion.cursor()
+    try:
+        # Si se restablece a un estado activo, limpiar datos de cierre para permitir que se vuelva a ejecutar
+        if estado in ['PENDIENTE', 'REAGENDADA', 'EN_RUTA', 'EN_PROGRESO']:
+            query = """
+                UPDATE visitas_tecnicas 
+                SET cliente = %s, contrato = %s, telefonos = %s, sector = %s, direccion = %s,
+                    latitud = %s, longitud = %s, preferencia_horaria = %s, servicio = %s,
+                    velocidad_mbps = %s, problema = %s, observacion_callcenter = %s,
+                    informacion_tecnico = %s, fecha_programada = %s, estado = %s,
+                    tecnico_principal = %s, ventana_inicio_min = %s, ventana_fin_min = %s,
+                    hora_fin_visita = NULL, solucion_tecnico = NULL, observacion_tecnico = NULL,
+                    modelo_onu = NULL, modelo_router = NULL, coordenadas_tecnico = NULL,
+                    foto_equipos = NULL, foto_equipos_2 = NULL, firma_cliente = NULL
+                WHERE id_visita = %s
+            """
+            cursor.execute(query, (
+                cliente, contrato, telefonos, sector, direccion, lat, lon, preferencia, servicio,
+                velocidad_mbps, problema, obs_call, informacion_tecnico, fecha_prog, estado,
+                tecnico, ventana_inicio, ventana_fin, id_visita
+            ))
+        else:
+            query = """
+                UPDATE visitas_tecnicas 
+                SET cliente = %s, contrato = %s, telefonos = %s, sector = %s, direccion = %s,
+                    latitud = %s, longitud = %s, preferencia_horaria = %s, servicio = %s,
+                    velocidad_mbps = %s, problema = %s, observacion_callcenter = %s,
+                    informacion_tecnico = %s, fecha_programada = %s, estado = %s,
+                    tecnico_principal = %s, ventana_inicio_min = %s, ventana_fin_min = %s
+                WHERE id_visita = %s
+            """
+            cursor.execute(query, (
+                cliente, contrato, telefonos, sector, direccion, lat, lon, preferencia, servicio,
+                velocidad_mbps, problema, obs_call, informacion_tecnico, fecha_prog, estado,
+                tecnico, ventana_inicio, ventana_fin, id_visita
+            ))
+        conexion.commit()
+        flash('Visita actualizada correctamente.', 'success')
+    except Exception as e:
+        print(f"Error al editar visita: {e}")
+        flash(f"Error al guardar cambios: {e}", 'danger')
+    finally:
+        cursor.close()
+        conexion.close()
+
+    return redirect(request.referrer or url_for('dashboard'))
