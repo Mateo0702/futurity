@@ -317,10 +317,13 @@ def api_tecnicos_ubicaciones():
                    placa_vehiculo,
                    alerta_panico,
                    mensaje_panico,
-                   CASE WHEN latitud_actual IS NOT NULL 
-                         AND longitud_actual IS NOT NULL 
-                         AND (ultima_conexion >= DATE_SUB(NOW(), INTERVAL 10 MINUTE) OR alerta_panico = 1) 
-                        THEN 1 ELSE 0 END AS conectado
+                   CASE 
+                     WHEN latitud_actual IS NOT NULL AND longitud_actual IS NOT NULL AND (ultima_conexion >= DATE_SUB(NOW(), INTERVAL 10 MINUTE) OR alerta_panico = 1) 
+                       THEN 1 
+                     WHEN latitud_actual IS NOT NULL AND longitud_actual IS NOT NULL AND estado_actividad != 'Desconectado'
+                       THEN 2
+                     ELSE 0 
+                   END AS conectado
             FROM tecnicos
             WHERE activo = 1 
               AND area_trabajo = %s

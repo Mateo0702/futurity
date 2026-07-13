@@ -300,6 +300,13 @@
                 } else if (u.estado === 'Disponible' || u.estado === 'Sesión Iniciada') {
                     libresCount++;
                 }
+            } else if (u.conectado === 2) {
+                desconectadosCount++;
+                if (u.estado.includes('Trabajando') || u.estado.includes('En camino')) {
+                    ocupadosCount++;
+                } else if (u.estado === 'Disponible' || u.estado === 'Sesión Iniciada') {
+                    libresCount++;
+                }
             } else {
                 desconectadosCount++;
             }
@@ -384,11 +391,12 @@
                 }
             }
 
-            // Si está conectado, renderizar marcador en el mapa
-            if (u.conectado === 1) {
+            // Si está conectado o con baja cobertura, renderizar marcador en el mapa
+            if (u.conectado === 1 || u.conectado === 2) {
                 nombresActivos.push(key);
                 const latLng = [u.lat, u.lon];
                 let icono = iconoOffline;
+                let opacityVal = u.conectado === 2 ? 0.6 : 1.0;
 
                 if (u.alerta_panico) {
                     icono = iconoPanico;
@@ -401,6 +409,9 @@
                         reproducirSonidoAlerta();
                         mostrarToastAlerta(key, u.mensaje_panico || 'Auxilio solicitado');
                     }
+                } else if (u.conectado === 2) {
+                    estadoClaseColor = '#64748b';
+                    estadoTexto = '⚠️ SIN SEÑAL / BAJA COB.';
                 } else if (u.estado.includes('En camino')) {
                     icono = iconoEnRuta;
                     estadoClaseColor = '#f59e0b';
@@ -420,7 +431,7 @@
                 } else {
                     estadoTexto = u.estado;
                 }
-
+                
                 // Círculo de pánico
                 if (u.alerta_panico) {
                     if (circulosEmergencia[key]) {
@@ -446,8 +457,9 @@
                 if (marcadoresTecnicos[key]) {
                     marcadoresTecnicos[key].setLatLng(latLng);
                     marcadoresTecnicos[key].setIcon(icono);
+                    marcadoresTecnicos[key].setOpacity(opacityVal);
                 } else {
-                    const marker = L.marker(latLng, { icon: icono }).addTo(mapaTecnicos);
+                    const marker = L.marker(latLng, { icon: icono, opacity: opacityVal }).addTo(mapaTecnicos);
                     marker.bindTooltip(key, { permanent: true, direction: 'top', className: 'tooltip-tecnico' });
                     marcadoresTecnicos[key] = marker;
                 }
@@ -491,18 +503,20 @@
 
             // HTML de listado
             const itemClasePanico = u.alerta_panico ? 'panico' : '';
-            const itemClaseConexion = u.conectado === 0 ? 'desconectado' : '';
+            const itemClaseConexion = u.conectado === 0 ? 'desconectado' : (u.conectado === 2 ? 'sin-senal' : '');
             let clickHandlerHtml = `onclick="enfocarTecnico('${key}', ${u.lat}, ${u.lon})"`;
             let centrarBtnHtml = `<span style="color: #2563eb; font-weight: 700; font-size: 0.7rem;"><i class="fa-solid fa-location-crosshairs"></i> Centrar</span>`;
             
             if (u.conectado === 0) {
                 clickHandlerHtml = '';
                 centrarBtnHtml = `<span style="color: #94a3b8; font-weight: 700; font-size: 0.7rem;"><i class="fa-solid fa-circle-notch"></i> Offline</span>`;
+            } else if (u.conectado === 2) {
+                centrarBtnHtml = `<span style="color: #64748b; font-weight: 700; font-size: 0.7rem;"><i class="fa-solid fa-location-crosshairs"></i> Última Ubic.</span>`;
             }
 
             const itemHtml = `
-                <div ${clickHandlerHtml} class="item-tecnico-lista ${itemClasePanico} ${itemClaseConexion}" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; cursor: ${u.conectado === 0 ? 'not-allowed' : 'pointer'}; transition: all 0.2s ease; display: flex; align-items: center; gap: 12px; ${u.conectado === 0 ? 'opacity: 0.55;' : ''}">
-                    <img src="${perfilUrl}" alt="${key}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1.5px solid #e2e8f0; flex-shrink: 0; ${u.conectado === 0 ? 'filter: grayscale(1);' : ''}">
+                <div ${clickHandlerHtml} class="item-tecnico-lista ${itemClasePanico} ${itemClaseConexion}" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; cursor: ${u.conectado === 0 ? 'not-allowed' : 'pointer'}; transition: all 0.2s ease; display: flex; align-items: center; gap: 12px; ${u.conectado === 0 ? 'opacity: 0.55;' : (u.conectado === 2 ? 'opacity: 0.85;' : '')}">
+                    <img src="${perfilUrl}" alt="${key}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1.5px solid #e2e8f0; flex-shrink: 0; ${u.conectado === 0 ? 'filter: grayscale(1);' : (u.conectado === 2 ? 'filter: grayscale(0.3);' : '')}">
                     <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 5px;">
                             <strong style="color: var(--text-main); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;">${key}</strong>
