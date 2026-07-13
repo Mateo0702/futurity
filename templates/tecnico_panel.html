@@ -162,6 +162,9 @@
                             {% endif %}
                         </div>
                         <div class="visita-ref">Ref. Sist: #VT-{{ visita.id_visita }}</div>
+                        <div style="font-size: 0.75rem; color: #475569; font-weight: 700; margin-top: 4px;">
+                            Contrato: <span style="color: #0f172a; font-weight: 800;">{{ visita.contrato or 'N/A' }}</span> | Asigna: <span style="color: #0f172a; font-weight: 800;">{{ visita.creado_por or 'Sist.' }}</span>
+                        </div>
                     </div>
 
                     <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
@@ -226,7 +229,7 @@
                     {% endif %}
                 </div>
 
-                {% if visita.info_caja or visita.info_hilo or visita.info_ip or visita.info_usr %}
+                {% if visita.info_caja or visita.info_hilo or visita.info_ip or visita.info_usr or visita.info_vlan %}
                 <div style="background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 14px; margin-bottom: 15px;">
                     <strong style="color: #0f172a; font-size: 0.85rem; margin-bottom: 8px; display: block;">🔌 Datos de Conexión en Poste/Nodo</strong>
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 0.85rem;">
@@ -238,6 +241,9 @@
                         {% endif %}
                         {% if visita.info_ip %}
                         <div><span style="color: #64748b;">IP Fija:</span> <strong style="color: #1e293b;">{{ visita.info_ip }}</strong></div>
+                        {% endif %}
+                        {% if visita.info_vlan %}
+                        <div><span style="color: #64748b;">VLAN:</span> <strong style="color: #1e293b;">{{ visita.info_vlan }}</strong></div>
                         {% endif %}
                         {% if visita.info_usr %}
                         <div style="grid-column: span 2; margin-top: 5px; border-top: 1px solid #e2e8f0; padding-top: 5px;">

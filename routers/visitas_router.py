@@ -78,12 +78,14 @@ def registrar_visita():
         info_caja = request.form.get('info_caja', '').strip()
         info_hilo = request.form.get('info_hilo', '').strip()
         info_ip = request.form.get('info_ip', '').strip()
+        info_vlan = request.form.get('info_vlan', '').strip()
         info_usr = request.form.get('info_usr', '').strip()
         info_pas = request.form.get('info_pas', '').strip()
         
         if info_caja: info_parts.append(f"CAJA: {info_caja}")
         if info_hilo: info_parts.append(f"HILO: {info_hilo}")
         if info_ip: info_parts.append(f"IP: {info_ip}")
+        if info_vlan: info_parts.append(f"VLAN: {info_vlan}")
         if info_usr: info_parts.append(f"USR: {info_usr}")
         if info_pas: info_parts.append(f"PAS: {info_pas}")
         

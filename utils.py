@@ -85,6 +85,7 @@ def parsear_informacion_tecnica(visitas):
         v['info_caja'] = None
         v['info_hilo'] = None
         v['info_ip'] = None
+        v['info_vlan'] = None
         v['info_usr'] = None
         v['info_pas'] = None
         
@@ -98,6 +99,8 @@ def parsear_informacion_tecnica(visitas):
                     v['info_hilo'] = line[5:].strip()
                 elif line.upper().startswith('IP:'):
                     v['info_ip'] = line[3:].strip()
+                elif line.upper().startswith('VLAN:'):
+                    v['info_vlan'] = line[5:].strip()
                 elif line.upper().startswith('USR:'):
                     v['info_usr'] = line[4:].strip()
                 elif line.upper().startswith('PAS:'):

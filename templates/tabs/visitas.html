@@ -241,7 +241,7 @@
                                                 visita.observacion_callcenter }}</span>
                                         </p>
                                         
-                                        {% if visita.info_caja or visita.info_hilo or visita.info_ip or visita.info_usr %}
+                                        {% if visita.info_caja or visita.info_hilo or visita.info_ip or visita.info_usr or visita.info_vlan %}
                                         <div style="background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px; margin-top: 10px;">
                                             <strong style="color: #0f172a; font-size: 0.8rem; margin-bottom: 6px; display: block;">🔌 Datos de Conexión (Poste/Nodo)</strong>
                                             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; font-size: 0.8rem;">
@@ -253,6 +253,9 @@
                                                 {% endif %}
                                                 {% if visita.info_ip %}
                                                 <div><span style="color: #64748b;">IP Fija:</span> <strong style="color: #1e293b;">{{ visita.info_ip }}</strong></div>
+                                                {% endif %}
+                                                {% if visita.info_vlan %}
+                                                <div><span style="color: #64748b;">VLAN:</span> <strong style="color: #1e293b;">{{ visita.info_vlan }}</strong></div>
                                                 {% endif %}
                                                 {% if visita.info_usr %}
                                                 <div style="grid-column: span 2; border-top: 1px solid #e2e8f0; padding-top: 4px; margin-top: 4px;">
