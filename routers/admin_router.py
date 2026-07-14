@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, session, send_file
+from flask import Blueprint, render_template, request, jsonify, session, send_file, redirect, url_for, flash
 from datetime import datetime, timedelta, date
 from db_config import get_db_connection
 from io import BytesIO
@@ -14,7 +14,6 @@ from reportlab.lib.enums import TA_CENTER
 
 admin_bp = Blueprint('admin', __name__)
 
-from flask import redirect, url_for
 from urllib.parse import urlencode
 
 @admin_bp.route('/admin/control_calidad')
@@ -22,7 +21,6 @@ def dashboard_calidad():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     if session.get('user_role') not in ['ADMIN', 'ASESOR']:
-        from flask import flash
         flash('No tienes permiso para acceder al control de calidad.', 'danger')
         return redirect(url_for('dashboard'))
 
