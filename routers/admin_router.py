@@ -2103,10 +2103,7 @@ def preview_cuadro_mando():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
         """, (fecha,))
         kpi_atendidas_hoy = cursor.fetchone()['total'] or 0
@@ -2132,10 +2129,7 @@ def preview_cuadro_mando():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
             GROUP BY solucion_tecnico
         """, (fecha,))
@@ -2372,10 +2366,7 @@ def download_excel_cuadro_mando():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
         """, (fecha,))
         kpi_atendidas_hoy = cursor.fetchone()['total'] or 0
@@ -2401,10 +2392,7 @@ def download_excel_cuadro_mando():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
             GROUP BY solucion_tecnico
         """, (fecha,))
