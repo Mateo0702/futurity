@@ -1489,10 +1489,7 @@ def preview_reporte_actividades():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
               AND es_instalacion = %s
             GROUP BY tecnico_principal, tecnico_apoyo, solucion_tecnico
@@ -1564,10 +1561,7 @@ def download_excel_reporte_actividades():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
               AND es_instalacion = %s
             GROUP BY tecnico_principal, tecnico_apoyo, solucion_tecnico

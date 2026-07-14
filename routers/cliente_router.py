@@ -521,10 +521,7 @@ def publico_cuadro_mando(fecha, token):
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
             GROUP BY tecnico_principal, tecnico_apoyo, solucion_tecnico, es_instalacion
             ORDER BY tecnico_principal, tecnico_apoyo, cantidad DESC
