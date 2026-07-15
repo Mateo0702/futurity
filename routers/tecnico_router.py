@@ -84,6 +84,9 @@ def panel_tecnico(nombre_tecnico):
     cursor.execute(query_all, (hoy, es_instalacion_val))
     todas_las_visitas = cursor.fetchall()
     
+    # Ordenar por id_visita de forma estable para asegurar el orden de registro
+    todas_las_visitas.sort(key=lambda x: x.get('id_visita', 0) or 0)
+    
     # Asignar índice global numero_parada
     for idx, v in enumerate(todas_las_visitas, start=1):
         v['numero_parada'] = idx
