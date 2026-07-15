@@ -606,11 +606,11 @@ def dashboard():
         else:
             r['hora_fin_str'] = None
 
-    # Consultar cantidad de visitas pendientes de días anteriores (atrasadas)
+    # Consultar cantidad de visitas pendientes específicamente del día de ayer
     cursor.execute("""
         SELECT COUNT(*) as total 
         FROM visitas_tecnicas 
-        WHERE fecha_programada < CURDATE() 
+        WHERE fecha_programada = DATE_SUB(CURDATE(), INTERVAL 1 DAY) 
           AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
           AND es_instalacion = %s
     """, (es_instalacion_val,))
