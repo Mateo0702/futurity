@@ -606,6 +606,17 @@ def dashboard():
         else:
             r['hora_fin_str'] = None
 
+    # Consultar cantidad de visitas pendientes de días anteriores (atrasadas)
+    cursor.execute("""
+        SELECT COUNT(*) as total 
+        FROM visitas_tecnicas 
+        WHERE fecha_programada < CURDATE() 
+          AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
+          AND es_instalacion = %s
+    """, (es_instalacion_val,))
+    cant_pendientes_atrasadas = cursor.fetchone()['total'] or 0
+    ayer_fecha = (date.today() - timedelta(days=1)).isoformat()
+
     # Verificar si el usuario actual (ADMIN o ASESOR) es también un técnico activo
     nombre_usuario = session.get('user_name', '')
     es_tecnico_activo = False
@@ -619,6 +630,13 @@ def dashboard():
         except Exception as e:
             print(f"Error checking if user is active tech: {e}")
 
+    # Cerrar cursor y conexión a la base de datos
+    try:
+        cursor.close()
+        conexion.close()
+    except Exception as e:
+        print(f"Error al cerrar la conexión en dashboard: {e}")
+
     # Pasamos las nuevas variables al template
     return render_template('index.html', 
                            visitas=visitas, 
@@ -631,6 +649,8 @@ def dashboard():
                            asesor=session.get('user_name', 'Asesor'),
                            recordatorios_hoy=recordatorios_hoy,
                            es_tecnico_activo=es_tecnico_activo,
+                           cant_pendientes_atrasadas=cant_pendientes_atrasadas,
+                           ayer_fecha=ayer_fecha,
                            # Variables para gráficos:
                            labels_barras=labels_barras, val_barras=valores_barras,
                            labels_prob=labels_prob, val_prob=valores_prob,

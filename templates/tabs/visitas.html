@@ -27,6 +27,29 @@
         </div>
     </div>
 
+    {% if cant_pendientes_atrasadas > 0 %}
+    <div style="background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); border-left: 5px solid #ef4444; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); display: flex; gap: 15px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+        <div style="display: flex; gap: 15px; align-items: flex-start;">
+            <div style="color: #ef4444; flex-shrink: 0; margin-top: 2px;">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+            </div>
+            <div>
+                <h4 style="margin: 0 0 4px 0; color: #991b1b; font-size: 1.1rem; font-weight: 700;">Visitas pendientes de días anteriores</h4>
+                <p style="margin: 0; color: #7f1d1d; font-size: 0.9rem; font-weight: 500;">
+                    Quedaron **{{ cant_pendientes_atrasadas }}** visita(s) pendiente(s) de días anteriores sin reagendar, solventar o finalizar.
+                </p>
+            </div>
+        </div>
+        <div>
+            <a href="/?fecha_filtro={{ ayer_fecha }}" class="btn" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; transition: background 0.2s; box-shadow: var(--shadow-sm);">
+                <i class="fa-solid fa-calendar-day"></i> Ver Visitas Atrasadas (Ayer)
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
     {% if recordatorios_hoy %}
     <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border-left: 5px solid #d97706; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); display: flex; gap: 15px; align-items: flex-start;">
         <div style="color: #d97706; flex-shrink: 0; margin-top: 2px;">
