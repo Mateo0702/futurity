@@ -90,6 +90,33 @@ public class MainActivity extends AppCompatActivity {
         settings.setDatabaseEnabled(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         
+        // Inyectar User-Agent personalizado para detectar la versión en el servidor Flask
+        String defaultUserAgent = settings.getUserAgentString();
+        int currentVersionCode = 1;
+        String currentVersionName = "1.0.0";
+        try {
+            currentVersionCode = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+            currentVersionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            Log.e(TAG, "Error al obtener info de version", e);
+        }
+        settings.setUserAgentString(defaultUserAgent + " FuturityAtlas/" + currentVersionName + " (versionCode:" + currentVersionCode + ")");
+
+        // Configurar DownloadListener para redirigir descargas (como el APK) al navegador del sistema
+        webView.setDownloadListener(new android.webkit.DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimetype, long contentLength) {
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW);
+                    intent.setData(android.net.Uri.parse(url));
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Log.e(TAG, "Error iniciando descarga: " + url, e);
+                    Toast.makeText(MainActivity.this, "Error al iniciar la descarga de la actualización", Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+        
         // Enable file access & permissions
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
