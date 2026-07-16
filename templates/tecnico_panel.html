@@ -500,6 +500,10 @@
                                     <i class="fa-solid fa-play"></i> Llegué / Iniciar Trabajo
                                 </button>
                             </form>
+                            
+                            <button type="button" class="btn-action-route" onclick="mostrarModalPosponer({{ visita.id_visita }})" style="width: 100%; margin-top: 10px; background: linear-gradient(135deg, #475569 0%, #334155 100%);">
+                                <i class="fa-solid fa-clock"></i> Posponer / Reagendar para hoy
+                            </button>
                         </div>
         
                         <script>
@@ -719,6 +723,10 @@
                                     <i class="fa-solid fa-check"></i> Guardar y Finalizar
                                 </button>
                             </form>
+                            
+                            <button type="button" class="btn-action-route" onclick="mostrarModalPosponer({{ visita.id_visita }})" style="width: 100%; margin-top: 10px; background: linear-gradient(135deg, #475569 0%, #334155 100%);">
+                                <i class="fa-solid fa-clock"></i> Posponer / Reagendar para hoy
+                            </button>
                         </div>
         
                         {% elif visita.estado == 'FINALIZADA' %}
@@ -877,7 +885,75 @@
         </div>
     </div>
 
+    <!-- Modal Posponer Visita -->
+    <div id="modalPosponer" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 200000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+        <div style="background-color: #1e1e2d; color: white; border-radius: 16px; border: 1px solid #334155; width: 100%; max-width: 420px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.5); overflow: hidden;">
+            <div style="padding: 18px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #4b5563 0%, #1f2937 100%);">
+                <h5 style="margin: 0; color: white; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-clock"></i> Posponer Visita
+                </h5>
+                <button type="button" onclick="cerrarModalPosponer()" style="background: none; border: none; color: white; font-size: 1.8rem; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
+            </div>
+            
+            <form id="form-posponer-visita" onsubmit="procesarAccionFormulario(event, document.getElementById('posponer-id-visita').value, document.getElementById('form-posponer-visita').action, 'posponer')" style="margin: 0;">
+                <input type="hidden" name="id_visita" id="posponer-id-visita">
+                <div style="padding: 20px; display: flex; flex-direction: column; gap: 15px;">
+                    <p style="margin: 0; color: #cbd5e1; font-size: 0.9rem; line-height: 1.4;">
+                        Indica el motivo por el cual pospondrás la visita para más tarde el día de hoy:
+                    </p>
+                    
+                    <div>
+                        <label style="font-weight: 700; color: #94a3b8; font-size: 0.8rem; display: block; margin-bottom: 8px; text-transform: uppercase;">Motivo de Postergación:</label>
+                        <select name="motivo" id="select-motivo-posponer" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #334155; background-color: #0f172a; color: white; font-size: 0.9rem; outline: none; appearance: auto;" onchange="chequearOtroMotivoPosponer()">
+                            <option value="Cliente ausente (retorna más tarde)">👤 Cliente ausente (retorna más tarde)</option>
+                            <option value="Cliente solicitó postergar unas horas">📞 Cliente solicitó postergar unas horas</option>
+                            <option value="Falta de materiales o herramientas">🛠️ Falta de materiales o herramientas</option>
+                            <option value="Lluvia / Condición climática adversa">🌧️ Lluvia / Condición climática adversa</option>
+                            <option value="Otro motivo">🚨 Otro motivo</option>
+                        </select>
+                    </div>
+
+                    <div id="otro-motivo-posponer-container" style="display: none;">
+                        <label style="font-weight: 700; color: #94a3b8; font-size: 0.8rem; display: block; margin-bottom: 8px; text-transform: uppercase;">Especifique el motivo:</label>
+                        <input type="text" name="motivo_otro" id="input-motivo-posponer-otro" placeholder="Ej. Retorno en 2 horas, etc..." style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #334155; background-color: #0f172a; color: white; font-size: 0.9rem; outline: none;">
+                    </div>
+                    
+                    <div style="display: flex; gap: 12px; margin-top: 10px;">
+                        <button type="button" onclick="cerrarModalPosponer()" style="flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #334155; background: #2d3748; color: white; font-weight: 700; cursor: pointer; font-size: 0.9rem;">
+                            Cancelar
+                        </button>
+                        <button type="submit" style="flex: 1; padding: 12px; border-radius: 10px; border: none; background: linear-gradient(135deg, #4b5563 0%, #374151 100%); color: white; font-weight: 700; cursor: pointer; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            <i class="fa-solid fa-check"></i> Aceptar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
+        // --- FUNCIONES PARA POSPONER VISITA ---
+        function mostrarModalPosponer(id) {
+            document.getElementById('posponer-id-visita').value = id;
+            document.getElementById('form-posponer-visita').action = `/api/tecnico/posponer/${id}`;
+            document.getElementById('modalPosponer').style.display = 'flex';
+        }
+        function cerrarModalPosponer() {
+            document.getElementById('modalPosponer').style.display = 'none';
+        }
+        function chequearOtroMotivoPosponer() {
+            const val = document.getElementById('select-motivo-posponer').value;
+            const container = document.getElementById('otro-motivo-posponer-container');
+            if (val === 'Otro motivo') {
+                container.style.display = 'block';
+                document.getElementById('input-motivo-posponer-otro').required = true;
+            } else {
+                container.style.display = 'none';
+                document.getElementById('input-motivo-posponer-otro').required = false;
+                document.getElementById('input-motivo-posponer-otro').value = '';
+            }
+        }
+
         // --- FUNCIÓN PARA CERRAR EL MODAL ---
         function cerrarModalHistorial() {
             document.getElementById('modalHistorial').style.display = 'none';

@@ -3528,6 +3528,22 @@ def editar_visita(id_visita):
         flash('No tienes permiso para editar visitas.', 'danger')
         return redirect(url_for('dashboard'))
 
+    # Validar que la visita no esté cerrada o en progreso antes de editar
+    conexion_check = get_db_connection()
+    cursor_check = conexion_check.cursor(dictionary=True)
+    try:
+        cursor_check.execute("SELECT estado FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        visita_actual = cursor_check.fetchone()
+        if not visita_actual:
+            flash('Visita no encontrada.', 'danger')
+            return redirect(request.referrer or url_for('dashboard'))
+        if visita_actual['estado'] not in ['PENDIENTE', 'EN_RUTA', 'REAGENDADA']:
+            flash('No se puede editar una visita que ya se encuentra cerrada (Finalizada/Cancelada) o en progreso.', 'danger')
+            return redirect(request.referrer or url_for('dashboard'))
+    finally:
+        cursor_check.close()
+        conexion_check.close()
+
     cliente = request.form.get('cliente').strip()
     contrato = request.form.get('contrato', '').strip() or None
     telefonos = request.form.get('telefonos', '').strip() or None

@@ -867,3 +867,68 @@ def verificar_firma(id_visita):
     finally:
         cursor.close()
         conexion.close()
+
+
+@tecnico_bp.route('/api/tecnico/posponer/<int:id_visita>', methods=['POST'])
+def posponer_visita(id_visita):
+    if 'user_id' not in session or session.get('user_role') != 'TECNICO':
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+        
+    if request.is_json:
+        datos = request.get_json() or {}
+    else:
+        datos = request.form
+        
+    motivo = datos.get('motivo')
+    motivo_otro = datos.get('motivo_otro')
+    
+    motivo_final = motivo
+    if motivo == 'Otro motivo' and motivo_otro:
+        motivo_final = motivo_otro
+        
+    tecnico_nombre = session.get('user_name')
+    
+    conexion = get_db_connection()
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        # 1. Obtener observacion actual de callcenter
+        cursor.execute("SELECT observacion_callcenter FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        visita = cursor.fetchone()
+        if not visita:
+            return jsonify({"status": "error", "message": "Visita no encontrada"}), 404
+            
+        obs_actual = visita['observacion_callcenter'] or ""
+        import datetime
+        now_str = datetime.datetime.now().strftime("%H:%M")
+        nota_pospuesta = f"\n[Pospuesta {now_str}]: {motivo_final}"
+        nueva_obs = (obs_actual + nota_pospuesta).strip()
+        
+        # 2. Restablecer visita a PENDIENTE, limpiando marcas de tiempo
+        cursor.execute("""
+            UPDATE visitas_tecnicas 
+            SET estado = 'PENDIENTE',
+                hora_en_ruta = NULL,
+                hora_inicio_visita = NULL,
+                observacion_callcenter = %s
+            WHERE id_visita = %s
+        """, (nueva_obs, id_visita))
+        
+        # 3. Liberar estado del técnico a Disponible
+        if tecnico_nombre:
+            cursor.execute("""
+                UPDATE tecnicos 
+                SET estado_actividad = %s,
+                    ultima_conexion = NOW() 
+                WHERE nombre = %s
+            """, ("Disponible", tecnico_nombre))
+            
+        conexion.commit()
+        print(f"[Posponer] Visita #{id_visita} pospuesta para más tarde por el técnico.")
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        conexion.rollback()
+        print(f"[Posponer] Error al posponer visita #{id_visita}: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
