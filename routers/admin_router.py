@@ -1942,7 +1942,7 @@ def map_solucion(sol):
         return "LÓGICO / CONFIGURACIÓN DE EQUIPOS"
     if "INSPECCIÓN" in sol or "SOLUCIÓN PARCIAL" in sol:
         return "INSPECCIÓN / SOLUCIÓN PARCIAL"
-    if "RADIO ENLACE" in sol or "DOMÓTICA" in sol:
+    if "RADIO ENLACE" in sol or "DOM" in sol:
         return "RADIO ENLACE / DOMÓTICA"
     if "ADAPTADOR" in sol or "CONEXIÓN ELÉCTRICA" in sol:
         return "FISICO / CAMBIO DE ADAPTADOR DE CORRIENTE"
