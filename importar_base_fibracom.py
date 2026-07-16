@@ -21,17 +21,9 @@ def format_fibracom_contract(val):
         
     # Verificar si el contrato ya tiene el sufijo 'F'
     if val_str.upper().endswith('F'):
-        num_part = val_str[:-1].strip()
-        try:
-            return f"{int(float(num_part)):07d}F"
-        except ValueError:
-            return val_str.upper()
+        return val_str.upper()
     else:
-        # Formato numérico puro: rellenar con ceros a la izquierda hasta 7 dígitos y añadir 'F'
-        try:
-            return f"{int(float(val_str)):07d}F"
-        except ValueError:
-            return f"{val_str}F"
+        return f"{val_str.upper()}F"
 
 def clean_str(val):
     if pd.isna(val) or val is None:
