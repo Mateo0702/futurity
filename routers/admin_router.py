@@ -3537,8 +3537,8 @@ def editar_visita(id_visita):
         if not visita_actual:
             flash('Visita no encontrada.', 'danger')
             return redirect(request.referrer or url_for('dashboard'))
-        if visita_actual['estado'] not in ['PENDIENTE', 'EN_RUTA', 'REAGENDADA']:
-            flash('No se puede editar una visita que ya se encuentra cerrada (Finalizada/Cancelada) o en progreso.', 'danger')
+        if visita_actual['estado'] not in ['PENDIENTE', 'EN_RUTA']:
+            flash('No se puede editar una visita que ya se encuentra cerrada (Finalizada/Cancelada), reagendada o en progreso.', 'danger')
             return redirect(request.referrer or url_for('dashboard'))
     finally:
         cursor_check.close()

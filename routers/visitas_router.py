@@ -251,27 +251,59 @@ def reagendar_visita(id_visita):
         return redirect(url_for('dashboard'))
 
     nueva_prioridad = request.form.get('nueva_prioridad') # Por si ahora urge más
-    observacion_adicional = request.form.get('observacion_reagendado')
+    observacion_adicional = request.form.get('observacion_reagendado', '').strip()
     
     conexion = get_db_connection()
-    cursor = conexion.cursor()
+    cursor = conexion.cursor(dictionary=True)
     try:
-        # 1. Actualizamos la visita
-        # Al cambiar la fecha, automáticamente desaparecerá del dashboard de 'HOY'
-        query = """
+        # 1. Obtener la visita original con todos sus datos
+        cursor.execute("SELECT * FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        original = cursor.fetchone()
+        if not original:
+            flash('La visita a reagendar no fue encontrada.', 'danger')
+            return redirect(url_for('dashboard'))
+            
+        # 2. Actualizar la visita original (se queda en el día actual pero con estado REAGENDADA)
+        nota_reagenda = f" | REAGENDADO: {observacion_adicional}" if observacion_adicional else " | REAGENDADO"
+        obs_call_original = (original['observacion_callcenter'] or "") + nota_reagenda
+        
+        cursor.execute("""
             UPDATE visitas_tecnicas 
-            SET fecha_programada = %s, 
-                prioridad = %s,
-                estado = 'REAGENDADA',
-                observacion_callcenter = CONCAT(observacion_callcenter, ' | REAGENDADO: ', %s),
-                tecnico_principal = 'NO TECNICO', -- Opcional: la liberamos para volver a asignarla
-                token_rastreo = NULL -- IMPORTANTE: Matamos el link de rastreo anterior
+            SET estado = 'REAGENDADA',
+                observacion_callcenter = %s,
+                tecnico_principal = 'NO TECNICO',
+                tecnico_apoyo = NULL,
+                token_rastreo = NULL
             WHERE id_visita = %s
-        """
-        cursor.execute(query, (nueva_fecha, nueva_prioridad, observacion_adicional, id_visita))
+        """, (obs_call_original, id_visita))
+        
+        # 3. Crear (clonar) una nueva visita para la nueva fecha en estado PENDIENTE y con 'NO TECNICO'
+        prioridad_final = nueva_prioridad if nueva_prioridad else original['prioridad']
+        
+        cursor.execute("""
+            INSERT INTO visitas_tecnicas (
+                creado_por, tecnico_principal, tecnico_apoyo, fecha_programada, preferencia_horaria, 
+                empresa, contrato, cliente, telefonos, sector, direccion, 
+                servicio, velocidad_mbps, problema, observacion_callcenter, informacion_tecnico, 
+                ventana_inicio_min, ventana_fin_min, estado, prioridad,
+                es_instalacion, producto, tipo_instalacion, vendedor, recibido_coordinacion,
+                latitud, longitud
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE', %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            original['creado_por'], 'NO TECNICO', None, nueva_fecha, original['preferencia_horaria'],
+            original['empresa'], original['contrato'], original['cliente'], original['telefonos'], original['sector'], original['direccion'],
+            original['servicio'], original['velocidad_mbps'], original['problema'], obs_call_original, original['informacion_tecnico'],
+            original['ventana_inicio_min'], original['ventana_fin_min'], prioridad_final,
+            original['es_instalacion'], original['producto'], original['tipo_instalacion'], original['vendedor'], original['recibido_coordinacion'],
+            original['latitud'], original['longitud']
+        ))
+        
         conexion.commit()
+        flash('Visita reagendada con éxito: se conservó el registro anterior y se creó uno nuevo en estado pendiente.', 'success')
     except Exception as e:
+        conexion.rollback()
         print(f"Error al reagendar: {e}")
+        flash(f"Error al reagendar visita: {e}", 'danger')
     finally:
         cursor.close()
         conexion.close()
