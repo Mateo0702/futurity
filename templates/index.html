@@ -381,7 +381,7 @@
                                 <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #e2e8f0; border-left: 4px solid ${colorEstado};">
                                     <div style="display: flex; justify-content: space-between; margin-bottom: 8px; align-items: center;">
                                         <span style="font-size: 0.85rem; color: #475569; font-weight: bold;">📅 ${fecha}</span>
-                                        <span class="historial-badge-estado status-${visita.estado.toLowerCase()}">${visita.estado}</span>
+                                        <span class="historial-badge-estado status-${visita.estado.toLowerCase()}">${visita.estado.replace(/_/g, ' ')}</span>
                                     </div>
                                     <h6 style="color: #0f172a; margin: 0 0 5px 0; font-size: 1rem;">Problema: <span style="color: #b91c1c;">${visita.problema}</span></h6>
                                     <p style="font-size: 0.85rem; margin: 0 0 8px 0; color: #475569;"><strong>Solución:</strong> ${visita.solucion_tecnico || 'Sin registrar'}</p>

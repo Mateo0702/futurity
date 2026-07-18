@@ -213,7 +213,7 @@
                             {% endif %}
                         </td>
                         <td style="vertical-align: middle;">
-                            <span class="badge-{{ visita.estado|lower }}">{{ visita.estado }}</span>
+                            <span class="badge-{{ visita.estado|lower }}">{{ visita.estado|replace('_', ' ') }}</span>
                             <div class="visita-timer-container" 
                                  data-id="{{ visita.id_visita }}"
                                  data-estado="{{ visita.estado }}"
