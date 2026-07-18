@@ -2189,6 +2189,36 @@
             
             // Validar coordenadas si es cierre de visita
             if (tipo === 'finalizar') {
+                // 1. Validar firma del cliente remota
+                const metodoFirma = document.getElementById(`metodo-firma-${idVisita}`).value;
+                const valFirmaRecibida = document.getElementById(`firma-recibida-val-${idVisita}`);
+                if (metodoFirma !== 'SIN_FIRMA' && (!valFirmaRecibida || valFirmaRecibida.value !== '1')) {
+                    alert("Por favor, registre la firma de conformidad del cliente antes de finalizar.");
+                    return;
+                }
+
+                // 2. Validar fotos de equipos
+                const checkJuntos = document.getElementById(`equipos-juntos-${idVisita}`);
+                const hiddenFoto1 = document.getElementById(`foto_equipos_base64_hidden-${idVisita}`);
+                const hiddenFoto2 = document.getElementById(`foto_equipos_2_base64_hidden-${idVisita}`);
+                
+                if (checkJuntos && checkJuntos.checked) {
+                    if (!hiddenFoto1 || !hiddenFoto1.value) {
+                        alert("Por favor, tome la foto de los equipos (ONU y Router) juntos antes de finalizar.");
+                        return;
+                    }
+                } else {
+                    if (!hiddenFoto1 || !hiddenFoto1.value) {
+                        alert("Por favor, tome la foto de la ONU antes de finalizar.");
+                        return;
+                    }
+                    if (!hiddenFoto2 || !hiddenFoto2.value) {
+                        alert("Por favor, tome la foto del Router antes de finalizar.");
+                        return;
+                    }
+                }
+
+                // 3. Validar coordenadas (se ejecuta al final de las validaciones de datos)
                 const coordsInput = document.getElementById(`coords-${idVisita}`);
                 if (coordsInput && !coordsInput.value) {
                     const btnGps = document.getElementById(`btn-gps-${idVisita}`);
@@ -2264,35 +2294,6 @@
                         }
                     }
                     return;
-                }
-
-                // 1. Validar firma del cliente remota
-                const metodoFirma = document.getElementById(`metodo-firma-${idVisita}`).value;
-                const valFirmaRecibida = document.getElementById(`firma-recibida-val-${idVisita}`);
-                if (metodoFirma !== 'SIN_FIRMA' && (!valFirmaRecibida || valFirmaRecibida.value !== '1')) {
-                    alert("Por favor, registre la firma de conformidad del cliente antes de finalizar.");
-                    return;
-                }
-
-                // 2. Validar fotos de equipos
-                const checkJuntos = document.getElementById(`equipos-juntos-${idVisita}`);
-                const hiddenFoto1 = document.getElementById(`foto_equipos_base64_hidden-${idVisita}`);
-                const hiddenFoto2 = document.getElementById(`foto_equipos_2_base64_hidden-${idVisita}`);
-                
-                if (checkJuntos && checkJuntos.checked) {
-                    if (!hiddenFoto1 || !hiddenFoto1.value) {
-                        alert("Por favor, tome la foto de los equipos (ONU y Router) juntos antes de finalizar.");
-                        return;
-                    }
-                } else {
-                    if (!hiddenFoto1 || !hiddenFoto1.value) {
-                        alert("Por favor, tome la foto de la ONU antes de finalizar.");
-                        return;
-                    }
-                    if (!hiddenFoto2 || !hiddenFoto2.value) {
-                        alert("Por favor, tome la foto del Router antes de finalizar.");
-                        return;
-                    }
                 }
             }
             
