@@ -31,6 +31,7 @@ app = Flask(__name__)
 # Pega aquí el código que generaste en la terminal:
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', '8b093e226bd1155f8527a13430d48a4048023c69e7cde5dcc37224407f0ac1c2') 
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)
+app.config['SESSION_REFRESH_EACH_REQUEST'] = False
 
 app.register_blueprint(visitas_bp)
 app.register_blueprint(tecnico_bp)

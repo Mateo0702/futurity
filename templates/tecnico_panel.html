@@ -1193,6 +1193,11 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ latitud: lat, longitud: lon })
                 })
+                .then(res => {
+                    if (res.status === 401) {
+                        window.location.href = '/login';
+                    }
+                })
                 .catch(err => console.log("Error de conexión ping global nativo:", err));
             } else if (tipo && tipo.toString().startsWith('inicio_')) {
                 if (window.recibirUbicacionNativaInicio) {
@@ -1246,6 +1251,11 @@
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ latitud: position.coords.latitude, longitud: position.coords.longitude })
+                                })
+                                .then(res => {
+                                    if (res.status === 401) {
+                                        window.location.href = '/login';
+                                    }
                                 })
                                 .catch(err => console.log("Error de conexión ping global HTML5:", err));
                             },
