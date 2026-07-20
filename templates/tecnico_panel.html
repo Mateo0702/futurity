@@ -1472,16 +1472,18 @@
             // Limpiamos los espacios en blanco
             const dirLimpia = direccion.trim();
 
-            // Expresión Regular para detectar si son coordenadas (ej: -2.927893, -78.970737)
-            const esCoordenada = /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(dirLimpia);
+            // Expresión Regular para buscar coordenadas en el texto (ej: -2.927893, -78.970737 o dentro de paréntesis)
+            const regexCoordenadas = /(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/;
+            const match = dirLimpia.match(regexCoordenadas);
 
             let url = "";
 
-            if (esCoordenada) {
-                // Si es GPS, creamos una ruta exacta hacia ese punto
-                url = `https://www.google.com/maps/dir/?api=1&destination=${dirLimpia}`;
+            if (match) {
+                // Si encontramos coordenadas, extraemos el par y creamos una ruta exacta
+                const coordenadas = match[0];
+                url = `https://www.google.com/maps/dir/?api=1&destination=${coordenadas}`;
             } else {
-                // Si es texto, hacemos una búsqueda en Cuenca para evitar que Maps lo mande a otra ciudad
+                // Si es solo texto, hacemos una búsqueda convencional en Cuenca
                 const busqueda = encodeURIComponent(`${dirLimpia}, ${sector}, Cuenca, Ecuador`);
                 url = `https://www.google.com/maps/search/?api=1&query=${busqueda}`;
             }

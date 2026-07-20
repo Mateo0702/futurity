@@ -385,3 +385,135 @@ def atenciones_recientes_contrato():
         cursor.close()
         conn.close()
 
+@atenciones_bp.route('/api/admin/atenciones/masivo', methods=['POST'])
+def registrar_atenciones_masivo():
+    if 'user_id' not in session:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para registrar atenciones."}), 403
+
+    data = request.get_json() if request.is_json else request.form
+    
+    # Extraer lista de contratos (puede ser texto multilínea, delimitado por comas, etc.)
+    raw_contratos = data.get('contratos')
+    if isinstance(raw_contratos, str):
+        import re
+        contratos_list = [c.strip() for c in re.split(r'[\r\n,;\s]+', raw_contratos) if c.strip()]
+    elif isinstance(raw_contratos, list):
+        contratos_list = [str(c).strip() for c in raw_contratos if str(c).strip()]
+    else:
+        contratos_list = []
+
+    if not contratos_list:
+        return jsonify({"status": "error", "message": "No se proporcionó ningún contrato válido para procesar."}), 400
+
+    # Eliminar duplicados manteniendo el orden
+    contratos_unicos = []
+    seen = set()
+    for c in contratos_list:
+        if c not in seen:
+            seen.add(c)
+            contratos_unicos.append(c)
+
+    # Parámetros comunes
+    fecha_val = data.get('fecha') or date.today().isoformat()
+    hora_val = data.get('hora') or datetime.now().time().strftime('%H:%M:%S')
+
+    try:
+        f_dt = datetime.strptime(str(fecha_val), "%Y-%m-%d").date()
+        h_tm = datetime.strptime(str(hora_val), "%H:%M:%S").time()
+        fecha_hora = datetime.combine(f_dt, h_tm)
+    except:
+        f_dt = date.today()
+        h_tm = datetime.now().time()
+        fecha_hora = datetime.now()
+
+    tipo_atencion = (data.get('tipo_atencion') or '').strip().upper() or "SERVICIO TÉCNICO"
+    tipo_solicitud = (data.get('tipo_solicitud') or '').strip().upper() or "SOPORTE TÉCNICO"
+    medio_contacto = (data.get('medio_contacto') or '').strip().upper() or "WHATSAPP"
+    accion = (data.get('accion') or '').strip().upper() or "SOPORTE MEDIANTE MENSAJES"
+    motivo = (data.get('motivo') or '').strip().upper() or "VALIDACIÓN DE SC"
+    observacion = (data.get('observacion') or '').strip() or None
+    olt = (data.get('olt') or '').strip().upper() or None
+    agente = session.get('user_name', 'Call Center').strip()
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+
+    cursor = conn.cursor(dictionary=True)
+    no_encontrados = []
+
+    try:
+        # Pre-cargar directorio de clientes para los contratos solicitados
+        format_strings = ','.join(['%s'] * len(contratos_unicos))
+        query_directorio = f"""
+            SELECT contrato, nombre_cliente, zona, telefono1, telefono2, fecha_instalacion
+            FROM directorio_clientes
+            WHERE contrato IN ({format_strings})
+        """
+        cursor.execute(query_directorio, tuple(contratos_unicos))
+        clientes_db = {str(row['contrato']).strip(): row for row in cursor.fetchall()}
+
+        query_insert = """
+            INSERT INTO atenciones (
+                fecha, hora, fecha_hora, contrato, cliente, fecha_instalacion, 
+                sector, tipo_atencion, tipo_solicitud, medio_contacto, telefono1, telefono2, 
+                accion, motivo, agente, observacion, olt, ont, router, timer_minutos
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+
+        rows_to_insert = []
+        for c in contratos_unicos:
+            cliente_info = clientes_db.get(c)
+            if cliente_info:
+                nombre_cl = (cliente_info['nombre_cliente'] or f"CLIENTE CONTRATO {c}").strip().upper()
+                sector_cl = (cliente_info['zona'] or '').strip().upper() or None
+                tel1 = (str(cliente_info['telefono1']).strip() if cliente_info['telefono1'] else '').replace('.0', '').replace(',0', '') or None
+                tel2 = (str(cliente_info['telefono2']).strip() if cliente_info['telefono2'] else '').replace('.0', '').replace(',0', '') or None
+                
+                f_inst = cliente_info['fecha_instalacion']
+                if isinstance(f_inst, (datetime, date)):
+                    f_inst_str = f_inst.isoformat()
+                elif isinstance(f_inst, str) and len(f_inst) >= 10:
+                    f_inst_str = f_inst[:10]
+                else:
+                    f_inst_str = None
+            else:
+                nombre_cl = f"CLIENTE NO ENCONTRADO EN DIRECTORIO (CONTRATO {c})"
+                sector_cl = None
+                tel1 = None
+                tel2 = None
+                f_inst_str = None
+                no_encontrados.append(c)
+
+            rows_to_insert.append((
+                f_dt.isoformat(), h_tm.isoformat(), fecha_hora.isoformat(), c, nombre_cl, f_inst_str,
+                sector_cl, tipo_atencion, tipo_solicitud, medio_contacto, tel1, tel2,
+                accion, motivo, agente, observacion, olt, None, None, None
+            ))
+
+        # Inserción en bloque
+        cursor_exec = conn.cursor()
+        cursor_exec.executemany(query_insert, rows_to_insert)
+        conn.commit()
+        registrados = cursor_exec.rowcount
+        cursor_exec.close()
+
+        return jsonify({
+            "status": "success",
+            "message": f"Se registraron {registrados} atenciones exitosamente.",
+            "total_procesados": len(contratos_unicos),
+            "registrados": registrados,
+            "no_encontrados": no_encontrados,
+            "agente": agente
+        })
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"status": "error", "message": f"Error al procesar el lote: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+

@@ -4,9 +4,14 @@
             <h1 style="margin: 0; font-size: 1.8rem; color: #0f172a; font-weight: 800; letter-spacing: -0.02em;">Registro de Atenciones Diarias</h1>
             <p style="margin-top: 5px; color: #64748b; font-size: 0.95rem; font-weight: 500;">Registra llamadas, WhatsApps, cobros y atenciones de oficina en tiempo real.</p>
         </div>
-        <div style="background: #f1f5f9; padding: 10px 18px; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 10px;">
-            <div style="width: 10px; height: 10px; border-radius: 50%; background: #10b981; animation: pulse 2s infinite;"></div>
-            <span style="font-size: 0.85rem; font-weight: 700; color: #334155;">Agente: <span style="color: var(--primary);" id="agente-sesion-tag">{{ asesor }}</span></span>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <button type="button" onclick="abrirModalCargaMasivaAtenciones()" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border: none; padding: 10px 18px; border-radius: 12px; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); transition: all 0.2s;">
+                <i class="fa-solid fa-layer-group"></i> Carga Masiva (Lote)
+            </button>
+            <div style="background: #f1f5f9; padding: 10px 18px; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 10px;">
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #10b981; animation: pulse 2s infinite;"></div>
+                <span style="font-size: 0.85rem; font-weight: 700; color: #334155;">Agente: <span style="color: var(--primary);" id="agente-sesion-tag">{{ asesor }}</span></span>
+            </div>
         </div>
     </div>
 
@@ -495,6 +500,128 @@
     </div>
 </div>
 
+<!-- Modal Carga Masiva Atenciones -->
+<div id="modal-carga-masiva-atenciones" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(5px); z-index: 9999; justify-content: center; align-items: center; padding: 20px; animation: fadeIn 0.2s ease;">
+    <div style="background: white; border-radius: 20px; max-width: 850px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid #e2e8f0; padding: 30px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 15px; margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="background: #e0e7ff; color: #6366f1; width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+                    <i class="fa-solid fa-layer-group"></i>
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 1.25rem; color: #0f172a; font-weight: 800;">Carga Masiva por Lote de Contratos</h3>
+                    <p style="margin: 2px 0 0 0; color: #64748b; font-size: 0.85rem;">Pega una lista de contratos desde Excel/Drive y asigna los parámetros del lote.</p>
+                </div>
+            </div>
+            <button type="button" onclick="cerrarModalCargaMasivaAtenciones()" style="background: #f1f5f9; border: none; font-size: 1.2rem; cursor: pointer; color: #64748b; width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <form id="form-carga-masiva-atenciones" onsubmit="event.preventDefault(); ejecutarCargaMasivaAtenciones();">
+            <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <!-- Lista de Contratos -->
+                <div style="display: flex; flex-direction: column;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="font-weight: 700; color: #1e293b; font-size: 0.9rem;">Lista de Contratos (pegar de Excel/Drive):</label>
+                        <span id="contador-contratos-masivos" style="background: #e0e7ff; color: #4338ca; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 6px;">0 detectados</span>
+                    </div>
+                    <textarea id="masivo_contratos" rows="12" class="form-control" placeholder="Pega aquí los números de contratos (uno por línea o separados por comas/espacios)...&#10;Ejemplo:&#10;38404&#10;41413&#10;032350&#10;20005" required style="resize: vertical; font-family: monospace; font-size: 0.9rem; padding: 12px; line-height: 1.5;" oninput="actualizarContadorContratos()"></textarea>
+                    <small style="color: #64748b; margin-top: 6px; font-size: 0.78rem;">
+                        <i class="fa-solid fa-lightbulb" style="color: #f59e0b;"></i> Los nombres y datos de clientes se autocompletarán con la base de datos.
+                    </small>
+                </div>
+
+                <!-- Campos Comunes del Lote -->
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-weight: 700; font-size: 0.85rem;">Fecha del Registro:</label>
+                        <input type="date" id="masivo_fecha" class="form-control" style="font-size: 0.85rem;">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-weight: 700; font-size: 0.85rem;">Tipo de Atención:</label>
+                        <select id="masivo_tipo_atencion" class="form-control" style="font-size: 0.85rem;">
+                            <option value="SERVICIO TÉCNICO" selected>SERVICIO TÉCNICO</option>
+                            <option value="ATENCIÓN AL CLIENTE">ATENCIÓN AL CLIENTE</option>
+                            <option value="COBRANZAS">COBRANZAS</option>
+                            <option value="VENTAS">VENTAS</option>
+                            <option value="CANCELACIÓN">CANCELACIÓN</option>
+                            <option value="OTROS">OTROS</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-weight: 700; font-size: 0.85rem;">Tipo de Solicitud:</label>
+                        <select id="masivo_tipo_solicitud" class="form-control" style="font-size: 0.85rem;">
+                            <option value="SOPORTE TÉCNICO" selected>SOPORTE TÉCNICO</option>
+                            <option value="ACTUALIZACION DE DATOS">ACTUALIZACION DE DATOS</option>
+                            <option value="ACTUALIZACION DE DEBITO">ACTUALIZACION DE DEBITO</option>
+                            <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
+                            <option value="ENTREGA DE EQUIPOS">ENTREGA DE EQUIPOS</option>
+                            <option value="INCREMENTO MEGAS">INCREMENTO MEGAS</option>
+                            <option value="MIGRACIÓN">MIGRACIÓN</option>
+                            <option value="CONSULTA">CONSULTA</option>
+                            <option value="ACUERDO DE PAGOS">ACUERDO DE PAGOS</option>
+                            <option value="PAGO FACTURA">PAGO FACTURA</option>
+                            <option value="RECONEXION">RECONEXION</option>
+                            <option value="RECLAMO">RECLAMO</option>
+                            <option value="RETENCIÓN">RETENCIÓN</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-weight: 700; font-size: 0.85rem;">Medio de Contacto:</label>
+                        <select id="masivo_medio_contacto" class="form-control" style="font-size: 0.85rem;">
+                            <option value="WHATSAPP" selected>WHATSAPP</option>
+                            <option value="TELEFONO">TELÉFONO</option>
+                            <option value="OFICINA">OFICINA</option>
+                            <option value="WHATSAPP + TELEFONO">WHATSAPP + TELEFONO</option>
+                            <option value="REDES SOCIALES">REDES SOCIALES</option>
+                            <option value="CONTROL CALIDAD">CONTROL CALIDAD</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-weight: 700; font-size: 0.85rem;">Acción Realizada:</label>
+                        <select id="masivo_accion" class="form-control" style="font-size: 0.85rem;">
+                            <option value="SOPORTE MEDIANTE MENSAJES" selected>SOPORTE MEDIANTE MENSAJES</option>
+                            <option value="SOPORTE MEDIANTE LLAMADA">SOPORTE MEDIANTE LLAMADA</option>
+                            <option value="LLAMADA SALIENTE">LLAMADA SALIENTE</option>
+                            <option value="VISITA TECNICA">VISITA TECNICA</option>
+                            <option value="CORTE INTERNO DE SERVICIO">CORTE INTERNO DE SERVICIO</option>
+                            <option value="SE DA INFORMACION">SE DA INFORMACION</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-weight: 700; font-size: 0.85rem;">Motivo / Solución:</label>
+                    <input type="text" id="masivo_motivo" class="form-control" list="motivos-list" placeholder="Ej: VALIDACIÓN DE SC / CLIENTE CORTADO" style="font-size: 0.85rem;">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-weight: 700; font-size: 0.85rem;">Observación / Acción común:</label>
+                    <input type="text" id="masivo_observacion" class="form-control" placeholder="Ej: auditoría: se verifica cliente cortado" style="font-size: 0.85rem;">
+                </div>
+            </div>
+
+            <!-- Banner de Alertas/Resultados -->
+            <div id="masivo_resultado_container" style="display: none; margin-bottom: 20px; padding: 15px; border-radius: 12px; font-size: 0.88rem;"></div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
+                <button type="button" onclick="cerrarModalCargaMasivaAtenciones()" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 10px 20px; border-radius: 10px; font-weight: 700; font-size: 0.9rem; cursor: pointer;">
+                    Cancelar
+                </button>
+                <button type="submit" id="btn-submit-masivo" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Registrar Lote de Atenciones
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
     // --- AUTOCOMPLETADO POR CONTRATO (BLUR) ---
     document.getElementById('aten_contrato').addEventListener('blur', function() {
@@ -850,6 +977,120 @@
             ahora.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' }) + ' ' +
             ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }, 1000);
+
+    // --- LÓGICA DE CARGA MASIVA DE ATENCIONES ---
+    function abrirModalCargaMasivaAtenciones() {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('masivo_fecha').value = today;
+        document.getElementById('masivo_contratos').value = '';
+        document.getElementById('masivo_motivo').value = 'VALIDACIÓN DE SC';
+        document.getElementById('masivo_observacion').value = 'auditoría: se verifica cliente cortado';
+        const resContainer = document.getElementById('masivo_resultado_container');
+        if (resContainer) resContainer.style.display = 'none';
+        actualizarContadorContratos();
+        
+        const modal = document.getElementById('modal-carga-masiva-atenciones');
+        if (modal) modal.style.display = 'flex';
+    }
+
+    function cerrarModalCargaMasivaAtenciones() {
+        const modal = document.getElementById('modal-carga-masiva-atenciones');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function actualizarContadorContratos() {
+        const raw = document.getElementById('masivo_contratos').value;
+        const contratos = raw.split(/[\r\n,;\s]+/).map(c => c.trim()).filter(c => c.length > 0);
+        const unicos = [...new Set(contratos)];
+        const counter = document.getElementById('contador-contratos-masivos');
+        if (counter) {
+            counter.textContent = `${unicos.length} detectados`;
+        }
+    }
+
+    async function ejecutarCargaMasivaAtenciones() {
+        const rawContratos = document.getElementById('masivo_contratos').value;
+        const btnSubmit = document.getElementById('btn-submit-masivo');
+        const resContainer = document.getElementById('masivo_resultado_container');
+        
+        if (!rawContratos.trim()) {
+            if (typeof mostrarToast === 'function') {
+                mostrarToast('Por favor pega al menos un número de contrato.', true);
+            } else {
+                alert("Por favor pega al menos un número de contrato.");
+            }
+            return;
+        }
+        
+        const payload = {
+            contratos: rawContratos,
+            fecha: document.getElementById('masivo_fecha').value,
+            tipo_atencion: document.getElementById('masivo_tipo_atencion').value,
+            tipo_solicitud: document.getElementById('masivo_tipo_solicitud').value,
+            medio_contacto: document.getElementById('masivo_medio_contacto').value,
+            accion: document.getElementById('masivo_accion').value,
+            motivo: document.getElementById('masivo_motivo').value,
+            observacion: document.getElementById('masivo_observacion').value
+        };
+        
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registrando lote...';
+        resContainer.style.display = 'none';
+        
+        try {
+            const resp = await fetch('/api/admin/atenciones/masivo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await resp.json();
+            
+            if (data.status === 'success') {
+                let msgHTML = `<div style="background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; border-radius: 10px; padding: 12px 15px;">`;
+                msgHTML += `<strong><i class="fa-solid fa-circle-check"></i> ¡Éxito!</strong> ${data.message}`;
+                
+                if (data.no_encontrados && data.no_encontrados.length > 0) {
+                    msgHTML += `<div style="margin-top: 8px; font-size: 0.82rem; color: #92400e;">`;
+                    msgHTML += `⚠️ <strong>Nota:</strong> Los siguientes ${data.no_encontrados.length} contrato(s) no estaban en el directorio de clientes y se registraron con contrato genérico: ${data.no_encontrados.join(', ')}`;
+                    msgHTML += `</div>`;
+                }
+                msgHTML += `</div>`;
+                
+                resContainer.innerHTML = msgHTML;
+                resContainer.style.display = 'block';
+                
+                if (typeof mostrarToast === 'function') {
+                    mostrarToast(`¡Éxito! Se registraron ${data.registrados} atenciones.`);
+                }
+                
+                // Refrescar historial
+                if (typeof cargarAtencionesHoy === 'function') {
+                    cargarAtencionesHoy();
+                }
+                
+                // Limpiar área de texto
+                document.getElementById('masivo_contratos').value = '';
+                actualizarContadorContratos();
+                
+                setTimeout(() => {
+                    cerrarModalCargaMasivaAtenciones();
+                }, 2500);
+            } else {
+                resContainer.innerHTML = `<div style="background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 10px; padding: 12px 15px;">
+                    <strong><i class="fa-solid fa-triangle-exclamation"></i> Error:</strong> ${data.message}
+                </div>`;
+                resContainer.style.display = 'block';
+            }
+        } catch (err) {
+            resContainer.innerHTML = `<div style="background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 10px; padding: 12px 15px;">
+                <strong><i class="fa-solid fa-triangle-exclamation"></i> Error de conexión:</strong> ${err.message}
+            </div>`;
+            resContainer.style.display = 'block';
+        } finally {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Registrar Lote de Atenciones';
+        }
+    }
 
     // Inicializar cargas al abrir
     document.addEventListener("DOMContentLoaded", function() {
