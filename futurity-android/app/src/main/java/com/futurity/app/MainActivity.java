@@ -90,6 +90,33 @@ public class MainActivity extends AppCompatActivity {
         settings.setDatabaseEnabled(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         
+        // Inyectar User-Agent personalizado para detectar la versión en el servidor Flask
+        String defaultUserAgent = settings.getUserAgentString();
+        int currentVersionCode = 1;
+        String currentVersionName = "1.0.0";
+        try {
+            currentVersionCode = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+            currentVersionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            Log.e(TAG, "Error al obtener info de version", e);
+        }
+        settings.setUserAgentString(defaultUserAgent + " FuturityAtlas/" + currentVersionName + " (versionCode:" + currentVersionCode + ")");
+
+        // Configurar DownloadListener para redirigir descargas (como el APK) al navegador del sistema
+        webView.setDownloadListener(new android.webkit.DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimetype, long contentLength) {
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW);
+                    intent.setData(android.net.Uri.parse(url));
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Log.e(TAG, "Error iniciando descarga: " + url, e);
+                    Toast.makeText(MainActivity.this, "Error al iniciar la descarga de la actualización", Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+        
         // Enable file access & permissions
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
@@ -310,32 +337,124 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        fusedLocationClient.getLastLocation().addOnSuccessListener(this, location -> {
-            if (location != null && (System.currentTimeMillis() - location.getTime() < 30000)) {
-                sendLocationToWebView(tipo, location.getLatitude(), location.getLongitude());
-            } else {
-                LocationRequest singleRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 0)
-                        .setMaxUpdates(1)
-                        .setDurationMillis(10000)
-                        .build();
+        fusedLocationClient.getLastLocation()
+            .addOnSuccessListener(this, location -> {
+                if (location != null && (System.currentTimeMillis() - location.getTime() < 25000)) {
+                    sendLocationToWebView(tipo, location.getLatitude(), location.getLongitude());
+                } else {
+                    LocationRequest singleRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 0)
+                            .setMaxUpdates(1)
+                            .setDurationMillis(8000)
+                            .build();
 
-                fusedLocationClient.requestLocationUpdates(singleRequest, new LocationCallback() {
-                    @Override
-                    public void onLocationResult(LocationResult locationResult) {
-                        if (locationResult != null && locationResult.getLastLocation() != null) {
-                            Location loc = locationResult.getLastLocation();
-                            sendLocationToWebView(tipo, loc.getLatitude(), loc.getLongitude());
-                        } else {
-                            if (location != null) {
-                                sendLocationToWebView(tipo, location.getLatitude(), location.getLongitude());
-                            } else {
-                                runOnUiThread(() -> webView.evaluateJavascript("alert('No se pudo obtener la ubicación GPS nativa. Active la ubicación del teléfono.');", null));
+                    // LocationCallback con bandera para evitar ejecuciones duplicadas
+                    class SafeLocationCallback extends LocationCallback {
+                        public boolean finished = false;
+                        @Override
+                        public void onLocationResult(LocationResult locationResult) {
+                            synchronized (this) {
+                                if (!finished) {
+                                    finished = true;
+                                    if (locationResult != null && locationResult.getLastLocation() != null) {
+                                        Location loc = locationResult.getLastLocation();
+                                        sendLocationToWebView(tipo, loc.getLatitude(), loc.getLongitude());
+                                    } else {
+                                        fallbackToLocationManager(tipo);
+                                    }
+                                    fusedLocationClient.removeLocationUpdates(this);
+                                }
                             }
                         }
                     }
-                }, Looper.getMainLooper());
+                    final SafeLocationCallback callback = new SafeLocationCallback();
+
+                    // Temporizador de seguridad de 4 segundos para FusedLocation
+                    final android.os.Handler handler = new android.os.Handler(Looper.getMainLooper());
+                    handler.postDelayed(() -> {
+                        synchronized (callback) {
+                            if (!callback.finished) {
+                                callback.finished = true;
+                                Log.d(TAG, "FusedLocation request timed out. Falling back to LocationManager.");
+                                fusedLocationClient.removeLocationUpdates(callback);
+                                fallbackToLocationManager(tipo);
+                            }
+                        }
+                    }, 4000);
+
+                    fusedLocationClient.requestLocationUpdates(singleRequest, callback, Looper.getMainLooper());
+                }
+            })
+            .addOnFailureListener(e -> {
+                fallbackToLocationManager(tipo);
+            });
+    }
+
+    private void fallbackToLocationManager(final String tipo) {
+        Log.d(TAG, "Falling back to LocationManager for single location");
+        try {
+            final android.location.LocationManager lm = (android.location.LocationManager) getSystemService(android.content.Context.LOCATION_SERVICE);
+            if (lm != null) {
+                Location gpsLoc = null;
+                Location netLoc = null;
+                if (lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)) {
+                    gpsLoc = lm.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER);
+                }
+                if (lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)) {
+                    netLoc = lm.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER);
+                }
+
+                Location bestLocation = null;
+                if (gpsLoc != null && netLoc != null) {
+                    bestLocation = (gpsLoc.getTime() > netLoc.getTime()) ? gpsLoc : netLoc;
+                } else {
+                    bestLocation = (gpsLoc != null) ? gpsLoc : netLoc;
+                }
+
+                // If last known location is very fresh (less than 20 seconds), use it immediately
+                if (bestLocation != null && (System.currentTimeMillis() - bestLocation.getTime() < 20000)) {
+                    sendLocationToWebView(tipo, bestLocation.getLatitude(), bestLocation.getLongitude());
+                    return;
+                }
+
+                // Request updates from both providers simultaneously
+                final android.location.LocationListener oneTimeListener = new android.location.LocationListener() {
+                    private boolean hasSent = false;
+                    @Override
+                    public void onLocationChanged(@NonNull Location loc) {
+                        synchronized (this) {
+                            if (!hasSent) {
+                                hasSent = true;
+                                sendLocationToWebView(tipo, loc.getLatitude(), loc.getLongitude());
+                                lm.removeUpdates(this);
+                            }
+                        }
+                    }
+                    @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
+                    @Override public void onProviderEnabled(String provider) {}
+                    @Override public void onProviderDisabled(String provider) {}
+                };
+
+                boolean requested = false;
+                if (lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)) {
+                    lm.requestLocationUpdates(android.location.LocationManager.GPS_PROVIDER, 0, 0, oneTimeListener, Looper.getMainLooper());
+                    requested = true;
+                }
+                if (lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)) {
+                    lm.requestLocationUpdates(android.location.LocationManager.NETWORK_PROVIDER, 0, 0, oneTimeListener, Looper.getMainLooper());
+                    requested = true;
+                }
+
+                if (!requested) {
+                    runOnUiThread(() -> webView.evaluateJavascript("alert('Active la ubicación de su teléfono.');", null));
+                }
+            } else {
+                runOnUiThread(() -> webView.evaluateJavascript("alert('Active la ubicación de su teléfono.');", null));
             }
-        });
+        } catch (SecurityException se) {
+            Log.e(TAG, "SecurityException in fallbackToLocationManager: " + se.getMessage());
+        } catch (Exception ex) {
+            Log.e(TAG, "Error in fallbackToLocationManager: " + ex.getMessage());
+        }
     }
 
     private void sendLocationToWebView(String tipo, double lat, double lon) {

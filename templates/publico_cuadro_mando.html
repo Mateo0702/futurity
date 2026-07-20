@@ -17,121 +17,179 @@
         }
 
         body {
-            background: linear-gradient(135deg, #090d16 0%, #111827 100%);
+            background: linear-gradient(135deg, #07090e 0%, #0f172a 100%);
             min-height: 100vh;
             color: #f1f5f9;
-            padding: 16px;
+            padding: 20px;
             display: flex;
             justify-content: center;
         }
 
+        @media (max-width: 500px) {
+            body {
+                padding: 10px;
+            }
+        }
+
         .container {
             width: 100%;
-            max-width: 900px;
+            max-width: 950px;
             display: flex;
             flex-direction: column;
             gap: 20px;
         }
 
+        /* PREMIUM HEADER */
         .header-card {
-            background: rgba(17, 24, 39, 0.7);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 20px;
-            padding: 20px;
+            border-radius: 24px;
+            padding: 24px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 15px;
             flex-wrap: wrap;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, #dc2626, #6366f1, #10b981);
         }
 
         .logo-section {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 15px;
         }
 
         .logo-icon {
-            width: 44px;
-            height: 44px;
-            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
-            border-radius: 12px;
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #dc2626 0%, #7f1d1d 100%);
+            border-radius: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 6px 15px rgba(220, 38, 38, 0.3);
+            box-shadow: 0 8px 20px rgba(220, 38, 38, 0.3);
+            border: 1px solid rgba(255,255,255,0.1);
         }
 
         .logo-icon i {
-            font-size: 1.25rem;
+            font-size: 1.4rem;
             color: white;
         }
 
         .logo-text h1 {
-            font-size: 1.35rem;
-            font-weight: 800;
-            letter-spacing: -0.02em;
-            background: linear-gradient(to right, #ffffff, #cbd5e1);
+            font-size: 1.5rem;
+            font-weight: 900;
+            letter-spacing: -0.03em;
+            background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
         .logo-text p {
-            font-size: 0.75rem;
+            font-size: 0.72rem;
             color: #94a3b8;
-            font-weight: 500;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.08em;
         }
 
         .date-badge {
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 8px 16px;
-            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 10px 18px;
+            border-radius: 14px;
             font-size: 0.9rem;
             font-weight: 700;
             color: #f8fafc;
             display: flex;
             align-items: center;
             gap: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transition: all 0.3s;
         }
 
-        .error-card {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.25);
-            border-radius: 20px;
-            padding: 30px;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            margin: auto 0;
+        .date-badge:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
         }
 
-        .error-card i {
-            font-size: 3rem;
-            color: #ef4444;
-            margin-bottom: 15px;
+        /* PREMIUM TAB BAR */
+        .tabs {
+            display: flex;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 6px;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            gap: 4px;
+            margin-top: 5px;
+            margin-bottom: 5px;
         }
 
-        .error-card h2 {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 10px;
-            color: #f8fafc;
-        }
-
-        .error-card p {
-            font-size: 0.95rem;
+        .tab-btn {
+            flex: 1;
+            padding: 12px 8px;
+            border-radius: 14px;
+            border: none;
+            background: transparent;
             color: #94a3b8;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 0.88rem;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .tab-btn:hover {
+            color: #f8fafc;
+            background: rgba(255,255,255,0.02);
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            color: #ffffff;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        /* Responsive text for tab buttons */
+        .tab-text-short {
+            display: none;
+        }
+
+        @media (max-width: 500px) {
+            .tab-text-full {
+                display: none;
+            }
+            .tab-text-short {
+                display: inline;
+            }
+            .tab-btn {
+                padding: 10px 4px;
+                font-size: 0.78rem;
+            }
         }
 
         /* GRID LAYOUT FOR SECTIONS */
         .report-grid {
             display: grid;
-            grid-template-columns: 1.25fr 1fr;
+            grid-template-columns: 1.2fr 1fr;
             gap: 20px;
             width: 100%;
         }
@@ -142,43 +200,77 @@
             }
         }
 
+        /* PREMIUM GLASS CARDS */
         .card {
-            background: rgba(17, 24, 39, 0.6);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 20px;
+            border-radius: 24px;
             overflow: hidden;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.25);
             display: flex;
             flex-direction: column;
+            transition: transform 0.3s, border-color 0.3s;
+        }
+
+        .card:hover {
+            border-color: rgba(255,255,255,0.1);
         }
 
         .card-header {
-            padding: 14px 20px;
-            font-size: 0.9rem;
+            padding: 16px 20px;
+            font-size: 0.92rem;
             font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 0.03em;
+            letter-spacing: 0.04em;
             text-align: center;
             color: white;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            position: relative;
         }
 
+        /* TABLE RESPONSIVENESS AND SMOOTH SCROLL */
         .table-responsive {
             width: 100%;
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
+            position: relative;
+        }
+
+        /* Scroll indicator message for mobile */
+        .table-scroll-hint {
+            display: none;
+            font-size: 0.68rem;
+            color: #64748b;
+            text-align: right;
+            padding: 4px 12px;
+            font-weight: 600;
+            background: rgba(0,0,0,0.05);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+
+        @media (max-width: 600px) {
+            .table-scroll-hint {
+                display: block;
+            }
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
             font-size: 0.85rem;
+            min-width: 500px; /* Evita que las columnas colapsen en pantallas pequeñas */
+        }
+
+        @media (max-width: 400px) {
+            table {
+                min-width: 480px;
+            }
         }
 
         th, td {
-            padding: 10px 12px;
+            padding: 12px 14px;
             text-align: center;
             border-right: 1px solid rgba(255, 255, 255, 0.05);
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -190,42 +282,55 @@
 
         /* Call Center Styles */
         .th-main {
-            background: #1e3a8a;
+            background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
             color: white;
-            font-weight: 700;
+            font-weight: 800;
         }
 
         .th-header {
-            font-weight: 700;
-            font-size: 0.8rem;
-            border-bottom: 1.5px solid rgba(255, 255, 255, 0.1);
+            font-weight: 800;
+            font-size: 0.82rem;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
         }
 
         .td-label {
-            font-weight: 700;
+            font-weight: 800;
             text-align: left;
-            background: rgba(128, 100, 162, 0.2);
-            color: #e9d5ff;
+            background: rgba(139, 92, 246, 0.12) !important;
+            color: #d8b4fe;
             width: 38%;
         }
 
         .cc-total-row {
-            background: #000000;
+            background: rgba(0, 0, 0, 0.4);
             color: #ffffff;
-            font-weight: 800;
+            font-weight: 900;
         }
 
-        /* KPIs de Campo */
+        .cc-total-row td {
+            border-bottom: none;
+            padding: 14px 12px;
+        }
+
+        /* FIELD OPERATOR KPIs */
         .kpi-container {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
         }
 
         .kpi-box {
-            padding: 12px;
+            padding: 16px 12px;
             text-align: center;
-            border-right: 1px solid rgba(255, 255, 255, 0.05);
+            border-right: 1px solid rgba(255, 255, 255, 0.06);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .kpi-box:hover {
+            background: rgba(255,255,255,0.01);
         }
 
         .kpi-box:last-child {
@@ -233,21 +338,43 @@
         }
 
         .kpi-title {
-            font-size: 0.65rem;
+            font-size: 0.68rem;
             font-weight: 700;
             color: #94a3b8;
             height: 32px;
             display: flex;
             align-items: center;
             justify-content: center;
-            line-height: 1.2;
+            line-height: 1.25;
             text-transform: uppercase;
+            letter-spacing: 0.02em;
         }
 
         .kpi-value {
-            font-size: 1.4rem;
-            font-weight: 800;
-            margin-top: 4px;
+            font-size: 1.7rem;
+            font-weight: 900;
+            margin-top: 6px;
+            background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .kpis-blue .kpi-value {
+            background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .kpis-green .kpi-value {
+            background: linear-gradient(135deg, #4ade80 0%, #16a34a 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .kpis-orange .kpi-value {
+            background: linear-gradient(135deg, #fcd34d 0%, #d97706 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
         .kpi-damage-detail {
@@ -256,28 +383,32 @@
         }
 
         .kpi-damage-box {
-            padding: 12px;
+            padding: 16px 12px;
             text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
 
         .kpi-damage-box.left {
-            border-right: 1px solid rgba(255, 255, 255, 0.05);
-            background: rgba(30, 58, 138, 0.25);
+            border-right: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(30, 58, 138, 0.15);
         }
 
         .kpi-damage-box.right {
-            background: rgba(20, 83, 45, 0.2);
+            background: rgba(20, 83, 45, 0.12);
         }
 
         .kpi-damage-title {
-            font-size: 0.65rem;
+            font-size: 0.68rem;
             font-weight: 700;
-            height: 28px;
+            height: 32px;
             display: flex;
             align-items: center;
             justify-content: center;
-            line-height: 1.2;
+            line-height: 1.25;
             text-transform: uppercase;
+            letter-spacing: 0.02em;
         }
 
         .kpi-damage-box.left .kpi-damage-title {
@@ -289,11 +420,15 @@
         }
 
         .kpi-damage-box.left .kpi-value {
-            color: #60a5fa;
+            background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
         .kpi-damage-box.right .kpi-value {
-            color: #4ade80;
+            background: linear-gradient(135deg, #4ade80 0%, #15803d 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
         /* Soluciones & Problemas lists */
@@ -307,31 +442,35 @@
         }
 
         .detail-name {
-            padding: 8px 12px;
+            padding: 10px 14px;
             text-align: left;
             color: #cbd5e1;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
+            font-weight: 500;
         }
 
         .detail-val {
-            padding: 8px 12px;
-            font-weight: 700;
-            width: 60px;
+            padding: 10px 14px;
+            font-weight: 800;
+            width: 70px;
+            font-size: 0.9rem;
         }
 
         .detail-sol-val {
-            color: #60a5fa;
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.04);
         }
 
         .detail-prob-val {
-            color: #4ade80;
+            color: #34d399;
+            background: rgba(52, 211, 153, 0.04);
         }
 
         .empty-row {
-            padding: 15px;
+            padding: 24px;
             text-align: center;
             color: #64748b;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             font-style: italic;
         }
 
@@ -342,46 +481,108 @@
             gap: 20px;
         }
 
-        @media (max-width: 600px) {
+        @media (max-width: 650px) {
             .charts-container {
                 grid-template-columns: 1fr;
             }
         }
 
         .chart-card {
-            background: rgba(17, 24, 39, 0.6);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 20px;
-            padding: 20px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.25);
             text-align: center;
+            transition: border-color 0.3s;
+        }
+
+        .chart-card:hover {
+            border-color: rgba(255,255,255,0.15);
         }
 
         .chart-card h3 {
-            font-size: 0.85rem;
+            font-size: 0.88rem;
             font-weight: 800;
             text-transform: uppercase;
             color: #94a3b8;
-            margin-bottom: 15px;
-            letter-spacing: 0.05em;
+            margin-bottom: 20px;
+            letter-spacing: 0.06em;
         }
 
         .chart-wrapper {
-            height: 220px;
+            height: 230px;
             position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
+        /* ERRORS AND GENERAL ALERTS */
+        .error-card {
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 24px;
+            padding: 40px 24px;
+            text-align: center;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+            margin: auto 0;
+            max-width: 480px;
+            align-self: center;
+        }
+
+        .error-card i {
+            font-size: 3.5rem;
+            color: #ef4444;
+            margin-bottom: 20px;
+            text-shadow: 0 0 15px rgba(239,68,68,0.2);
+        }
+
+        .error-card h2 {
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin-bottom: 12px;
+            color: #f8fafc;
+        }
+
+        .error-card p {
+            font-size: 0.95rem;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+
         .footer {
             text-align: center;
-            padding: 10px 0 30px 0;
-            font-size: 0.75rem;
+            padding: 20px 0 40px 0;
+            font-size: 0.8rem;
             color: #475569;
-            font-weight: 500;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        /* CUSTOM SCROLLBARS FOR CHROME/SAFARI */
+        .table-responsive::-webkit-scrollbar,
+        div::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+
+        .table-responsive::-webkit-scrollbar-track,
+        div::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.2);
+        }
+
+        .table-responsive::-webkit-scrollbar-thumb,
+        div::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.25);
+            border-radius: 10px;
+        }
+
+        .table-responsive::-webkit-scrollbar-thumb:hover,
+        div::-webkit-scrollbar-thumb:hover {
+            background: rgba(99, 102, 241, 0.5);
         }
     </style>
 </head>
@@ -412,12 +613,33 @@
         </div>
     </div>
 
+    <!-- TABS NAVIGATION -->
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab(event, 'tab-general')">
+            <span class="tab-text-full">📊 Cuadro de Mando</span>
+            <span class="tab-text-short">📊 Resumen</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab-manana')">
+            <span class="tab-text-full">📅 Visitas Mañana ({{ visitas_manana|length }})</span>
+            <span class="tab-text-short">📅 Mañana ({{ visitas_manana|length }})</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab-actividades')">
+            <span class="tab-text-full">🛠️ Actividades ({{ actividades_tecnicos|length }})</span>
+            <span class="tab-text-short">🛠️ Actividades ({{ actividades_tecnicos|length }})</span>
+        </button>
+    </div>
+
+    <!-- MAIN CONTENT WRAPPER -->
+    <div id="tab-general" class="tab-content">
     <!-- MAIN TABLES GRID -->
     <div class="report-grid">
         <!-- Call Center Card -->
         <div class="card">
-            <div class="card-header" style="background: #1e3a8a;">
+            <div class="card-header" style="background: #1e3a8a; border-bottom: none;">
                 Atenciones Diarias por Call Center
+            </div>
+            <div class="table-scroll-hint">
+                <i class="fa-solid fa-arrows-left-right"></i> Desliza para ver la tabla completa
             </div>
             <div class="table-responsive">
                 <table>
@@ -461,22 +683,22 @@
 
         <!-- Field Tech KPIs Card -->
         <div class="card">
-            <div class="card-header" style="background: #1f2937;">
+            <div class="card-header" style="background: #1f2937; border-bottom: none;">
                 Desempeño Operador de Campo (VT)
             </div>
             
             <div class="kpi-container">
                 <div class="kpi-box">
                     <span class="kpi-title">Pendientes<br>Anteriores</span>
-                    <div class="kpi-value" style="color: #cbd5e1;">{{ kpis.pendientes_anteriores }}</div>
+                    <div class="kpi-value">{{ kpis.pendientes_anteriores }}</div>
                 </div>
                 <div class="kpi-box">
                     <span class="kpi-title">Generadas<br>Hoy</span>
-                    <div class="kpi-value" style="color: #cbd5e1;">{{ kpis.generadas_hoy }}</div>
+                    <div class="kpi-value">{{ kpis.generadas_hoy }}</div>
                 </div>
-                <div class="kpi-box">
+                <div class="kpi-box kpis-blue">
                     <span class="kpi-title">Carga Total<br>Visitas</span>
-                    <div class="kpi-value" style="color: #38bdf8;">{{ kpis.total_carga }}</div>
+                    <div class="kpi-value">{{ kpis.total_carga }}</div>
                 </div>
             </div>
 
@@ -562,6 +784,105 @@
             <div class="chart-wrapper">
                 <canvas id="cmChartTipo"></canvas>
             </div>
+        </div>
+    </div>
+    </div> <!-- END OF TAB GENERAL -->
+
+    <!-- TAB 2: VISITAS MAÑANA -->
+    <div id="tab-manana" class="tab-content" style="display: none;">
+        <div class="card" style="padding: 20px; margin-bottom: 20px;">
+            <div class="card-header" style="background: #1e3a8a; border-radius: 12px; display: flex; align-items: center; gap: 8px; justify-content: center; margin-bottom: 16px;">
+                <i class="fa-solid fa-calendar-day" style="font-size: 1.1rem; color: #60a5fa;"></i>
+                <h2 style="font-size: 1rem; font-weight: 700; color: #fff; margin: 0;">Visitas Planificadas para el Día Siguiente</h2>
+            </div>
+            
+            {% if visitas_manana %}
+            <div class="table-scroll-hint">
+                <i class="fa-solid fa-arrows-left-right"></i> Desliza para ver la tabla completa
+            </div>
+            <div class="table-responsive">
+                <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; color: #cbd5e1; background: rgba(255,255,255,0.01);">
+                    <thead>
+                        <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 700; color: #f8fafc;">
+                            <th style="padding: 12px 16px;">#</th>
+                            <th style="padding: 12px 16px;">Cliente</th>
+                            <th style="padding: 12px 16px;">Sector / Zona</th>
+                            <th style="padding: 12px 16px;">Daño / Problema</th>
+                            <th style="padding: 12px 16px; text-align: center;">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for v in visitas_manana %}
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='none'">
+                            <td style="padding: 12px 16px; color: #94a3b8; font-weight: 500;">{{ loop.index }}</td>
+                            <td style="padding: 12px 16px; font-weight: 700; color: #fff;">{{ v.cliente }}</td>
+                            <td style="padding: 12px 16px; color: #cbd5e1;">{{ v.sector or 'No registrado' }}</td>
+                            <td style="padding: 12px 16px; color: #cbd5e1;">{{ v.problema or 'No detallado' }}</td>
+                            <td style="padding: 12px 16px; text-align: center;">
+                                <span style="background: #fef3c7; color: #d97706; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">{{ v.estado }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div style="text-align: center; padding: 40px 20px; color: #94a3b8; font-style: italic;">
+                <i class="fa-solid fa-calendar-xmark" style="font-size: 2.5rem; color: rgba(255,255,255,0.1); margin-bottom: 12px; display: block;"></i>
+                No hay visitas agendadas para el día siguiente.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- TAB 3: ACTIVIDADES REALIZADAS -->
+    <div id="tab-actividades" class="tab-content" style="display: none;">
+        <div class="card" style="padding: 20px; margin-bottom: 20px;">
+            <div class="card-header" style="background: #14532d; border-radius: 12px; display: flex; align-items: center; gap: 8px; justify-content: center; margin-bottom: 16px;">
+                <i class="fa-solid fa-screwdriver-wrench" style="font-size: 1.1rem; color: #4ade80;"></i>
+                <h2 style="font-size: 1rem; font-weight: 700; color: #fff; margin: 0;">Resumen de Actividades de Técnicos Realizadas Hoy</h2>
+            </div>
+            
+            {% if actividades_tecnicos %}
+            <div class="table-scroll-hint">
+                <i class="fa-solid fa-arrows-left-right"></i> Desliza para ver la tabla completa
+            </div>
+            <div class="table-responsive">
+                <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; color: #cbd5e1; background: rgba(255,255,255,0.01);">
+                    <thead>
+                        <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 700; color: #f8fafc;">
+                            <th style="padding: 12px 16px;">Técnico Principal</th>
+                            <th style="padding: 12px 16px;">Técnico Apoyo</th>
+                            <th style="padding: 12px 16px;">Solución Aplicada</th>
+                            <th style="padding: 12px 16px; text-align: center;">Área</th>
+                            <th style="padding: 12px 16px; text-align: center;">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in actividades_tecnicos %}
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='none'">
+                            <td style="padding: 12px 16px; font-weight: 700; color: #fff;">{{ a.tecnico_principal }}</td>
+                            <td style="padding: 12px 16px; color: #94a3b8;">{{ a.tecnico_apoyo or '-' }}</td>
+                            <td style="padding: 12px 16px; color: #cbd5e1; font-weight: 600;">{{ a.solucion_tecnico }}</td>
+                            <td style="padding: 12px 16px; text-align: center;">
+                                {% if a.es_instalacion == 1 %}
+                                <span style="background: rgba(16,185,129,0.15); color: #10b981; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Instalación</span>
+                                {% else %}
+                                <span style="background: rgba(59,130,246,0.15); color: #3b82f6; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">Soporte VT</span>
+                                {% endif %}
+                            </td>
+                            <td style="padding: 12px 16px; text-align: center; font-weight: 700; color: #fff; font-size: 0.95rem;">{{ a.cantidad }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div style="text-align: center; padding: 40px 20px; color: #94a3b8; font-style: italic;">
+                <i class="fa-solid fa-list-check" style="font-size: 2.5rem; color: rgba(255,255,255,0.1); margin-bottom: 12px; display: block;"></i>
+                No se registran actividades finalizadas para el día de hoy.
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -694,6 +1015,25 @@
         } catch(e) {
             console.error(e);
         }
+
+        // Navegación de Pestañas
+        window.switchTab = function(event, tabId) {
+            event.preventDefault();
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+            document.getElementById(tabId).style.display = 'block';
+            
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                btn.style.background = 'rgba(255, 255, 255, 0.02)';
+                btn.style.color = '#94a3b8';
+                btn.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+            });
+            const activeBtn = event.currentTarget;
+            activeBtn.classList.add('active');
+            activeBtn.style.background = 'rgba(255, 255, 255, 0.06)';
+            activeBtn.style.color = '#fff';
+            activeBtn.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+        };
     });
 </script>
 {% endif %}

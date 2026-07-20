@@ -151,8 +151,6 @@ def optimizar_ruta_tecnico(visitas, starting_lat=None, starting_lon=None):
     # Assign sequential orden_tecnico (technician stop sequence)
     for idx, v in enumerate(sorted_visitas, start=1):
         v['orden_tecnico'] = idx
-        if 'numero_parada' not in v:
-            v['numero_parada'] = idx
          
     return sorted_visitas
 
@@ -161,6 +159,9 @@ def optimizar_todas_las_visitas(visitas):
     if not visitas:
         return []
         
+    # Ordenar por id_visita de forma estable para asegurar el orden de registro
+    visitas.sort(key=lambda x: x.get('id_visita', 0) or 0)
+    
     # Assign global numero_parada in the order they are loaded
     for idx, v in enumerate(visitas, start=1):
         v['numero_parada'] = idx

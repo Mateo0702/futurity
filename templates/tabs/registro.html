@@ -35,37 +35,25 @@
                 <!-- No priority field for installations, we default it to MEDIA internally via a hidden input -->
                 <input type="hidden" name="prioridad" value="MEDIA">
 
-                <!-- Crew selection instead of individual technicians -->
-                <div class="form-group" style="grid-column: span 2;">
-                    <label style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Cuadrilla Asignada:</label>
-                    <select id="registro-cuadrilla" class="form-control" required onchange="actualizarTecnicosCuadrilla(this.value)">
-                        <option value="">-- Seleccione la Cuadrilla Responsable --</option>
-                        <option value="CUADRILLA_1">CUADRILLA 1 (Henry Cuenca / Eduardo Cruz)</option>
-                        <option value="CUADRILLA_2">CUADRILLA 2 (Jooel Arroyo / Oswaldo Bermeo)</option>
+                <div class="form-group">
+                    <label style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Técnico Principal:</label>
+                    <select name="tecnico_asignado" id="registro-tecnico-asignado" class="form-control" required>
+                        <option value="">-- Seleccione el Técnico Responsable --</option>
+                        {% for tecnico in tecnicos %}
+                        <option value="{{ tecnico.nombre }}">{{ tecnico.nombre }}</option>
+                        {% endfor %}
                     </select>
-                    <!-- Hidden inputs to submit expected technician names to backend -->
-                    <input type="hidden" name="tecnico_asignado" id="registro-tecnico-asignado" value="">
-                    <input type="hidden" name="tecnico_apoyo" id="registro-tecnico-apoyo" value="">
                 </div>
-                <script>
-                    function actualizarTecnicosCuadrilla(val) {
-                        const principalInput = document.getElementById('registro-tecnico-asignado');
-                        const apoyoInput = document.getElementById('registro-tecnico-apoyo');
-                        if (val === 'CUADRILLA_1') {
-                            principalInput.value = 'HENRY CUENCA';
-                            apoyoInput.value = 'EDUARDO CRUZ';
-                        } else if (val === 'CUADRILLA_2') {
-                            principalInput.value = 'JOOEL ARROYO';
-                            apoyoInput.value = 'OSWALDO BERMEO';
-                        } else {
-                            principalInput.value = '';
-                            apoyoInput.value = '';
-                        }
-                        if (typeof verificarConflictosAgenda === 'function') {
-                            verificarConflictosAgenda();
-                        }
-                    }
-                </script>
+
+                <div class="form-group">
+                    <label style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Técnico de Apoyo (Opcional):</label>
+                    <select name="tecnico_apoyo" id="registro-tecnico-apoyo" class="form-control">
+                        <option value="">-- Sin Apoyo --</option>
+                        {% for tecnico in tecnicos %}
+                        <option value="{{ tecnico.nombre }}">{{ tecnico.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             {% else %}
                 <div class="form-group">
                     <label>Prioridad de Atención:</label>
@@ -116,14 +104,18 @@
             <div class="form-grid">
                 <div class="form-group">
                     <label>Empresa:</label>
-                    <select name="empresa" required class="form-control">
+                    <select name="empresa" id="registro-empresa" required class="form-control">
                         <option value="SERVICABLE">SERVICABLE</option>
                         <option value="FIBRACOM">FIBRACOM</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Contrato:</label>
-                    <input type="text" name="contrato" placeholder="Ej. 47d" class="form-control">
+                    <label style="font-weight: 700;">Contrato:</label>
+                    <div style="position: relative;">
+                        <input type="text" name="contrato" id="registro-contrato" placeholder="Ej. 47d" class="form-control" style="padding-right: 40px;">
+                        <span id="registro_contrato_loading" style="position: absolute; right: 12px; top: 12px; display: none; color: #64748b;"><i class="fa-solid fa-spinner fa-spin"></i></span>
+                        <span id="registro_contrato_ok" style="position: absolute; right: 12px; top: 12px; display: none; color: #10b981;"><i class="fa-solid fa-circle-check"></i></span>
+                    </div>
                 </div>
                 <div class="form-group">
                     <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px;">
@@ -138,7 +130,7 @@
                 </div>
                 <div class="form-group">
                     <label>Teléfonos:</label>
-                    <input type="text" name="telefonos" placeholder="Ej. 593 99 232 1716" class="form-control">
+                    <input type="text" name="telefonos" id="registro-telefonos" placeholder="Ej. 593 99 232 1716" class="form-control">
                 </div>
             </div>
 
@@ -224,9 +216,13 @@
                     <label>Servicio:</label>
                     <select name="servicio" required class="form-control">
                         <option value="">-- Seleccionar --</option>
-                        <option value="INTERNET_GPON">INTERNET_GPON</option>
-                        <option value="COMBO_GPON">COMBO_GPON</option>
+                        <option value="CABLE">CABLE</option>
                         <option value="CABLE_GPON">CABLE_GPON</option>
+                        <option value="COMBO_GPON">COMBO_GPON</option>
+                        <option value="INTERNET_GPON">INTERNET_GPON</option>
+                        <option value="RADIO">RADIO</option>
+                        <option value="INTERNET_UTP">INTERNET_UTP</option>
+                        <option value="SMART HOME">SMART HOME</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -272,6 +268,10 @@
                         <div>
                             <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px; display: block;">IP (Estática):</label>
                             <input type="text" name="info_ip" class="form-control" placeholder="192.168.x.x">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px; display: block;">VLAN:</label>
+                            <input type="text" name="info_vlan" class="form-control" placeholder="Ej. 100">
                         </div>
                         <div>
                             <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px; display: block;">Usuario (PPPoE):</label>
@@ -640,6 +640,71 @@
         if (inputPref) {
             inputPref.addEventListener('input', verificarConflictosAgenda);
             inputPref.addEventListener('change', verificarConflictosAgenda);
+        }
+
+        // --- AUTOCOMPLETADO POR CONTRATO EN REGISTRO DE VISITAS/INSTALACIONES ---
+        const inputContratoReg = document.getElementById('registro-contrato');
+        if (inputContratoReg) {
+            inputContratoReg.addEventListener('blur', function() {
+                const contrato = this.value.trim();
+                if (!contrato) return;
+
+                const empresaSelect = document.getElementById('registro-empresa');
+                const empresa = empresaSelect ? empresaSelect.value : 'SERVICABLE';
+
+                const loader = document.getElementById('registro_contrato_loading');
+                const checkIcon = document.getElementById('registro_contrato_ok');
+
+                if (loader) loader.style.display = 'block';
+                if (checkIcon) checkIcon.style.display = 'none';
+
+                fetch(`/api/cliente/${encodeURIComponent(contrato)}?empresa=${encodeURIComponent(empresa)}`)
+                    .then(res => {
+                        if (res.ok) return res.json();
+                        throw new Error('No encontrado');
+                    })
+                    .then(data => {
+                        if (loader) loader.style.display = 'none';
+                        if (data.cliente) {
+                            if (checkIcon) checkIcon.style.display = 'block';
+
+                            document.getElementById('input-cliente-registro').value = data.cliente;
+                            
+                            const inputTels = document.getElementById('registro-telefonos');
+                            if (inputTels) inputTels.value = data.telefonos || '';
+
+                            const inputDireccion = document.getElementById('registro-direccion');
+                            if (inputDireccion) inputDireccion.value = data.direccion || '';
+
+                            if (data.zona_excel) {
+                                const sectorInput = document.getElementById('registro-sector');
+                                const sectorVal = data.zona_excel.trim().toUpperCase();
+                                const datalist = document.getElementById('sectores-list');
+                                if (datalist) {
+                                    const options = Array.from(datalist.options);
+                                    const match = options.find(opt => opt.value.toUpperCase() === sectorVal);
+                                    if (match) {
+                                        sectorInput.value = match.value;
+                                    } else {
+                                        sectorInput.value = data.zona_excel;
+                                    }
+                                } else {
+                                    sectorInput.value = data.zona_excel;
+                                }
+                                
+                                // Completar coordenadas y cargar en mapa
+                                if (sectorInput) {
+                                    autoCompletarCoordenadasSector(sectorInput);
+                                }
+                            }
+                        }
+                    })
+                    .catch(err => {
+                        if (loader) loader.style.display = 'none';
+                        if (checkIcon) checkIcon.style.display = 'none';
+                        console.log('Cliente no encontrado en el directorio.');
+                    });
+            });
         }
     });
 </script>

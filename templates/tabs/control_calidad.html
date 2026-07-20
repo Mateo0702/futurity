@@ -199,9 +199,17 @@
                 <label for="calidad_fecha_fin" style="font-weight: 600; color: #475569; font-size: 0.9rem; margin-bottom: 5px; display: block;">Hasta (Fecha)</label>
                 <input type="date" id="calidad_fecha_fin" class="form-control" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; font-family: inherit;">
             </div>
-            <div style="flex: 2; min-width: 250px;">
+            <div style="flex: 2; min-width: 200px;">
                 <label for="calidad_cliente" style="font-weight: 600; color: #475569; font-size: 0.9rem; margin-bottom: 5px; display: block;">Buscar Cliente</label>
                 <input type="text" id="calidad_cliente" class="form-control" placeholder="Nombre del cliente..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; font-family: inherit;">
+            </div>
+            <div style="flex: 1; min-width: 180px;">
+                <label for="calidad_tipo_servicio" style="font-weight: 600; color: #475569; font-size: 0.9rem; margin-bottom: 5px; display: block;">Tipo de Servicio</label>
+                <select id="calidad_tipo_servicio" class="form-control" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; font-family: inherit; background: white; height: 42px;">
+                    <option value="">-- Todos los Servicios --</option>
+                    <option value="0">Visitas de Soporte</option>
+                    <option value="1">Instalaciones</option>
+                </select>
             </div>
             <div style="display: flex; gap: 10px;">
                 <button type="submit" class="btn" style="padding: 10px 20px; border-radius: 8px; background-color: var(--primary); color: white; border: none; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
@@ -340,6 +348,7 @@
         document.getElementById('calidad_fecha_inicio').value = fechaStr;
         document.getElementById('calidad_fecha_fin').value = fechaStr;
         document.getElementById('calidad_cliente').value = "";
+        document.getElementById('calidad_tipo_servicio').value = "";
         
         cargarCalidad();
     }
@@ -348,6 +357,7 @@
         const fechaInicio = document.getElementById('calidad_fecha_inicio').value;
         const fechaFin = document.getElementById('calidad_fecha_fin').value;
         const cliente = document.getElementById('calidad_cliente').value.trim();
+        const tipoServicio = document.getElementById('calidad_tipo_servicio').value;
 
         const listContainer = document.getElementById('calidad-resenas-list');
         if (listContainer) {
@@ -359,7 +369,7 @@
             `;
         }
 
-        const url = `/api/admin/control_calidad/datos?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}&cliente=${encodeURIComponent(cliente)}`;
+        const url = `/api/admin/control_calidad/datos?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}&cliente=${encodeURIComponent(cliente)}&es_instalacion=${tipoServicio}`;
 
         fetch(url)
             .then(res => res.json())

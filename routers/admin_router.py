@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, session, send_file
+from flask import Blueprint, render_template, request, jsonify, session, send_file, redirect, url_for, flash
 from datetime import datetime, timedelta, date
 from db_config import get_db_connection
 from io import BytesIO
@@ -14,7 +14,6 @@ from reportlab.lib.enums import TA_CENTER
 
 admin_bp = Blueprint('admin', __name__)
 
-from flask import redirect, url_for
 from urllib.parse import urlencode
 
 @admin_bp.route('/admin/control_calidad')
@@ -22,7 +21,6 @@ def dashboard_calidad():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     if session.get('user_role') not in ['ADMIN', 'ASESOR']:
-        from flask import flash
         flash('No tienes permiso para acceder al control de calidad.', 'danger')
         return redirect(url_for('dashboard'))
 
@@ -46,11 +44,12 @@ def api_dashboard_calidad():
         
     try:
         cursor = conexion.cursor(dictionary=True)
-        # Capturar parámetros de fecha y cliente, usando hoy por defecto
+        # Capturar parámetros de fecha, cliente y es_instalacion, usando hoy por defecto
         hoy = datetime.now().strftime('%Y-%m-%d')
         fecha_inicio = request.args.get('fecha_inicio', hoy)
         fecha_fin = request.args.get('fecha_fin', hoy)
         cliente_filtro = request.args.get('cliente', '').strip()
+        es_instalacion = request.args.get('es_instalacion', '').strip()
 
         # Construir cláusula WHERE común
         base_where = "WHERE calificacion_estrellas IS NOT NULL AND fecha_programada >= %s AND fecha_programada <= %s"
@@ -59,6 +58,10 @@ def api_dashboard_calidad():
         if cliente_filtro:
             base_where += " AND cliente LIKE %s"
             params.append(f"%{cliente_filtro}%")
+
+        if es_instalacion in ['0', '1']:
+            base_where += " AND es_instalacion = %s"
+            params.append(int(es_instalacion))
         
         # 1. Consulta para los KPIs Generales (incluye promedios de encuesta 1-10)
         cursor.execute(f"""
@@ -312,10 +315,13 @@ def api_tecnicos_ubicaciones():
                    placa_vehiculo,
                    alerta_panico,
                    mensaje_panico,
-                   CASE WHEN latitud_actual IS NOT NULL 
-                         AND longitud_actual IS NOT NULL 
-                         AND (ultima_conexion >= DATE_SUB(NOW(), INTERVAL 10 MINUTE) OR alerta_panico = 1) 
-                        THEN 1 ELSE 0 END AS conectado
+                   CASE 
+                     WHEN latitud_actual IS NOT NULL AND longitud_actual IS NOT NULL AND (ultima_conexion >= DATE_SUB(NOW(), INTERVAL 10 MINUTE) OR alerta_panico = 1) 
+                       THEN 1 
+                     WHEN latitud_actual IS NOT NULL AND longitud_actual IS NOT NULL AND estado_actividad != 'Desconectado'
+                       THEN 2
+                     ELSE 0 
+                   END AS conectado
             FROM tecnicos
             WHERE activo = 1 
               AND area_trabajo = %s
@@ -1152,6 +1158,7 @@ def preview_reporte_calidad():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha', date.today().isoformat())
+    es_instalacion = request.args.get('es_instalacion', '0').strip()
     
     conexion = get_db_connection()
     if not conexion:
@@ -1203,9 +1210,10 @@ def preview_reporte_calidad():
                       'GENERAR ARREGLO DE INSTALACIÓN',
                       'GESTIONAR ARREGLO DE INSTALACIÓN'
                   )
+                  AND es_instalacion = %s
                 ORDER BY COALESCE(DATE(hora_fin_visita), fecha_programada) ASC, hora_fin_visita ASC
             """
-            cursor.execute(query, (fecha, fecha))
+            cursor.execute(query, (fecha, fecha, int(es_instalacion)))
         else:
             query = """
                 SELECT 
@@ -1246,9 +1254,10 @@ def preview_reporte_calidad():
                       'GENERAR ARREGLO DE INSTALACIÓN',
                       'GESTIONAR ARREGLO DE INSTALACIÓN'
                   )
+                  AND es_instalacion = %s
                 ORDER BY hora_fin_visita ASC
             """
-            cursor.execute(query, (fecha,))
+            cursor.execute(query, (fecha, int(es_instalacion)))
         visitas = cursor.fetchall()
         
         # Serializar objetos datetime a formato legible/ISO para JSON
@@ -1272,6 +1281,7 @@ def download_excel_reporte_calidad():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha', date.today().isoformat())
+    es_instalacion = request.args.get('es_instalacion', '0').strip()
     
     conexion = get_db_connection()
     if not conexion:
@@ -1309,9 +1319,10 @@ def download_excel_reporte_calidad():
                       'GENERAR ARREGLO DE INSTALACIÓN',
                       'GESTIONAR ARREGLO DE INSTALACIÓN'
                   )
+                  AND es_instalacion = %s
                 ORDER BY COALESCE(DATE(hora_fin_visita), fecha_programada) ASC, hora_fin_visita ASC
             """
-            cursor.execute(query, (fecha, fecha))
+            cursor.execute(query, (fecha, fecha, int(es_instalacion)))
         else:
             query = """
                 SELECT 
@@ -1338,9 +1349,10 @@ def download_excel_reporte_calidad():
                       'GENERAR ARREGLO DE INSTALACIÓN',
                       'GESTIONAR ARREGLO DE INSTALACIÓN'
                   )
+                  AND es_instalacion = %s
                 ORDER BY hora_fin_visita ASC
             """
-            cursor.execute(query, (fecha,))
+            cursor.execute(query, (fecha, int(es_instalacion)))
         visitas = cursor.fetchall()
         cursor.close()
         conexion.close()
@@ -1454,6 +1466,7 @@ def preview_reporte_actividades():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha', date.today().isoformat())
+    es_instalacion = request.args.get('es_instalacion', '0').strip()
     
     conexion = get_db_connection()
     if not conexion:
@@ -1474,15 +1487,13 @@ def preview_reporte_actividades():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
+              AND es_instalacion = %s
             GROUP BY tecnico_principal, tecnico_apoyo, solucion_tecnico
             ORDER BY tecnico_principal, tecnico_apoyo, cantidad DESC
         """
-        cursor.execute(query, (fecha,))
+        cursor.execute(query, (fecha, int(es_instalacion)))
         rows = cursor.fetchall()
         cursor.close()
         conexion.close()
@@ -1527,6 +1538,7 @@ def download_excel_reporte_actividades():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha', date.today().isoformat())
+    es_instalacion = request.args.get('es_instalacion', '0').strip()
     
     conexion = get_db_connection()
     if not conexion:
@@ -1547,15 +1559,13 @@ def download_excel_reporte_actividades():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
+              AND es_instalacion = %s
             GROUP BY tecnico_principal, tecnico_apoyo, solucion_tecnico
             ORDER BY tecnico_principal, tecnico_apoyo, cantidad DESC
         """
-        cursor.execute(query, (fecha,))
+        cursor.execute(query, (fecha, int(es_instalacion)))
         rows = cursor.fetchall()
         cursor.close()
         conexion.close()
@@ -1932,7 +1942,7 @@ def map_solucion(sol):
         return "LÓGICO / CONFIGURACIÓN DE EQUIPOS"
     if "INSPECCIÓN" in sol or "SOLUCIÓN PARCIAL" in sol:
         return "INSPECCIÓN / SOLUCIÓN PARCIAL"
-    if "RADIO ENLACE" in sol or "DOMÓTICA" in sol:
+    if "RADIO ENLACE" in sol or "DOM" in sol:
         return "RADIO ENLACE / DOMÓTICA"
     if "ADAPTADOR" in sol or "CONEXIÓN ELÉCTRICA" in sol:
         return "FISICO / CAMBIO DE ADAPTADOR DE CORRIENTE"
@@ -2079,17 +2089,9 @@ def preview_cuadro_mando():
         # 4. KPIs de Visitas Técnicas de Campo (derecha)
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE fecha_programada < %s AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA', 'REAGENDADA')
-        """, (fecha,))
+            WHERE fecha_programada = %s AND DATE(fecha_registro) < %s AND (estado != 'CANCELADA' OR estado IS NULL)
+        """, (fecha, fecha))
         kpi_pendientes_anteriores = cursor.fetchone()['total'] or 0
-        
-        cursor.execute("""
-            SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE DATE(fecha_registro) = %s
-        """, (fecha,))
-        kpi_generadas_hoy = cursor.fetchone()['total'] or 0
-        
-        kpi_total_carga = kpi_pendientes_anteriores + kpi_generadas_hoy
         
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
@@ -2099,10 +2101,7 @@ def preview_cuadro_mando():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
         """, (fecha,))
         kpi_atendidas_hoy = cursor.fetchone()['total'] or 0
@@ -2111,9 +2110,12 @@ def preview_cuadro_mando():
         manana = (fecha_dt + timedelta(days=1)).isoformat()
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE fecha_programada = %s AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
+            WHERE fecha_programada = %s AND (estado != 'CANCELADA' OR estado IS NULL)
         """, (manana,))
         kpi_pendientes_manana = cursor.fetchone()['total'] or 0
+        
+        kpi_generadas_hoy = max(0, kpi_atendidas_hoy + kpi_pendientes_manana - kpi_pendientes_anteriores)
+        kpi_total_carga = kpi_pendientes_anteriores + kpi_generadas_hoy
         
         # 5. Listados de problemas / soluciones
         cursor.execute("""
@@ -2125,10 +2127,7 @@ def preview_cuadro_mando():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
             GROUP BY solucion_tecnico
         """, (fecha,))
@@ -2222,12 +2221,39 @@ def get_cuadro_mando_share_link():
         return jsonify({"status": "error", "message": "Fecha requerida"}), 400
         
     import hashlib
+    import os
+    import glob
+    import re
     from flask import current_app
+    
     secret = current_app.secret_key or "fallback_secret_salt_futurity_2026"
     token = hashlib.sha256(f"{fecha}_{secret}".encode('utf-8')).hexdigest()[:16]
     
-    public_url = f"{request.host_url}publico/cuadro_mando/{fecha}/{token}"
-    
+    # Intentar detectar dinámicamente el dominio activo de Cloudflare en los logs
+    cf_domain = None
+    base_dir = r"C:\Users\Operaciones\.gemini\antigravity-ide\brain"
+    if os.path.exists(base_dir):
+        log_files = glob.glob(os.path.join(base_dir, "*", ".system_generated", "tasks", "*.log"))
+        if log_files:
+            log_files.sort(key=os.path.getmtime, reverse=True)
+            for filepath in log_files:
+                try:
+                    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read()
+                        matches = re.findall(r"https://[a-zA-Z0-9\-]+\.trycloudflare\.com", content)
+                        if matches:
+                            cf_domain = matches[-1]
+                            break
+                except Exception:
+                    continue
+                    
+    if cf_domain:
+        if not cf_domain.endswith("/"):
+            cf_domain += "/"
+        public_url = f"{cf_domain}publico/cuadro_mando/{fecha}/{token}"
+    else:
+        public_url = f"{request.host_url}publico/cuadro_mando/{fecha}/{token}"
+        
     return jsonify({
         "status": "ok",
         "url": public_url
@@ -2326,15 +2352,9 @@ def download_excel_cuadro_mando():
         # 2. KPIs de Visitas Técnicas de Campo
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE fecha_programada < %s AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA', 'REAGENDADA')
-        """, (fecha,))
+            WHERE fecha_programada = %s AND DATE(fecha_registro) < %s AND (estado != 'CANCELADA' OR estado IS NULL)
+        """, (fecha, fecha))
         kpi_pendientes_anteriores = cursor.fetchone()['total'] or 0
-        
-        cursor.execute("""
-            SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE DATE(fecha_registro) = %s
-        """, (fecha,))
-        kpi_generadas_hoy = cursor.fetchone()['total'] or 0
         
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
@@ -2344,10 +2364,7 @@ def download_excel_cuadro_mando():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
         """, (fecha,))
         kpi_atendidas_hoy = cursor.fetchone()['total'] or 0
@@ -2356,9 +2373,12 @@ def download_excel_cuadro_mando():
         manana = (fecha_dt + timedelta(days=1)).isoformat()
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE fecha_programada = %s AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
+            WHERE fecha_programada = %s AND (estado != 'CANCELADA' OR estado IS NULL)
         """, (manana,))
         kpi_pendientes_manana = cursor.fetchone()['total'] or 0
+        
+        kpi_generadas_hoy = max(0, kpi_atendidas_hoy + kpi_pendientes_manana - kpi_pendientes_anteriores)
+        kpi_total_carga = kpi_pendientes_anteriores + kpi_generadas_hoy
         
         # Listados de problemas / soluciones
         cursor.execute("""
@@ -2370,10 +2390,7 @@ def download_excel_cuadro_mando():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
             GROUP BY solucion_tecnico
         """, (fecha,))
@@ -3500,4 +3517,117 @@ def verificar_conflictos_agenda():
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()
-        conexion.close()
+        conexion.close()
+
+
+@admin_bp.route('/api/admin/visitas/<int:id_visita>/editar', methods=['POST'])
+def editar_visita(id_visita):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+        flash('No tienes permiso para editar visitas.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Validar que la visita no esté cerrada o en progreso antes de editar
+    conexion_check = get_db_connection()
+    cursor_check = conexion_check.cursor(dictionary=True)
+    try:
+        cursor_check.execute("SELECT estado FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        visita_actual = cursor_check.fetchone()
+        if not visita_actual:
+            flash('Visita no encontrada.', 'danger')
+            return redirect(request.referrer or url_for('dashboard'))
+        if visita_actual['estado'] not in ['PENDIENTE', 'EN_RUTA']:
+            flash('No se puede editar una visita que ya se encuentra cerrada (Finalizada/Cancelada), reagendada o en progreso.', 'danger')
+            return redirect(request.referrer or url_for('dashboard'))
+    finally:
+        cursor_check.close()
+        conexion_check.close()
+
+    cliente = request.form.get('cliente').strip()
+    contrato = request.form.get('contrato', '').strip() or None
+    telefonos = request.form.get('telefonos', '').strip() or None
+    sector = request.form.get('sector').strip()
+    direccion = request.form.get('direccion').strip()
+    lat = request.form.get('latitud', '').strip() or None
+    lon = request.form.get('longitud', '').strip() or None
+    preferencia = request.form.get('preferencia_horaria').strip()
+    servicio = request.form.get('servicio').strip()
+    
+    velocidad_mbps_raw = request.form.get('velocidad_mbps', '').strip()
+    velocidad_mbps = int(velocidad_mbps_raw) if velocidad_mbps_raw else None
+    
+    problema = request.form.get('problema').strip()
+    obs_call = request.form.get('observacion_callcenter', '').strip() or None
+    fecha_prog = request.form.get('fecha_programada').strip()
+    estado = request.form.get('estado').strip()
+    tecnico = request.form.get('tecnico_principal').strip()
+
+    # Reconstruir información técnica
+    info_parts = []
+    caja = request.form.get('info_caja', '').strip()
+    hilo = request.form.get('info_hilo', '').strip()
+    ip = request.form.get('info_ip', '').strip()
+    vlan = request.form.get('info_vlan', '').strip()
+    usr = request.form.get('info_usr', '').strip()
+    pas = request.form.get('info_pas', '').strip()
+
+    if caja: info_parts.append(f"CAJA: {caja}")
+    if hilo: info_parts.append(f"HILO: {hilo}")
+    if ip: info_parts.append(f"IP: {ip}")
+    if vlan: info_parts.append(f"VLAN: {vlan}")
+    if usr: info_parts.append(f"USR: {usr}")
+    if pas: info_parts.append(f"PAS: {pas}")
+    informacion_tecnico = "\n".join(info_parts) if info_parts else None
+
+    # Normalizar horario texto a minutos para el optimizador
+    from utils import normalizar_horario_texto
+    ventana_inicio, ventana_fin = normalizar_horario_texto(preferencia)
+
+    conexion = get_db_connection()
+    cursor = conexion.cursor()
+    try:
+        # Si se restablece a un estado activo, limpiar datos de cierre para permitir que se vuelva a ejecutar
+        if estado in ['PENDIENTE', 'REAGENDADA', 'EN_RUTA', 'EN_PROGRESO']:
+            query = """
+                UPDATE visitas_tecnicas 
+                SET cliente = %s, contrato = %s, telefonos = %s, sector = %s, direccion = %s,
+                    latitud = %s, longitud = %s, preferencia_horaria = %s, servicio = %s,
+                    velocidad_mbps = %s, problema = %s, observacion_callcenter = %s,
+                    informacion_tecnico = %s, fecha_programada = %s, estado = %s,
+                    tecnico_principal = %s, ventana_inicio_min = %s, ventana_fin_min = %s,
+                    hora_fin_visita = NULL, solucion_tecnico = NULL, observacion_tecnico = NULL,
+                    modelo_onu = NULL, modelo_router = NULL, coordenadas_tecnico = NULL,
+                    foto_equipos = NULL, foto_equipos_2 = NULL, firma_cliente = NULL
+                WHERE id_visita = %s
+            """
+            cursor.execute(query, (
+                cliente, contrato, telefonos, sector, direccion, lat, lon, preferencia, servicio,
+                velocidad_mbps, problema, obs_call, informacion_tecnico, fecha_prog, estado,
+                tecnico, ventana_inicio, ventana_fin, id_visita
+            ))
+        else:
+            query = """
+                UPDATE visitas_tecnicas 
+                SET cliente = %s, contrato = %s, telefonos = %s, sector = %s, direccion = %s,
+                    latitud = %s, longitud = %s, preferencia_horaria = %s, servicio = %s,
+                    velocidad_mbps = %s, problema = %s, observacion_callcenter = %s,
+                    informacion_tecnico = %s, fecha_programada = %s, estado = %s,
+                    tecnico_principal = %s, ventana_inicio_min = %s, ventana_fin_min = %s
+                WHERE id_visita = %s
+            """
+            cursor.execute(query, (
+                cliente, contrato, telefonos, sector, direccion, lat, lon, preferencia, servicio,
+                velocidad_mbps, problema, obs_call, informacion_tecnico, fecha_prog, estado,
+                tecnico, ventana_inicio, ventana_fin, id_visita
+            ))
+        conexion.commit()
+        flash('Visita actualizada correctamente.', 'success')
+    except Exception as e:
+        print(f"Error al editar visita: {e}")
+        flash(f"Error al guardar cambios: {e}", 'danger')
+    finally:
+        cursor.close()
+        conexion.close()
+
+    return redirect(request.referrer or url_for('dashboard'))

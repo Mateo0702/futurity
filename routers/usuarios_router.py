@@ -55,7 +55,12 @@ def list_usuarios():
 
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id_usuario, nombre, email, rol, activo FROM usuarios_callcenter ORDER BY id_usuario DESC")
+        cursor.execute("""
+            SELECT u.id_usuario, u.nombre, u.email, u.rol, u.activo, t.area_trabajo 
+            FROM usuarios_callcenter u 
+            LEFT JOIN tecnicos t ON u.nombre = t.nombre 
+            ORDER BY u.id_usuario DESC
+        """)
         usuarios = cursor.fetchall()
         return jsonify({"status": "ok", "usuarios": usuarios})
     except Exception as e:
@@ -76,6 +81,10 @@ def create_usuario():
     password = data.get('password', '').strip()
     rol = data.get('rol', 'ASESOR').strip().upper()
     activo = int(data.get('activo', 1))
+    area_trabajo = data.get('area_trabajo', 'SOPORTE').strip().upper()
+    
+    if area_trabajo not in ['SOPORTE', 'INSTALACIONES']:
+        area_trabajo = 'SOPORTE'
 
     if not nombre or not email or not password:
         return jsonify({"status": "error", "message": "Todos los campos (nombre, email y contraseña) son obligatorios."}), 400
@@ -108,7 +117,10 @@ def create_usuario():
             cursor_tec = conn.cursor()
             cursor_tec.execute("SELECT id_tecnico FROM tecnicos WHERE nombre = %s", (nombre,))
             if not cursor_tec.fetchone():
-                cursor_tec.execute("INSERT INTO tecnicos (nombre, activo) VALUES (%s, %s)", (nombre, activo))
+                cursor_tec.execute("""
+                    INSERT INTO tecnicos (nombre, activo, area_trabajo) 
+                    VALUES (%s, %s, %s)
+                """, (nombre, activo, area_trabajo))
                 conn.commit()
             cursor_tec.close()
 
@@ -132,6 +144,10 @@ def update_usuario(id_usuario):
     password = data.get('password', '').strip()
     rol = data.get('rol', '').strip().upper()
     activo = int(data.get('activo', 1))
+    area_trabajo = data.get('area_trabajo', 'SOPORTE').strip().upper()
+
+    if area_trabajo not in ['SOPORTE', 'INSTALACIONES']:
+        area_trabajo = 'SOPORTE'
 
     if not nombre or not email or not rol:
         return jsonify({"status": "error", "message": "Nombre, email y rol son campos obligatorios."}), 400
@@ -170,9 +186,19 @@ def update_usuario(id_usuario):
         if rol == 'TECNICO':
             cursor_tec = conn.cursor()
             cursor_tec.execute("SELECT id_tecnico FROM tecnicos WHERE nombre = %s", (nombre,))
-            if not cursor_tec.fetchone():
-                cursor_tec.execute("INSERT INTO tecnicos (nombre, activo) VALUES (%s, %s)", (nombre, activo))
-                conn.commit()
+            row_tec = cursor_tec.fetchone()
+            if not row_tec:
+                cursor_tec.execute("""
+                    INSERT INTO tecnicos (nombre, activo, area_trabajo) 
+                    VALUES (%s, %s, %s)
+                """, (nombre, activo, area_trabajo))
+            else:
+                cursor_tec.execute("""
+                    UPDATE tecnicos 
+                    SET area_trabajo = %s, activo = %s
+                    WHERE nombre = %s
+                """, (area_trabajo, activo, nombre))
+            conn.commit()
             cursor_tec.close()
 
         return jsonify({"status": "ok", "message": "Usuario actualizado con éxito."})
@@ -224,9 +250,8 @@ def toggle_usuario(id_usuario):
 
 @usuarios_bp.route('/api/admin/tecnicos', methods=['GET'])
 def list_tecnicos():
-    is_admin, response, status = check_admin_privileges()
-    if not is_admin:
-        return response, status
+    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para ver la lista de técnicos."}), 403
 
     conn = get_db_connection()
     if not conn:

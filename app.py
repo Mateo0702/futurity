@@ -5,6 +5,9 @@ import uuid
 import re
 from datetime import date, timedelta
 from dotenv import load_dotenv
+import qrcode
+import io
+import base64
 
 # Cargar variables de entorno del archivo .env
 load_dotenv()
@@ -28,6 +31,7 @@ app = Flask(__name__)
 # Pega aquí el código que generaste en la terminal:
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', '8b093e226bd1155f8527a13430d48a4048023c69e7cde5dcc37224407f0ac1c2') 
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)
+app.config['SESSION_REFRESH_EACH_REQUEST'] = False
 
 app.register_blueprint(visitas_bp)
 app.register_blueprint(tecnico_bp)
@@ -36,11 +40,58 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(atenciones_bp)
 app.register_blueprint(usuarios_bp)
 
+def get_app_version():
+    version_code = 1
+    version_name = "1.0.0"
+    try:
+        props_path = os.path.join(os.path.dirname(__file__), 'futurity-android', 'gradle.properties')
+        if os.path.exists(props_path):
+            with open(props_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if '=' in line:
+                        parts = line.strip().split('=', 1)
+                        if len(parts) == 2:
+                            key, val = parts
+                            if key.strip() == 'VERSION_CODE':
+                                version_code = int(val.strip())
+                            elif key.strip() == 'VERSION_NAME':
+                                version_name = val.strip()
+    except Exception as e:
+        print("Error reading properties version:", e)
+    return version_code, version_name
+
 __version__ = "1.0.0"
 
 @app.context_processor
 def inject_version():
-    return dict(app_version=__version__)
+    # Detectar versión del User-Agent personalizado
+    user_agent = request.headers.get('User-Agent', '')
+    need_update = False
+    client_code = None
+    
+    # Formato esperado: FuturityAtlas/1.0.0 (versionCode:1)
+    match = re.search(r'versionCode:(\d+)', user_agent)
+    latest_code, latest_name = get_app_version()
+    
+    if match:
+        client_code = int(match.group(1))
+        if client_code < latest_code:
+            need_update = True
+            
+    return dict(
+        app_version=__version__,
+        need_app_update=need_update,
+        latest_app_version_name=latest_name
+    )
+
+@app.route('/api/app/version')
+def app_version_api():
+    latest_code, latest_name = get_app_version()
+    return jsonify({
+        "versionCode": latest_code,
+        "versionName": latest_name,
+        "url": request.host_url + "static/app/futurity_atlas.apk"
+    })
 
 # --- FILTROS ---
 @app.template_filter('minutos_a_hora')
@@ -105,12 +156,13 @@ def check_user_active_area():
         if rol == 'CALIDAD':
             session['active_area'] = 'INSTALACIONES'
         elif rol in ['ASESOR', 'ADMIN']:
-            session['active_area'] = 'SOPORTE'
+            if 'active_area' not in session:
+                session['active_area'] = 'SOPORTE'
 
 
 @app.route('/api/admin/cambiar_area_vista', methods=['POST'])
 def cambiar_area_vista():
-    if 'user_id' not in session or session.get('user_role') != 'ADMIN':
+    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     if request.is_json:
@@ -363,6 +415,40 @@ def cambiar_password():
     return render_template('cambiar_password.html')
 
 
+# --- RUTAS DE DESCARGA DE LA APP MÓVIL ---
+@app.route('/descargar')
+@app.route('/app')
+def descargar_app():
+    try:
+        # URL de descarga directa basada en cómo se conecta el usuario
+        download_url = request.url_root + "static/app/futurity_atlas.apk"
+        
+        # Generar código QR dinámico
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=10,
+            border=2,
+        )
+        qr.add_data(download_url)
+        qr.make(fit=True)
+
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Guardar en memoria y codificar a Base64
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        qr_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    except Exception as e:
+        import traceback
+        with open("qr_error.log", "w") as f:
+            f.write(f"Error: {str(e)}\n")
+            traceback.print_exc(file=f)
+        qr_base64 = None
+        
+    return render_template('descargar.html', qr_base64=qr_base64)
+
+
 # --- 1. RUTA PRINCIPAL: El Dashboard ---
 @app.route('/')
 def dashboard():
@@ -569,6 +655,37 @@ def dashboard():
         else:
             r['hora_fin_str'] = None
 
+    # Consultar cantidad de visitas pendientes específicamente del día de ayer
+    cursor.execute("""
+        SELECT COUNT(*) as total 
+        FROM visitas_tecnicas 
+        WHERE fecha_programada = DATE_SUB(CURDATE(), INTERVAL 1 DAY) 
+          AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA', 'REAGENDADA')
+          AND es_instalacion = %s
+    """, (es_instalacion_val,))
+    cant_pendientes_atrasadas = cursor.fetchone()['total'] or 0
+    ayer_fecha = (date.today() - timedelta(days=1)).isoformat()
+
+    # Verificar si el usuario actual (ADMIN o ASESOR) es también un técnico activo
+    nombre_usuario = session.get('user_name', '')
+    es_tecnico_activo = False
+    if nombre_usuario:
+        try:
+            cursor_tec = conexion.cursor()
+            cursor_tec.execute("SELECT 1 FROM tecnicos WHERE nombre = %s AND activo = 1", (nombre_usuario,))
+            if cursor_tec.fetchone():
+                es_tecnico_activo = True
+            cursor_tec.close()
+        except Exception as e:
+            print(f"Error checking if user is active tech: {e}")
+
+    # Cerrar cursor y conexión a la base de datos
+    try:
+        cursor.close()
+        conexion.close()
+    except Exception as e:
+        print(f"Error al cerrar la conexión en dashboard: {e}")
+
     # Pasamos las nuevas variables al template
     return render_template('index.html', 
                            visitas=visitas, 
@@ -580,6 +697,9 @@ def dashboard():
                            problemas=obtener_problemas_activos(),
                            asesor=session.get('user_name', 'Asesor'),
                            recordatorios_hoy=recordatorios_hoy,
+                           es_tecnico_activo=es_tecnico_activo,
+                           cant_pendientes_atrasadas=cant_pendientes_atrasadas,
+                           ayer_fecha=ayer_fecha,
                            # Variables para gráficos:
                            labels_barras=labels_barras, val_barras=valores_barras,
                            labels_prob=labels_prob, val_prob=valores_prob,

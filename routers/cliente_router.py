@@ -75,7 +75,7 @@ def api_rastreo_ubicacion(token):
         archivo_vehiculo = visita['foto_vehiculo_principal'] if visita.get('foto_vehiculo_principal') else 'furgoneta_milton.jpeg'
         archivo_perfil_apoyo = visita['foto_perfil_apoyo'] if visita.get('foto_perfil_apoyo') else None
         
-        return jsonify({
+        resp = jsonify({
             "status": "ok",
             "lat": float(visita['latitud_gps_vivo']) if visita['latitud_gps_vivo'] else None,
             "lon": float(visita['longitud_gps_vivo']) if visita['longitud_gps_vivo'] else None,
@@ -88,6 +88,10 @@ def api_rastreo_ubicacion(token):
             "vehiculo_foto": url_for('static', filename='uploads/' + archivo_vehiculo),
             "placa": visita['placa_vehiculo_principal'] if visita.get('placa_vehiculo_principal') else 'S/P'
         })
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+        return resp
         
     return jsonify({"status": "error", "message": "Token no válido"}), 404
 
@@ -359,17 +363,9 @@ def publico_cuadro_mando(fecha, token):
         # 4. KPIs de Visitas Técnicas de Campo
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE fecha_programada < %s AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA', 'REAGENDADA')
-        """, (fecha,))
+            WHERE fecha_programada = %s AND DATE(fecha_registro) < %s AND (estado != 'CANCELADA' OR estado IS NULL)
+        """, (fecha, fecha))
         kpi_pendientes_anteriores = cursor.fetchone()['total'] or 0
-        
-        cursor.execute("""
-            SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE DATE(fecha_registro) = %s
-        """, (fecha,))
-        kpi_generadas_hoy = cursor.fetchone()['total'] or 0
-        
-        kpi_total_carga = kpi_pendientes_anteriores + kpi_generadas_hoy
         
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
@@ -379,10 +375,7 @@ def publico_cuadro_mando(fecha, token):
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
         """, (fecha,))
         kpi_atendidas_hoy = cursor.fetchone()['total'] or 0
@@ -391,9 +384,12 @@ def publico_cuadro_mando(fecha, token):
         manana = (fecha_dt + timedelta(days=1)).isoformat()
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE fecha_programada = %s AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
+            WHERE fecha_programada = %s AND (estado != 'CANCELADA' OR estado IS NULL)
         """, (manana,))
         kpi_pendientes_manana = cursor.fetchone()['total'] or 0
+        
+        kpi_generadas_hoy = max(0, kpi_atendidas_hoy + kpi_pendientes_manana - kpi_pendientes_anteriores)
+        kpi_total_carga = kpi_pendientes_anteriores + kpi_generadas_hoy
         
         # 5. Listados de problemas / soluciones
         cursor.execute("""
@@ -405,10 +401,7 @@ def publico_cuadro_mando(fecha, token):
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE',
-                  'GENERAR CAMBIO DE FO',
-                  'GENERAR ARREGLO DE INSTALACIÓN',
-                  'GESTIONAR ARREGLO DE INSTALACIÓN'
+                  'SIN RESPUESTA DEL CLIENTE'
               )
             GROUP BY solucion_tecnico
         """, (fecha,))
@@ -491,6 +484,44 @@ def publico_cuadro_mando(fecha, token):
         active_soluciones = {k: v for k, v in soluciones_dict.items() if v > 0}
         active_problemas = {k: v for k, v in problemas_dict.items() if v > 0}
         
+        # 4.5. Obtener visitas para mañana (Reporte 2)
+        fecha_dt = datetime.strptime(fecha, "%Y-%m-%d").date()
+        target_date = (fecha_dt + timedelta(days=1)).isoformat()
+        cursor.execute("""
+            SELECT 
+                id_visita,
+                fecha_registro,
+                cliente,
+                sector,
+                problema,
+                estado
+            FROM visitas_tecnicas
+            WHERE fecha_programada = %s AND estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA', 'FINALIZADA')
+        """, (target_date,))
+        visitas_manana = cursor.fetchall()
+        
+        # 4.6. Obtener actividades de técnicos de hoy (Reporte 3)
+        cursor.execute("""
+            SELECT 
+                tecnico_principal,
+                tecnico_apoyo,
+                solucion_tecnico,
+                es_instalacion,
+                COUNT(*) as cantidad
+            FROM visitas_tecnicas
+            WHERE COALESCE(DATE(hora_fin_visita), fecha_programada) = %s AND estado = 'FINALIZADA'
+              AND tecnico_principal IS NOT NULL 
+              AND tecnico_principal NOT IN ('', 'NO TECNICO', 'SIN ASIGNAR', 'NONE', 'NAN')
+              AND solucion_tecnico IS NOT NULL 
+              AND solucion_tecnico NOT IN (
+                  'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
+                  'SIN RESPUESTA DEL CLIENTE'
+              )
+            GROUP BY tecnico_principal, tecnico_apoyo, solucion_tecnico, es_instalacion
+            ORDER BY tecnico_principal, tecnico_apoyo, cantidad DESC
+        """, (fecha,))
+        actividades_tecnicos = cursor.fetchall()
+        
         return render_template('publico_cuadro_mando.html',
                                fecha=fecha,
                                agente_a=agente_a,
@@ -510,7 +541,9 @@ def publico_cuadro_mando(fecha, token):
                                    "pendientes_manana": kpi_pendientes_manana
                                },
                                soluciones=active_soluciones,
-                               problemas=active_problemas)
+                               problemas=active_problemas,
+                               visitas_manana=visitas_manana,
+                               actividades_tecnicos=actividades_tecnicos)
     except Exception as e:
         return f"Error al procesar el reporte: {str(e)}", 500
     finally:

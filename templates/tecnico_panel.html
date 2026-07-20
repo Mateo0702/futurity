@@ -4,12 +4,140 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Futurity - Panel Técnico</title>
+    <title>Futurity Atlas - Panel Técnico</title>
     <link rel="shortcut icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#dc2626">
+    <style>
+        datalist {
+            display: none !important;
+        }
+        /* Diseño Fullscreen Overlay para detalles de visita */
+        .fullscreen-details-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #0f172a; /* Slate 900 */
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            color: #f8fafc;
+            animation: slideIn 0.25s ease-out;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        .modal-nav-header {
+            background-color: #1e293b; /* Slate 800 */
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            flex-shrink: 0;
+        }
+        .btn-modal-back {
+            background: transparent;
+            border: none;
+            color: #38bdf8; /* sky blue */
+            font-size: 1.05rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+        .btn-modal-back:hover {
+            background-color: rgba(255,255,255,0.05);
+        }
+        .modal-nav-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #f8fafc;
+            text-align: center;
+        }
+        .modal-tabs-header {
+            background-color: #1e293b;
+            display: flex;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            flex-shrink: 0;
+        }
+        .tab-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 14px 6px;
+            color: #94a3b8;
+            font-weight: 800;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            text-align: center;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            color: #38bdf8;
+            border-bottom-color: #38bdf8;
+        }
+        .modal-details-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background-color: #0f172a;
+        }
+        .tab-pane {
+            display: none;
+        }
+        .tab-pane.active {
+            display: block;
+        }
+        
+        /* Ajustar estilos existentes dentro del modal oscuro */
+        .fullscreen-details-overlay .dato-cliente {
+            border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+            padding-bottom: 15px;
+            margin-bottom: 15px;
+        }
+        .fullscreen-details-overlay .dato-cliente strong {
+            color: #94a3b8 !important;
+        }
+        .fullscreen-details-overlay .dato-cliente span {
+            color: #f8fafc !important;
+        }
+        .fullscreen-details-overlay label {
+            color: #cbd5e1 !important;
+        }
+        .fullscreen-details-overlay select, 
+        .fullscreen-details-overlay textarea, 
+        .fullscreen-details-overlay input[type="text"],
+        .fullscreen-details-overlay input[type="number"] {
+            background-color: #1e293b !important;
+            color: #f8fafc !important;
+            border-color: #475569 !important;
+        }
+        .fullscreen-details-overlay select:focus, 
+        .fullscreen-details-overlay textarea:focus,
+        .fullscreen-details-overlay input:focus {
+            border-color: #38bdf8 !important;
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2) !important;
+        }
+        .fullscreen-details-overlay .materials-card {
+            background-color: #1e293b !important;
+            border-color: rgba(255,255,255,0.08) !important;
+        }
+        .fullscreen-details-overlay .materials-header h6 {
+            color: #f8fafc !important;
+        }
+    </style>
 </head>
 
 <body class="body-tecnico">
@@ -26,7 +154,23 @@
         })();
     </script>
 
+    <datalist id="lista-materiales-global">
+        {% for mat in catalogo %}
+        <option data-id="{{ mat.id_material }}" value="{{ mat.nombre_material }} ({{ mat.unidad_medida }})"></option>
+        {% endfor %}
+    </datalist>
 
+
+
+    <!-- BANNER DE ACTUALIZACIÓN DISPONIBLE -->
+    {% if need_app_update %}
+    <div id="update-banner" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; text-align: center; padding: 12px; font-weight: 800; position: sticky; top: 0; z-index: 10001; box-shadow: 0 4px 6px rgba(0,0,0,0.15); font-size: 0.95rem;">
+        <i class="fa-solid fa-cloud-arrow-down fa-bounce" style="margin-right: 8px;"></i>
+        <span>Nueva versión de la app disponible (v{{ latest_app_version_name }}). 
+            <a href="/static/app/futurity_atlas.apk" download="futurity_atlas.apk" style="color: #67e8f9; text-decoration: underline; font-weight: 900; margin-left: 5px;">Presiona aquí para actualizar</a>
+        </span>
+    </div>
+    {% endif %}
 
     <!-- BANNER DE ESTADO OFFLINE -->
     <div id="offline-banner" style="display: none; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; text-align: center; padding: 12px; font-weight: 800; position: sticky; top: 0; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.15); font-size: 0.95rem;">
@@ -43,6 +187,10 @@
     <div class="panel-container">
 
         <div class="sidebar-tecnico">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 25px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); overflow: hidden; white-space: nowrap;">
+                <img src="/static/img/logo_futurity.png" alt="Logo" style="width: 24px; height: 24px; object-fit: contain; flex-shrink: 0;">
+                <span style="font-weight: 800; font-size: 0.95rem; color: #fff; letter-spacing: 0.02em;">Futurity <span style="background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900;">Atlas</span></span>
+            </div>
             <h2>Hola, {{ tecnico }}</h2>
             <p>Tus visitas programadas para hoy</p>
             
@@ -69,11 +217,17 @@
             <button id="theme-toggle-tecnico" class="theme-btn-tecnico theme-dark" title="Alternar Modo Oscuro">
                 <i class="fa-solid fa-moon"></i> <span>Modo Oscuro</span>
             </button>
+            {% if session.get('user_role') in ['ADMIN', 'ASESOR'] %}
+            <a href="/" class="theme-btn-tecnico" style="background-color: #2563eb; color: #fff; border: none; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;">
+                <i class="fa-solid fa-chart-line"></i> <span>Volver al Dashboard</span>
+            </a>
+            {% endif %}
             <a href="/logout" onclick="localStorage.removeItem('session_token'); localStorage.removeItem('user_id'); localStorage.removeItem('user_role'); localStorage.removeItem('user_name'); if (window.AndroidBridge) { window.AndroidBridge.stopTracking(); }" class="theme-btn-tecnico theme-logout">
                 <i class="fa-solid fa-right-from-bracket"></i> <span>Cerrar Sesión</span>
             </a>
-            <div style="margin-top: 20px; padding: 10px 0 0 0; border-top: 1px solid rgba(255, 255, 255, 0.1); text-align: center; font-size: 0.72rem; color: #94a3b8; opacity: 0.6; font-weight: 500;">
-                <i class="fa-solid fa-code-branch"></i> Versión v{{ app_version }}
+            <div style="margin-top: 20px; padding: 10px 0 0 0; border-top: 1px solid rgba(255, 255, 255, 0.1); text-align: center; font-size: 0.72rem; color: #94a3b8; opacity: 0.7; font-weight: 600; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;">
+                <span><i class="fa-solid fa-bolt" style="color: #60a5fa;"></i> Powered by Atlas</span>
+                <span style="font-size: 0.65rem; opacity: 0.7;"><i class="fa-solid fa-code-branch"></i> Versión v{{ app_version }}</span>
             </div>
         </div>
 
@@ -137,329 +291,458 @@
             </div>
 
             {% for visita in visitas %}
-            <div data-id="{{ visita.id_visita }}" class="visita-card 
-            {% if visita.estado == 'EN_RUTA' %}visita-en-ruta
-            {% elif visita.estado == 'EN_PROGRESO' %}visita-en-progreso
-            {% elif visita.estado == 'FINALIZADA' %}visita-finalizada{% endif %}">
-
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+            <!-- TARJETA COMPACTA DE VISITA -->
+            <div class="visita-card {% if visita.estado == 'EN_RUTA' %}visita-en-ruta{% elif visita.estado == 'EN_PROGRESO' %}visita-en-progreso{% elif visita.estado == 'FINALIZADA' %}visita-finalizada{% endif %}"
+                 onclick="abrirDetallesVisita('{{ visita.id_visita }}')"
+                 style="cursor: pointer; padding: 18px 20px; border-radius: 14px; margin-bottom: 16px; background-color: white; transition: transform 0.2s; position: relative; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 6px solid {% if visita.estado == 'EN_RUTA' %}#f59e0b{% elif visita.estado == 'EN_PROGRESO' %}#3b82f6{% elif visita.estado == 'FINALIZADA' %}#10b981{% else %}#94a3b8{% endif %};">
+                
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-right: 24px;">
                     <div>
-                        <div class="visita-title">
+                        <div class="visita-title" style="margin: 0; font-size: 1.1rem; font-weight: 800; color: #1e293b;">
                             {% if visita.es_instalacion == 1 %}
                                 🔌 Instalación #{{ visita.numero_parada }}
                             {% else %}
                                 📍 Parada #{{ visita.numero_parada }}
                             {% endif %}
                         </div>
-                        <div class="visita-ref">Ref. Sist: #VT-{{ visita.id_visita }}</div>
+                        <div class="visita-ref" style="font-size: 0.75rem; color: #64748b; margin-top: 1px;">Ref. Sist: #VT-{{ visita.id_visita }}</div>
                     </div>
-
                     <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
                         <span class="badge-estado-visita">{{ visita.estado|replace('_', ' ') }}</span>
                         {% if visita.prioridad == 'ALTA' %}
                         <span class="badge-prioridad-alta">🔴 URGENTE</span>
-                        {% elif visita.prioridad == 'BAJA' %}
-                        <span class="badge-prioridad-baja">⚪ FLEXIBLE</span>
                         {% endif %}
                     </div>
                 </div>
+                
+                <div>
+                    <span style="font-size: 0.78rem; font-weight: 800; color: #64748b; text-transform: uppercase; display: block; letter-spacing: 0.05em;">Cliente</span>
+                    <span style="font-size: 1rem; font-weight: 700; color: #0f172a; display: block; margin-top: 1px;">{{ visita.cliente }}</span>
+                </div>
 
-                <div class="dato-cliente" style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="border-top: 1px solid rgba(0,0,0,0.05); padding-top: 6px; display: flex; justify-content: space-between; align-items: center; padding-right: 24px;">
                     <div>
-                        <strong>Cliente</strong>
-                        <span>{{ visita.cliente }}</span>
-                    </div>
-                    <button type="button" onclick="cargarHistorial('{{ visita.cliente }}')" class="btn-historial">
-                        <i class="fa-solid fa-clock-rotate-left"></i> Historial
-                    </button>
-                </div>
-
-                <div class="dato-cliente" style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
-                    <div>
-                        <strong>Teléfono(s)</strong>
-                        <span>{{ visita.telefonos or 'No registrado' }}</span>
-                    </div>
-                    {% if visita.telefonos %}
-                    <button type="button" onclick="abrirLlamada('{{ visita.telefonos }}')" class="btn-call">
-                        <i class="fa-solid fa-phone"></i> Llamar
-                    </button>
-                    {% endif %}
-                </div>
-
-                <div class="dato-cliente" style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
-                    <div>
-                        <strong>Dirección / Ubicación</strong>
-                        <span>{{ visita.direccion }} ({{ visita.sector }})</span>
-                    </div>
-                    <button type="button" onclick="abrirNavegador('{{ visita.direccion }}', '{{ visita.sector }}')" class="btn-map-nav">
-                        <i class="fa-solid fa-map-location-dot"></i> Ir al Mapa
-                    </button>
-                </div>
-
-                <div class="dato-cliente" style="border-bottom: none; padding-bottom: 0; margin-bottom: 15px;">
-                    {% if visita.es_instalacion == 1 %}
-                        <strong>Servicio a Realizar</strong>
-                        <span style="color: #3b82f6; font-weight: 700;">🔌 {{ visita.servicio }}</span>
-                        <div style="margin-top: 8px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 0.85rem; background: rgba(0,0,0,0.03); padding: 10px; border-radius: 8px; border: 1px solid var(--border-color);">
-                            <div><strong style="color: #64748b;">Producto:</strong> <span style="font-weight: 600;">{{ visita.producto }}</span></div>
-                            <div><strong style="color: #64748b;">Tipo:</strong> <span style="font-weight: 600;">{{ visita.tipo_instalacion }}</span></div>
-                            <div style="grid-column: span 2;"><strong style="color: #64748b;">Vendedor:</strong> <span style="font-weight: 600;">{{ visita.vendedor or 'N/A' }}</span></div>
-                        </div>
-                    {% else %}
-                        <strong>Problema Reportado</strong>
-                        <span style="color: #b91c1c; font-weight: 700;">{{ visita.problema }}</span>
-                    {% endif %}
-                    {% if visita.observacion_callcenter %}
-                    <p style="margin: 6px 0 0 0; font-size: 0.9rem; color: #64748b; font-style: italic; line-height: 1.4;">
-                        "{{ visita.observacion_callcenter }}"
-                    </p>
-                    {% endif %}
-                </div>
-
-                {% if visita.info_caja or visita.info_hilo or visita.info_ip or visita.info_usr %}
-                <div style="background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 14px; margin-bottom: 15px;">
-                    <strong style="color: #0f172a; font-size: 0.85rem; margin-bottom: 8px; display: block;">🔌 Datos de Conexión en Poste/Nodo</strong>
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 0.85rem;">
-                        {% if visita.info_caja %}
-                        <div><span style="color: #64748b;">Caja/NAP:</span> <strong style="color: #1e293b;">{{ visita.info_caja }}</strong></div>
-                        {% endif %}
-                        {% if visita.info_hilo %}
-                        <div><span style="color: #64748b;">Hilo/Puerto:</span> <strong style="color: #1e293b;">{{ visita.info_hilo }}</strong></div>
-                        {% endif %}
-                        {% if visita.info_ip %}
-                        <div><span style="color: #64748b;">IP Fija:</span> <strong style="color: #1e293b;">{{ visita.info_ip }}</strong></div>
-                        {% endif %}
-                        {% if visita.info_usr %}
-                        <div style="grid-column: span 2; margin-top: 5px; border-top: 1px solid #e2e8f0; padding-top: 5px;">
-                            <span style="color: #64748b;">PPPoE:</span> 
-                            <strong style="color: #1e293b;">{{ visita.info_usr }}</strong> 
-                            {% if visita.info_pas %} | Clave: <strong style="color: #1e293b;">{{ visita.info_pas }}</strong>{% endif %}
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endif %}
-
-                {% if visita.estado == 'PENDIENTE' or visita.estado == 'REAGENDADA' %}
-                <form onsubmit="procesarAccionFormulario(event, {{ visita.id_visita }}, '/api/tecnico/en_camino/{{ visita.id_visita }}', 'camino')">
-                    <button type="submit" class="btn-action-route">
-                        <i class="fa-solid fa-truck-fast"></i> Voy en Camino
-                    </button>
-                </form>
-
-                {% elif visita.estado == 'EN_RUTA' %}
-                <div style="background-color: #fffbeb; padding: 16px; border-radius: 12px; border: 1px solid #fde68a; margin-top: 15px; display: flex; flex-direction: column; gap: 12px;">
-                    <p style="margin: 0; color: #b45309; font-size: 0.9rem; line-height: 1.4;">
-                        <strong>⏳ En Traslado:</strong> Notifica al cliente que estás en camino.
-                    </p>
-
-                    <button type="button" class="btn-wa" onclick="abrirWhatsApp('{{ visita.telefonos }}', '{{ tecnico }}', '{{ visita.token_rastreo }}')">
-                        <i class="fa-brands fa-whatsapp" style="font-size: 1.25rem;"></i> Avisar al Cliente
-                    </button>
-
-                    <form onsubmit="iniciarTrabajoConGPS(event, {{ visita.id_visita }}, '/api/tecnico/iniciar/{{ visita.id_visita }}')">
-                        <button type="submit" class="btn-action-start">
-                            <i class="fa-solid fa-play"></i> Llegué / Iniciar Trabajo
-                        </button>
-                    </form>
-                </div>
-
-                <script>
-                    window.addEventListener('DOMContentLoaded', () => {
-                        iniciarRastreoSilencioso('{{ visita.id_visita }}');
-                    });
-                </script>
-
-                {% elif visita.estado == 'EN_PROGRESO' %}
-                <script>
-                    window.addEventListener('DOMContentLoaded', () => {
-                        iniciarRastreoSilencioso('{{ visita.id_visita }}');
-                    });
-                </script>
-                <div style="background-color: #eff6ff; padding: 18px; border-radius: 12px; margin-top: 15px; border: 1px solid #bfdbfe;">
-                    <h3 style="margin-top: 0; color: #1e3a8a; font-size: 1.1rem; font-weight: 800; margin-bottom: 12px;">
+                        <span style="font-size: 0.78rem; font-weight: 800; color: #64748b; text-transform: uppercase; display: block; letter-spacing: 0.05em;">Motivo</span>
                         {% if visita.es_instalacion == 1 %}
-                            Cierre de Instalación
+                            <span style="color: #2563eb; font-weight: 800; font-size: 0.9rem;">🔌 {{ visita.servicio }}</span>
                         {% else %}
-                            Cierre de Visita
+                            <span style="color: #dc2626; font-weight: 800; font-size: 0.9rem;">🛠️ {{ visita.problema }}</span>
                         {% endif %}
-                    </h3>
+                    </div>
+                </div>
+                
+                <!-- Icono indicador de detalles a la derecha -->
+                <div style="position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 1rem; color: #cbd5e1;">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </div>
+            </div>
 
-                    <form onsubmit="procesarAccionFormulario(event, {{ visita.id_visita }}, '/api/tecnico/finalizar/{{ visita.id_visita }}', 'finalizar')">
-                        <div style="margin-bottom: 12px;">
-                            <label style="font-weight: 700; color: #475569; font-size: 0.85rem;">Solución del Técnico:</label>
-                            <select name="solucion_tecnico" required>
-                                <option value="">-- Seleccione la solución aplicada --</option>
-                                {% for sol in soluciones %}
-                                <option value="{{ sol.nombre }}">{{ sol.nombre }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <div style="margin-bottom: 12px;">
-                            <label style="font-weight: 700; color: #475569; font-size: 0.85rem;">Observación:</label>
-                            <textarea name="observacion_tecnico" rows="3" required placeholder="Detalle lo realizado..."></textarea>
-                        </div>
-
-                        <div style="display: flex; gap: 10px; margin-bottom: 12px;">
-                            <div style="flex: 1;">
-                                <label style="font-weight: 700; color: #475569; font-size: 0.85rem;">Modelo ONU:</label>
-                                <select name="modelo_onu">
-                                    <option value="">-- Ninguna --</option>
-                                    {% for ont in catalogo_ont %}
-                                    <option value="{{ ont.nombre }}">{{ ont.nombre }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div style="flex: 1;">
-                                <label style="font-weight: 700; color: #475569; font-size: 0.85rem;">Modelo Router:</label>
-                                <select name="modelo_router">
-                                    <option value="">-- Ninguno --</option>
-                                    {% for router in catalogo_router %}
-                                    <option value="{{ router.nombre }}">{{ router.nombre }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="materials-card">
-                            <div class="materials-header">
-                                <h6>🛠️ Materiales Utilizados</h6>
-                                <button type="button" class="btn-add-material" onclick="agregarFilaMaterial('{{ visita.id_visita }}')">
-                                    <i class="fa-solid fa-plus"></i> Añadir
-                                </button>
-                            </div>
-                            <div class="materials-body">
-                                <div id="contenedor-materiales-dinamicos-{{ visita.id_visita }}">
-                                    <p id="msg-sin-materiales-{{ visita.id_visita }}" style="font-size: 0.85rem; color: #64748b; text-align: center; margin: 0;">
-                                        Ningún material añadido. Dale a "Añadir" si usaste insumos.
-                                    </p>
+            <!-- MODAL DETALLADO EN MODO FULLSCREEN (ORGANIZADO POR PESTAÑAS) -->
+            <div id="modal-detalles-{{ visita.id_visita }}" class="fullscreen-details-overlay" style="display: none;">
+                <!-- Cabecera de Navegación -->
+                <div class="modal-nav-header">
+                    <button type="button" class="btn-modal-back" onclick="cerrarDetallesVisita('{{ visita.id_visita }}', event)">
+                        <i class="fa-solid fa-chevron-left"></i> Volver
+                    </button>
+                    <span class="modal-nav-title">
+                        {% if visita.es_instalacion == 1 %}🔌 Inst. #{{ visita.numero_parada }}{% else %}📍 Parada #{{ visita.numero_parada }}{% endif %}
+                    </span>
+                    <div style="width: 50px;"></div> <!-- Spacer para centrar -->
+                </div>
+                
+                <!-- Barra de Pestañas -->
+                <div class="modal-tabs-header">
+                    <button type="button" class="tab-btn active" onclick="switchTab(event, 'tab-cliente', '{{ visita.id_visita }}')">
+                        <i class="fa-solid fa-user" style="margin-right: 4px;"></i> CLIENTE
+                    </button>
+                    <button type="button" class="tab-btn" onclick="switchTab(event, 'tab-nodo', '{{ visita.id_visita }}')">
+                        <i class="fa-solid fa-network-wired" style="margin-right: 4px;"></i> CONEXIÓN
+                    </button>
+                    <button type="button" class="tab-btn" onclick="switchTab(event, 'tab-acciones', '{{ visita.id_visita }}')">
+                        <i class="fa-solid fa-clipboard-check" style="margin-right: 4px;"></i> TRABAJO
+                    </button>
+                </div>
+                
+                <!-- Cuerpo de Detalles -->
+                <div class="modal-details-body">
+                    
+                    <!-- PESTAÑA 1: CLIENTE -->
+                    <div id="tab-cliente-{{ visita.id_visita }}" class="tab-pane active">
+                        <div style="background-color: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+                            <span style="font-size: 0.78rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Información General</span>
+                            <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px;">
+                                <div>
+                                    <strong style="color: #64748b; font-size: 0.8rem; display: block;">Cliente</strong>
+                                    <span style="font-size: 1.1rem; font-weight: 700; color: #f8fafc;">{{ visita.cliente }}</span>
                                 </div>
-                            </div>
-                        </div>
-
-                        <!-- Toggle de Equipos Juntos/Separados -->
-                        <div style="margin-bottom: 16px; background-color: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
-                            <label style="font-weight: 700; color: #1e3a8a; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="checkbox" id="equipos-juntos-{{ visita.id_visita }}" checked onchange="toggleInputsFotos('{{ visita.id_visita }}')" style="width: auto; margin: 0; transform: scale(1.2);">
-                                <span>¿ONU y Router quedaron juntos?</span>
-                            </label>
-                            <input type="hidden" name="equipos_juntos" id="equipos-juntos-hidden-{{ visita.id_visita }}" value="1">
-                        </div>
-
-                        <!-- Sección de Foto(s) de Equipos -->
-                        <div style="margin-bottom: 16px; background-color: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
-                            <label style="font-weight: 700; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">📷 Fotos de Equipos (Obligatorio):</label>
-                            
-                            <!-- Input para Foto Conjunta -->
-                            <div id="container-foto-conjunta-{{ visita.id_visita }}" style="display: block; margin-bottom: 10px;">
-                                <label style="font-size: 0.8rem; color: #64748b; display: block; margin-bottom: 4px;">Foto de ONU y Router juntos:</label>
-                                <input type="file" id="input-foto-conjunta-{{ visita.id_visita }}" accept="image/*" capture="environment" onchange="comprimirYConvertirFoto('{{ visita.id_visita }}', this, 'foto_equipos', 'preview-foto-conjunta-{{ visita.id_visita }}')" style="width: 100%; font-size: 0.85rem; padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-color);">
-                                <div style="margin-top: 8px; text-align: center;">
-                                    <img id="preview-foto-conjunta-{{ visita.id_visita }}" style="max-height: 120px; display: none; border-radius: 6px; border: 1px solid var(--border-color); margin: 0 auto;">
-                                </div>
-                            </div>
-                            
-                            <!-- Inputs para Fotos Separadas -->
-                            <div id="container-fotos-separadas-{{ visita.id_visita }}" style="display: none;">
-                                <div style="margin-bottom: 10px;">
-                                    <label style="font-size: 0.8rem; color: #64748b; display: block; margin-bottom: 4px;">Foto de ONU:</label>
-                                    <input type="file" id="input-foto-onu-{{ visita.id_visita }}" accept="image/*" capture="environment" onchange="comprimirYConvertirFoto('{{ visita.id_visita }}', this, 'foto_equipos', 'preview-foto-onu-{{ visita.id_visita }}')" style="width: 100%; font-size: 0.85rem; padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-color);">
-                                    <div style="margin-top: 8px; text-align: center;">
-                                        <img id="preview-foto-onu-{{ visita.id_visita }}" style="max-height: 120px; display: none; border-radius: 6px; border: 1px solid var(--border-color); margin: 0 auto;">
-                                    </div>
-                                </div>
-                                <div style="margin-bottom: 10px;">
-                                    <label style="font-size: 0.8rem; color: #64748b; display: block; margin-bottom: 4px;">Foto de Router:</label>
-                                    <input type="file" id="input-foto-router-{{ visita.id_visita }}" accept="image/*" capture="environment" onchange="comprimirYConvertirFoto('{{ visita.id_visita }}', this, 'foto_equipos_2', 'preview-foto-router-{{ visita.id_visita }}')" style="width: 100%; font-size: 0.85rem; padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-color);">
-                                    <div style="margin-top: 8px; text-align: center;">
-                                        <img id="preview-foto-router-{{ visita.id_visita }}" style="max-height: 120px; display: none; border-radius: 6px; border: 1px solid var(--border-color); margin: 0 auto;">
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Campos hidden para guardar las imágenes Base64 comprimidas -->
-                            <input type="hidden" name="foto_equipos_base64" id="foto_equipos_base64_hidden-{{ visita.id_visita }}">
-                            <input type="hidden" name="foto_equipos_2_base64" id="foto_equipos_2_base64_hidden-{{ visita.id_visita }}">
-                        </div>
-
-                        <!-- Sección de Fotos Adicionales Opcionales -->
-                        <div style="margin-bottom: 16px; background-color: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
-                            <label style="font-weight: 700; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 6px;">📷 Fotos Adicionales / Pruebas de Trabajo (Opcional - Máx 4):</label>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                                {% for idx in range(1, 5) %}
-                                <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 6px; text-align: center;">
-                                    <label style="font-size: 0.72rem; color: #64748b; margin-bottom: 4px; display: block; font-weight: bold;">Foto Extra {{ idx }}:</label>
-                                    <input type="file" id="input-foto-extra-{{ idx }}-{{ visita.id_visita }}" accept="image/*" capture="environment" onchange="comprimirYConvertirFoto('{{ visita.id_visita }}', this, 'foto_extra_{{ idx }}', 'preview-foto-extra-{{ idx }}-{{ visita.id_visita }}')" style="width: 100%; font-size: 0.75rem; padding: 4px;">
-                                    <div style="margin-top: 4px; text-align: center;">
-                                        <img id="preview-foto-extra-{{ idx }}-{{ visita.id_visita }}" style="max-height: 80px; display: none; border-radius: 4px; margin: 0 auto; max-width: 100%;">
-                                    </div>
-                                    <input type="hidden" name="foto_extra_{{ idx }}_base64" id="foto_extra_{{ idx }}_base64_hidden-{{ visita.id_visita }}">
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-
-                        <!-- Sección de Firma del Cliente (Remota) -->
-                        <div style="margin-bottom: 16px; background-color: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
-                            <label style="font-weight: 700; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 8px;">✍️ Firma de Conformidad del Cliente (Remota):</label>
-                            
-                            <!-- Indicador de Estado en Tiempo Real -->
-                            <div id="status-firma-container-{{ visita.id_visita }}" style="background: #fffbeb; border: 1px solid #fde68a; padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.82rem; font-weight: 700; color: #b45309; margin-bottom: 12px; transition: all 0.3s ease;">
-                                <i class="fa-solid fa-circle-notch fa-spin"></i>
-                                <span id="txt-status-firma-{{ visita.id_visita }}">Esperando firma remota del cliente...</span>
-                            </div>
-                            
-                            <!-- Imagen de la firma ya guardada (inicialmente oculta) -->
-                            <div id="preview-firma-remota-container-{{ visita.id_visita }}" style="display: none; text-align: center; margin-bottom: 12px; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px;">
-                                <img id="preview-firma-remota-{{ visita.id_visita }}" style="max-height: 80px; max-width: 100%; border-radius: 4px;">
-                            </div>
-
-                            <!-- Botones de Acción -->
-                            <div style="display: flex; gap: 8px;">
-                                <button type="button" class="btn-wa" style="flex: 1; padding: 10px; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; color: white;" onclick="enviarLinkFirmaWhatsApp('{{ visita.telefonos }}', '{{ tecnico }}', '{{ visita.token_rastreo }}')">
-                                    <i class="fa-brands fa-whatsapp" style="font-size: 1.15rem;"></i> Enviar Enlace
-                                </button>
-                                <button type="button" class="btn-gps" style="flex: 1; padding: 10px; font-size: 0.8rem; margin-top: 0; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); border: none; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; color: white;" onclick="mostrarQRDeFirma('{{ visita.token_rastreo }}', '{{ visita.cliente }}')">
-                                    <i class="fa-solid fa-qrcode" style="font-size: 1.15rem;"></i> Código QR
+                                <button type="button" onclick="cargarHistorial('{{ visita.cliente }}')" class="btn-historial" style="padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; border: 1px solid #475569; background: transparent; color: #38bdf8; cursor: pointer;">
+                                    <i class="fa-solid fa-clock-rotate-left"></i> Historial
                                 </button>
                             </div>
                             
-                            <!-- Campo hidden para registrar si está firmada en el DOM -->
-                            <input type="hidden" id="firma-recibida-val-{{ visita.id_visita }}" value="0">
+                            <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px;">
+                                <div>
+                                    <strong style="color: #64748b; font-size: 0.8rem; display: block;">Contrato / Ref.</strong>
+                                    <span style="font-size: 0.95rem; font-weight: 600; color: #f8fafc;">Contrato: {{ visita.contrato or 'N/A' }} | Ref: #VT-{{ visita.id_visita }}</span>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; padding-bottom: 4px;">
+                                <div>
+                                    <strong style="color: #64748b; font-size: 0.8rem; display: block;">Asignado por:</strong>
+                                    <span style="font-size: 0.95rem; font-weight: 600; color: #f8fafc;">{{ visita.creado_por or 'Sistema' }}</span>
+                                </div>
+                            </div>
                         </div>
-
-                        <div style="margin-bottom: 16px;">
-                            <label style="font-weight: 700; color: #475569; font-size: 0.85rem; display: block; margin-bottom: 4px;">Coordenadas de Cierre:</label>
-                            <input type="text" name="coordenadas_tecnico" id="coords-{{ visita.id_visita }}" required readonly placeholder="Presione el botón de abajo para capturar" style="background-color: #cbd5e1; font-weight: bold; text-align: center;">
-                            <button type="button" class="btn-gps" id="btn-gps-{{ visita.id_visita }}" onclick="capturarGPS('{{ visita.id_visita }}')" style="margin-top: 8px;">
-                                <i class="fa-solid fa-location-crosshairs"></i> Obtener mi ubicación
+                        
+                        <!-- Teléfono -->
+                        <div class="dato-cliente" style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                            <div>
+                                <strong>Teléfono(s)</strong>
+                                <span>{{ visita.telefonos or 'No registrado' }}</span>
+                            </div>
+                            {% if visita.telefonos %}
+                            <button type="button" onclick="abrirLlamada('{{ visita.telefonos }}')" class="btn-call">
+                                <i class="fa-solid fa-phone"></i> Llamar
+                            </button>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Dirección -->
+                        <div class="dato-cliente" style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                            <div>
+                                <strong>Dirección / Ubicación</strong>
+                                <span>{{ visita.direccion }} ({{ visita.sector }})</span>
+                            </div>
+                            <button type="button" onclick="abrirNavegador('{{ visita.direccion }}', '{{ visita.sector }}')" class="btn-map-nav">
+                                <i class="fa-solid fa-map-location-dot"></i> Ir al Mapa
                             </button>
                         </div>
 
-                        <button type="submit" class="btn-action-finalize">
-                            <i class="fa-solid fa-check"></i> Guardar y Finalizar
-                        </button>
-                    </form>
-                </div>
-
-                {% elif visita.estado == 'FINALIZADA' %}
-                <div style="background-color: #dcfce7; padding: 12px; text-align: center; border-radius: 12px; color: #166534; font-weight: bold; margin-top: 15px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                    <i class="fa-solid fa-circle-check"></i> 
-                    {% if visita.es_instalacion == 1 %}
-                        Instalación Completada
-                    {% else %}
-                        Visita Completada
-                    {% endif %}
-                </div>
-                {% if visita.token_rastreo %}
-                <button type="button" class="btn-wa" style="margin-top: 10px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); width: 100%; border: none; padding: 10px; border-radius: 8px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; color: white;" onclick="enviarEncuestaWhatsApp('{{ visita.telefonos }}', '{{ visita.token_rastreo }}')">
-                    <i class="fa-brands fa-whatsapp" style="font-size: 1.25rem;"></i> Enviar Encuesta de Satisfacción
-                </button>
-                {% endif %}
-                {% endif %}
-
-            </div>
+                        <!-- Motivo / Servicio -->
+                        <div class="dato-cliente" style="border-bottom: none; padding-bottom: 0; margin-bottom: 15px;">
+                            {% if visita.es_instalacion == 1 %}
+                                <strong>Servicio a Realizar</strong>
+                                <span style="color: #38bdf8; font-weight: 700; font-size: 1.1rem; display: block; margin-top: 4px;">🔌 {{ visita.servicio }}</span>
+                                <div style="margin-top: 10px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 0.85rem; background: rgba(255,255,255,0.02); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                                    <div><strong style="color: #94a3b8;">Producto:</strong> <span style="font-weight: 600; color: #f8fafc;">{{ visita.producto }}</span></div>
+                                    <div><strong style="color: #94a3b8;">Tipo:</strong> <span style="font-weight: 600; color: #f8fafc;">{{ visita.tipo_instalacion }}</span></div>
+                                    <div style="grid-column: span 2;"><strong style="color: #94a3b8;">Vendedor:</strong> <span style="font-weight: 600; color: #f8fafc;">{{ visita.vendedor or 'N/A' }}</span></div>
+                                </div>
+                            {% else %}
+                                <strong>Problema Reportado</strong>
+                                <span style="color: #f43f5e; font-weight: 700; font-size: 1.1rem; display: block; margin-top: 4px;">🛠️ {{ visita.problema }}</span>
+                            {% endif %}
+                            
+                            {% if visita.observacion_callcenter %}
+                            <p style="margin: 10px 0 0 0; font-size: 0.95rem; color: #cbd5e1; font-style: italic; line-height: 1.4; background: rgba(56, 189, 248, 0.05); padding: 12px; border-radius: 8px; border-left: 4px solid #38bdf8;">
+                                "{{ visita.observacion_callcenter }}"
+                            </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- PESTAÑA 2: CONEXIÓN / NODO -->
+                    <div id="tab-nodo-{{ visita.id_visita }}" class="tab-pane">
+                        <div style="background-color: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px; padding: 16px;">
+                            <strong style="color: #38bdf8; font-size: 0.95rem; margin-bottom: 14px; display: block;">🔌 Datos de Conexión en Poste/Nodo</strong>
+                            
+                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px;">
+                                    <span style="color: #94a3b8;">Caja/NAP:</span>
+                                    <strong style="color: #f8fafc; font-size: 1rem;">{{ visita.info_caja or 'No registrada' }}</strong>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px;">
+                                    <span style="color: #94a3b8;">Hilo/Puerto:</span>
+                                    <strong style="color: #f8fafc; font-size: 1rem;">{{ visita.info_hilo or 'No registrado' }}</strong>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px;">
+                                    <span style="color: #94a3b8;">IP Fija:</span>
+                                    <strong style="color: #f8fafc; font-size: 1rem;">{{ visita.info_ip or 'No asignada' }}</strong>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px;">
+                                    <span style="color: #94a3b8;">VLAN:</span>
+                                    <strong style="color: #f8fafc; font-size: 1rem;">{{ visita.info_vlan or 'No asignada' }}</strong>
+                                </div>
+                                <div style="display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px;">
+                                    <span style="color: #94a3b8; font-size: 0.85rem;">Usuario PPPoE:</span>
+                                    <strong style="color: #f8fafc; font-size: 1.05rem; word-break: break-all;">{{ visita.info_usr or 'No asignado' }}</strong>
+                                </div>
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    <span style="color: #94a3b8; font-size: 0.85rem;">Clave PPPoE:</span>
+                                    <strong style="color: #f8fafc; font-size: 1.05rem;">{{ visita.info_pas or 'No asignada' }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- PESTAÑA 3: ACCIONES Y TRABAJO -->
+                    <div id="tab-acciones-{{ visita.id_visita }}" class="tab-pane">
+                        {% if visita.estado == 'PENDIENTE' or visita.estado == 'REAGENDADA' %}
+                        <form onsubmit="procesarAccionFormulario(event, {{ visita.id_visita }}, '/api/tecnico/en_camino/{{ visita.id_visita }}', 'camino')">
+                            <button type="submit" class="btn-action-route" style="width: 100%; margin-top: 10px;">
+                                <i class="fa-solid fa-truck-fast"></i> Voy en Camino
+                            </button>
+                        </form>
+        
+                        {% elif visita.estado == 'EN_RUTA' %}
+                        <div style="background-color: rgba(251, 191, 36, 0.05); padding: 18px; border-radius: 12px; border: 1px solid #fbbf24; display: flex; flex-direction: column; gap: 14px;">
+                            <p style="margin: 0; color: #fbbf24; font-size: 0.95rem; line-height: 1.4; font-weight: bold;">
+                                ⏳ En Traslado: Notifica al cliente que estás en camino.
+                            </p>
+        
+                            <button type="button" class="btn-wa" onclick="abrirWhatsApp('{{ visita.telefonos }}', '{{ tecnico }}', '{{ visita.token_rastreo }}')" style="width: 100%;">
+                                <i class="fa-brands fa-whatsapp" style="font-size: 1.25rem;"></i> Avisar al Cliente
+                            </button>
+        
+                            <form onsubmit="iniciarTrabajoConGPS(event, {{ visita.id_visita }}, '/api/tecnico/iniciar/{{ visita.id_visita }}')">
+                                <button type="submit" class="btn-action-start" style="width: 100%;">
+                                    <i class="fa-solid fa-play"></i> Llegué / Iniciar Trabajo
+                                </button>
+                            </form>
+                            
+                            <button type="button" class="btn-action-route" onclick="mostrarModalPosponer({{ visita.id_visita }})" style="width: 100%; margin-top: 10px; background: linear-gradient(135deg, #475569 0%, #334155 100%);">
+                                <i class="fa-solid fa-clock"></i> Posponer / Reagendar para hoy
+                            </button>
+                        </div>
+        
+                        <script>
+                            window.addEventListener('DOMContentLoaded', () => {
+                                iniciarRastreoSilencioso('{{ visita.id_visita }}');
+                            });
+                        </script>
+        
+                        {% elif visita.estado == 'EN_PROGRESO' %}
+                        <script>
+                            window.addEventListener('DOMContentLoaded', () => {
+                                iniciarRastreoSilencioso('{{ visita.id_visita }}');
+                            });
+                        </script>
+                        <div style="background-color: rgba(59, 130, 246, 0.05); padding: 18px; border-radius: 12px; border: 1px solid #3b82f6;">
+                            <h3 style="margin-top: 0; color: #38bdf8; font-size: 1.15rem; font-weight: 800; margin-bottom: 15px; text-align: center;">
+                                {% if visita.es_instalacion == 1 %}
+                                    Cierre de Instalación
+                                {% else %}
+                                    Cierre de Visita
+                                {% endif %}
+                            </h3>
+        
+                            <form onsubmit="procesarAccionFormulario(event, {{ visita.id_visita }}, '/api/tecnico/finalizar/{{ visita.id_visita }}', 'finalizar')">
+                                <div style="margin-bottom: 14px;">
+                                    <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 6px;">Solución del Técnico:</label>
+                                    <select name="solucion_tecnico" required style="width: 100%;">
+                                        <option value="">-- Seleccione la solución aplicada --</option>
+                                        {% if visita.es_instalacion == 1 %}
+                                            <option value="INSTALACION EFECTIVA">INSTALACION EFECTIVA</option>
+                                            <option value="SOLUCION PARCIAL">SOLUCION PARCIAL</option>
+                                        {% else %}
+                                            {% for sol in soluciones %}
+                                            <option value="{{ sol.nombre }}">{{ sol.nombre }}</option>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </select>
+                                </div>
+        
+                                <div style="margin-bottom: 14px;">
+                                    <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 6px;">Observación:</label>
+                                    <textarea name="observacion_tecnico" rows="3" required placeholder="Detalle lo realizado..." style="width: 100%;"></textarea>
+                                </div>
+        
+                                <div style="display: flex; gap: 10px; margin-bottom: 14px;">
+                                    <div style="flex: 1;">
+                                        <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 6px;">Modelo ONU:</label>
+                                        <select name="modelo_onu" style="width: 100%;">
+                                            <option value="">-- Ninguna --</option>
+                                            {% for ont in catalogo_ont %}
+                                            <option value="{{ ont.nombre }}">{{ ont.nombre }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div style="flex: 1;">
+                                        <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 6px;">Modelo Router:</label>
+                                        <select name="modelo_router" style="width: 100%;">
+                                            <option value="">-- Ninguno --</option>
+                                            {% for router in catalogo_router %}
+                                            <option value="{{ router.nombre }}">{{ router.nombre }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+        
+                                <div class="materials-card" style="margin-bottom: 14px;">
+                                    <div class="materials-header" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+                                        <h6>🛠️ Materiales Utilizados</h6>
+                                        <button type="button" class="btn-add-material" onclick="agregarFilaMaterial('{{ visita.id_visita }}')">
+                                            <i class="fa-solid fa-plus"></i> Añadir
+                                        </button>
+                                    </div>
+                                    <div class="materials-body" style="padding-top: 10px;">
+                                        <div id="contenedor-materiales-dinamicos-{{ visita.id_visita }}">
+                                            <p id="msg-sin-materiales-{{ visita.id_visita }}" style="font-size: 0.85rem; color: #94a3b8; text-align: center; margin: 0;">
+                                                Ningún material añadido. Dale a "Añadir" si usaste insumos.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+        
+                                <!-- Toggle de Equipos Juntos/Separados -->
+                                <div style="margin-bottom: 16px; background-color: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+                                    <label style="font-weight: 700; color: #38bdf8; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" id="equipos-juntos-{{ visita.id_visita }}" checked onchange="toggleInputsFotos('{{ visita.id_visita }}')" style="width: auto; margin: 0; transform: scale(1.2);">
+                                        <span>¿ONU y Router quedaron juntos?</span>
+                                    </label>
+                                    <input type="hidden" name="equipos_juntos" id="equipos-juntos-hidden-{{ visita.id_visita }}" value="1">
+                                </div>
+        
+                                <!-- Sección de Foto(s) de Equipos -->
+                                <div style="margin-bottom: 16px; background-color: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+                                    <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 6px;">📷 Fotos de Equipos (Obligatorio):</label>
+                                    
+                                    <!-- Input para Foto Conjunta -->
+                                    <div id="container-foto-conjunta-{{ visita.id_visita }}" style="display: block; margin-bottom: 10px;">
+                                        <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 4px;">Foto de ONU y Router juntos:</label>
+                                        <input type="file" id="input-foto-conjunta-{{ visita.id_visita }}" accept="image/*" capture="environment" onchange="comprimirYConvertirFoto('{{ visita.id_visita }}', this, 'foto_equipos', 'preview-foto-conjunta-{{ visita.id_visita }}')" style="width: 100%; font-size: 0.85rem; padding: 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); background: #1e293b; color: #f8fafc;">
+                                        <div style="margin-top: 8px; text-align: center;">
+                                            <img id="preview-foto-conjunta-{{ visita.id_visita }}" style="max-height: 120px; display: none; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); margin: 0 auto;">
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Inputs para Fotos Separadas -->
+                                    <div id="container-fotos-separadas-{{ visita.id_visita }}" style="display: none;">
+                                        <div style="margin-bottom: 10px;">
+                                            <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 4px;">Foto de ONU:</label>
+                                            <input type="file" id="input-foto-onu-{{ visita.id_visita }}" accept="image/*" capture="environment" onchange="comprimirYConvertirFoto('{{ visita.id_visita }}', this, 'foto_equipos', 'preview-foto-onu-{{ visita.id_visita }}')" style="width: 100%; font-size: 0.85rem; padding: 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); background: #1e293b; color: #f8fafc;">
+                                            <div style="margin-top: 8px; text-align: center;">
+                                                <img id="preview-foto-onu-{{ visita.id_visita }}" style="max-height: 120px; display: none; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); margin: 0 auto;">
+                                            </div>
+                                        </div>
+                                        <div style="margin-bottom: 10px;">
+                                            <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 4px;">Foto de Router:</label>
+                                            <input type="file" id="input-foto-router-{{ visita.id_visita }}" accept="image/*" capture="environment" onchange="comprimirYConvertirFoto('{{ visita.id_visita }}', this, 'foto_equipos_2', 'preview-foto-router-{{ visita.id_visita }}')" style="width: 100%; font-size: 0.85rem; padding: 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); background: #1e293b; color: #f8fafc;">
+                                            <div style="margin-top: 8px; text-align: center;">
+                                                <img id="preview-foto-router-{{ visita.id_visita }}" style="max-height: 120px; display: none; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); margin: 0 auto;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Campos hidden para guardar las imágenes Base64 comprimidas -->
+                                    <input type="hidden" name="foto_equipos_base64" id="foto_equipos_base64_hidden-{{ visita.id_visita }}">
+                                    <input type="hidden" name="foto_equipos_2_base64" id="foto_equipos_2_base64_hidden-{{ visita.id_visita }}">
+                                </div>
+        
+                                <!-- Sección de Fotos Adicionales Opcionales -->
+                                <div style="margin-bottom: 16px; background-color: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+                                    <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 6px;">📷 Fotos Adicionales / Pruebas de Trabajo (Opcional - Máx 4):</label>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                                        {% for idx in range(1, 5) %}
+                                        <div style="background: rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 6px; text-align: center;">
+                                            <label style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px; display: block; font-weight: bold;">Foto Extra {{ idx }}:</label>
+                                            <input type="file" id="input-foto-extra-{{ idx }}-{{ visita.id_visita }}" accept="image/*" capture="environment" onchange="comprimirYConvertirFoto('{{ visita.id_visita }}', this, 'foto_extra_{{ idx }}', 'preview-foto-extra-{{ idx }}-{{ visita.id_visita }}')" style="width: 100%; font-size: 0.75rem; padding: 4px; color: white;">
+                                            <div style="margin-top: 4px; text-align: center;">
+                                                <img id="preview-foto-extra-{{ idx }}-{{ visita.id_visita }}" style="max-height: 80px; display: none; border-radius: 4px; margin: 0 auto; max-width: 100%;">
+                                            </div>
+                                            <input type="hidden" name="foto_extra_{{ idx }}_base64" id="foto_extra_{{ idx }}_base64_hidden-{{ visita.id_visita }}">
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+        
+                                <!-- Sección de Firma / Cierre de Conformidad -->
+                                <div style="margin-bottom: 16px; background-color: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+                                    <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 8px;">✍️ Método de Conformidad / Firma:</label>
+                                    
+                                    <select id="metodo-firma-{{ visita.id_visita }}" name="metodo_firma" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); background: #1e293b; font-size: 0.85rem; font-weight: 600; color: #f8fafc; margin-bottom: 12px;" onchange="cambiarMetodoFirma('{{ visita.id_visita }}')">
+                                        <option value="REMOTA">Firma Remota del Cliente (QR / WhatsApp)</option>
+                                        <option value="DIRECTA">Firma en el Celular del Técnico (Tercera Edad / Discapacidad)</option>
+                                        <option value="SIN_FIRMA">Cierre sin Firma (Trabajo Externo / Cliente Ausente)</option>
+                                    </select>
+                                    
+                                    <!-- 1. Contenedor de Firma Remota -->
+                                    <div id="container-firma-remota-{{ visita.id_visita }}">
+                                        <!-- Indicador de Estado en Tiempo Real -->
+                                        <div id="status-firma-container-{{ visita.id_visita }}" style="background: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b; padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.82rem; font-weight: 700; color: #f59e0b; margin-bottom: 12px;">
+                                            <i class="fa-solid fa-circle-notch fa-spin"></i>
+                                            <span id="txt-status-firma-{{ visita.id_visita }}">Esperando firma remota del cliente...</span>
+                                        </div>
+                                        
+                                        <!-- Imagen de la firma ya guardada (inicialmente oculta) -->
+                                        <div id="preview-firma-remota-container-{{ visita.id_visita }}" style="display: none; text-align: center; margin-bottom: 12px; background: white; border: 1px solid #475569; border-radius: 8px; padding: 8px;">
+                                            <img id="preview-firma-remota-{{ visita.id_visita }}" style="max-height: 80px; max-width: 100%; border-radius: 4px;">
+                                        </div>
+        
+                                        <!-- Botones de Acción -->
+                                        <div style="display: flex; gap: 8px;">
+                                            <button type="button" class="btn-wa" style="flex: 1; padding: 10px; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; color: white;" onclick="enviarLinkFirmaWhatsApp('{{ visita.telefonos }}', '{{ tecnico }}', '{{ visita.token_rastreo }}')">
+                                                <i class="fa-brands fa-whatsapp" style="font-size: 1.15rem;"></i> Enviar Enlace
+                                            </button>
+                                            <button type="button" class="btn-gps" style="flex: 1; padding: 10px; font-size: 0.8rem; margin-top: 0; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); border: none; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; color: white;" onclick="mostrarQRDeFirma('{{ visita.token_rastreo }}', '{{ visita.cliente }}')">
+                                                <i class="fa-solid fa-qrcode" style="font-size: 1.15rem;"></i> Código QR
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- 2. Contenedor de Firma Directa (Celular del Técnico) -->
+                                    <div id="container-firma-directa-{{ visita.id_visita }}" style="display: none; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center;">
+                                        <span style="font-size: 0.8rem; font-weight: 700; color: #475569; display: block; margin-bottom: 8px; text-align: left;">✍️ Dibuje la firma del cliente sobre la pantalla:</span>
+                                        <canvas id="canvas-firma-{{ visita.id_visita }}" width="300" height="150" style="border: 1px dashed #94a3b8; width: 100%; height: 150px; cursor: crosshair; border-radius: 6px; touch-action: none; background: #fafafa;"></canvas>
+                                        <div style="display: flex; gap: 8px; margin-top: 8px;">
+                                            <button type="button" class="btn-gps" style="flex: 1; padding: 8px; font-size: 0.8rem; background: #64748b; margin-top: 0;" onclick="limpiarCanvasFirma('{{ visita.id_visita }}')">
+                                                <i class="fa-solid fa-eraser"></i> Limpiar
+                                            </button>
+                                            <button type="button" class="btn-gps" style="flex: 1; padding: 8px; font-size: 0.8rem; background: #10b981; margin-top: 0;" onclick="guardarFirmaDirecta('{{ visita.id_visita }}', '{{ visita.token_rastreo }}')">
+                                                <i class="fa-solid fa-circle-check"></i> Guardar Firma
+                                            </button>
+                                        </div>
+                                    </div>
+        
+                                    <!-- 3. Contenedor de Cierre sin Firma -->
+                                    <div id="container-cierre-sin-firma-{{ visita.id_visita }}" style="display: none; background: rgba(255,255,255,0.02); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+                                        <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 8px;">⚠️ Motivo de Cierre sin Firma:</label>
+                                        <select id="motivo-sin-firma-{{ visita.id_visita }}" name="motivo_sin_firma" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); background: #1e293b; font-size: 0.8rem; font-weight: 600; color: white;">
+                                            <option value="TRABAJO_EXTERNO">Trabajo Externo (Caja de Distribución / Poste)</option>
+                                            <option value="CLIENTE_AUSENTE">Cliente Ausente / No contesta</option>
+                                            <option value="SOPORTE_REMOTO">Soporte Remoto / Configuración Lógica</option>
+                                            <option value="TERCERA_EDAD_DISCAPACIDAD_SIN_FIRMA">Cliente de Tercera Edad / Discapacidad (No puede firmar)</option>
+                                            <option value="OTROS">Otros (Especificar en observación)</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <!-- Campo hidden para registrar si está firmada en el DOM -->
+                                    <input type="hidden" id="firma-recibida-val-{{ visita.id_visita }}" value="0">
+                                </div>
+        
+                                <div style="margin-bottom: 16px;">
+                                    <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 4px;">Coordenadas de Cierre:</label>
+                                    <input type="text" name="coordenadas_tecnico" id="coords-{{ visita.id_visita }}" required readonly placeholder="Presione el botón de abajo para capturar" style="background-color: #475569 !important; color: white !important; font-weight: bold; text-align: center;">
+                                    <button type="button" class="btn-gps" id="btn-gps-{{ visita.id_visita }}" onclick="capturarGPS('{{ visita.id_visita }}')" style="margin-top: 8px; width: 100%;">
+                                        <i class="fa-solid fa-location-crosshairs"></i> Obtener mi ubicación
+                                    </button>
+                                </div>
+        
+                                <button type="submit" class="btn-action-finalize" style="width: 100%;">
+                                    <i class="fa-solid fa-check"></i> Guardar y Finalizar
+                                </button>
+                            </form>
+                            
+                            <button type="button" class="btn-action-route" onclick="mostrarModalPosponer({{ visita.id_visita }})" style="width: 100%; margin-top: 10px; background: linear-gradient(135deg, #475569 0%, #334155 100%);">
+                                <i class="fa-solid fa-clock"></i> Posponer / Reagendar para hoy
+                            </button>
+                        </div>
+        
+                        {% elif visita.estado == 'FINALIZADA' %}
+                        <div style="background-color: rgba(16, 185, 129, 0.1); padding: 16px; text-align: center; border-radius: 12px; color: #10b981; font-weight: bold; margin-top: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid #10b981;">
+                            <i class="fa-solid fa-circle-check"></i> 
+                            {% if visita.es_instalacion == 1 %}
+                                Instalación Completada
+                            {% else %}
+                                Visita Completada
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                </div> <!-- /modal-details-body -->
+            </div> <!-- /fullscreen-details-overlay -->
             {% else %}
             <div class="empty-state-container">
                 <div class="empty-state-icon">
@@ -483,7 +766,7 @@
             {% endfor %}
         </div>
     </div>
-    <div id="modalHistorial" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.75); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+    <div id="modalHistorial" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.75); z-index: 200000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
     
         <div style="background-color: #1e1e2d; color: white; border-radius: 12px; border: 1px solid #333; width: 100%; max-width: 500px; display: flex; flex-direction: column; max-height: 85vh; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
             
@@ -505,7 +788,7 @@
     </div>
 
     <!-- Modal de Activación de Pánico -->
-    <div id="modalPanico" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+    <div id="modalPanico" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 200000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
         <div style="background-color: #1e1e2d; color: white; border-radius: 16px; border: 1px solid #334155; width: 100%; max-width: 420px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.5); overflow: hidden;">
             <div style="padding: 18px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);">
                 <h5 style="margin: 0; color: white; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
@@ -549,7 +832,7 @@
     </div>
 
     <!-- Modal Selector de Contacto -->
-    <div id="modalSelectorContacto" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+    <div id="modalSelectorContacto" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 200000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
         <div style="background-color: #1e1e2d; color: white; border-radius: 16px; border: 1px solid #334155; width: 100%; max-width: 420px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.5); overflow: hidden;">
             <div style="padding: 18px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
                 <h5 id="modalContactoTitulo" style="margin: 0; color: white; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
@@ -575,7 +858,7 @@
     </div>
 
     <!-- Modal de Código QR de Firma Remota -->
-    <div id="modalQR" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+    <div id="modalQR" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 200000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
         <div style="background-color: #1e1e2d; color: white; border-radius: 16px; border: 1px solid #334155; width: 100%; max-width: 360px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.5); overflow: hidden; text-align: center;">
             <div style="padding: 18px 20px; border-bottom: 1px solid #334155; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);">
                 <h5 style="margin: 0; color: white; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px;">
@@ -602,7 +885,75 @@
         </div>
     </div>
 
+    <!-- Modal Posponer Visita -->
+    <div id="modalPosponer" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 200000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+        <div style="background-color: #1e1e2d; color: white; border-radius: 16px; border: 1px solid #334155; width: 100%; max-width: 420px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.5); overflow: hidden;">
+            <div style="padding: 18px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #4b5563 0%, #1f2937 100%);">
+                <h5 style="margin: 0; color: white; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-clock"></i> Posponer Visita
+                </h5>
+                <button type="button" onclick="cerrarModalPosponer()" style="background: none; border: none; color: white; font-size: 1.8rem; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
+            </div>
+            
+            <form id="form-posponer-visita" onsubmit="procesarAccionFormulario(event, document.getElementById('posponer-id-visita').value, document.getElementById('form-posponer-visita').action, 'posponer')" style="margin: 0;">
+                <input type="hidden" name="id_visita" id="posponer-id-visita">
+                <div style="padding: 20px; display: flex; flex-direction: column; gap: 15px;">
+                    <p style="margin: 0; color: #cbd5e1; font-size: 0.9rem; line-height: 1.4;">
+                        Indica el motivo por el cual pospondrás la visita para más tarde el día de hoy:
+                    </p>
+                    
+                    <div>
+                        <label style="font-weight: 700; color: #94a3b8; font-size: 0.8rem; display: block; margin-bottom: 8px; text-transform: uppercase;">Motivo de Postergación:</label>
+                        <select name="motivo" id="select-motivo-posponer" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #334155; background-color: #0f172a; color: white; font-size: 0.9rem; outline: none; appearance: auto;" onchange="chequearOtroMotivoPosponer()">
+                            <option value="Cliente ausente (retorna más tarde)">👤 Cliente ausente (retorna más tarde)</option>
+                            <option value="Cliente solicitó postergar unas horas">📞 Cliente solicitó postergar unas horas</option>
+                            <option value="Falta de materiales o herramientas">🛠️ Falta de materiales o herramientas</option>
+                            <option value="Lluvia / Condición climática adversa">🌧️ Lluvia / Condición climática adversa</option>
+                            <option value="Otro motivo">🚨 Otro motivo</option>
+                        </select>
+                    </div>
+
+                    <div id="otro-motivo-posponer-container" style="display: none;">
+                        <label style="font-weight: 700; color: #94a3b8; font-size: 0.8rem; display: block; margin-bottom: 8px; text-transform: uppercase;">Especifique el motivo:</label>
+                        <input type="text" name="motivo_otro" id="input-motivo-posponer-otro" placeholder="Ej. Retorno en 2 horas, etc..." style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #334155; background-color: #0f172a; color: white; font-size: 0.9rem; outline: none;">
+                    </div>
+                    
+                    <div style="display: flex; gap: 12px; margin-top: 10px;">
+                        <button type="button" onclick="cerrarModalPosponer()" style="flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #334155; background: #2d3748; color: white; font-weight: 700; cursor: pointer; font-size: 0.9rem;">
+                            Cancelar
+                        </button>
+                        <button type="submit" style="flex: 1; padding: 12px; border-radius: 10px; border: none; background: linear-gradient(135deg, #4b5563 0%, #374151 100%); color: white; font-weight: 700; cursor: pointer; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            <i class="fa-solid fa-check"></i> Aceptar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
+        // --- FUNCIONES PARA POSPONER VISITA ---
+        function mostrarModalPosponer(id) {
+            document.getElementById('posponer-id-visita').value = id;
+            document.getElementById('form-posponer-visita').action = `/api/tecnico/posponer/${id}`;
+            document.getElementById('modalPosponer').style.display = 'flex';
+        }
+        function cerrarModalPosponer() {
+            document.getElementById('modalPosponer').style.display = 'none';
+        }
+        function chequearOtroMotivoPosponer() {
+            const val = document.getElementById('select-motivo-posponer').value;
+            const container = document.getElementById('otro-motivo-posponer-container');
+            if (val === 'Otro motivo') {
+                container.style.display = 'block';
+                document.getElementById('input-motivo-posponer-otro').required = true;
+            } else {
+                container.style.display = 'none';
+                document.getElementById('input-motivo-posponer-otro').required = false;
+                document.getElementById('input-motivo-posponer-otro').value = '';
+            }
+        }
+
         // --- FUNCIÓN PARA CERRAR EL MODAL ---
         function cerrarModalHistorial() {
             document.getElementById('modalHistorial').style.display = 'none';
@@ -638,7 +989,7 @@
                                 <div style="background-color: #2b2b40; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid ${colorEstado};">
                                     <div style="display: flex; justify-content: space-between; margin-bottom: 8px; align-items: center;">
                                         <span style="font-size: 0.85rem; color: #aaa;">📅 ${fecha}</span>
-                                        <span class="historial-badge-estado status-${visita.estado.toLowerCase()}">${visita.estado}</span>
+                                        <span class="historial-badge-estado status-${visita.estado.toLowerCase()}">${visita.estado.replace(/_/g, ' ')}</span>
                                     </div>
                                     <h6 style="color: #fff; margin: 0 0 5px 0; font-size: 1rem;">Problema: <span style="color: #ffb74d;">${visita.problema}</span></h6>
                                     <p style="font-size: 0.85rem; margin: 0 0 8px 0; color: #ccc;"><strong>Solución:</strong> ${visita.solucion_tecnico || 'Sin registrar'}</p>
@@ -826,6 +1177,11 @@
         // --- 1.4. RASTREO SATELITAL GLOBAL DE LA JORNADA ---
         window.recibirUbicacionNativa = function(tipo, lat, lon) {
             if (tipo === 'global') {
+                // Si recibimos respuesta nativa exitosa, cancelamos el fallback HTML5 programado para este tick
+                if (window.ultimoTimeoutGlobal) {
+                    clearTimeout(window.ultimoTimeoutGlobal);
+                    window.ultimoTimeoutGlobal = null;
+                }
                 const txtEstado = document.getElementById('txt-estado-jornada');
                 if (txtEstado && txtEstado.classList.contains('descanso')) {
                     console.log("El técnico está en descanso. Saltando ping global nativo.");
@@ -836,6 +1192,11 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ latitud: lat, longitud: lon })
+                })
+                .then(res => {
+                    if (res.status === 401) {
+                        window.location.href = '/login';
+                    }
                 })
                 .catch(err => console.log("Error de conexión ping global nativo:", err));
             } else if (tipo && tipo.toString().startsWith('inicio_')) {
@@ -857,50 +1218,61 @@
 
         let intervaloRastreoGlobal = null;
         function iniciarRastreoGlobal() {
-            if (window.AndroidBridge) {
-                function enviarPingGlobalNativo() {
-                    const txtEstado = document.getElementById('txt-estado-jornada');
-                    if (txtEstado && txtEstado.classList.contains('descanso')) {
-                        console.log("El técnico está en descanso. Saltando ping global nativo.");
-                        return;
-                    }
-                    window.AndroidBridge.requestSingleLocation("global");
+            function ejecutarPingHibrido() {
+                const txtEstado = document.getElementById('txt-estado-jornada');
+                if (txtEstado && txtEstado.classList.contains('descanso')) {
+                    console.log("El técnico está en descanso. Saltando ping.");
+                    return;
                 }
-                enviarPingGlobalNativo();
-                intervaloRastreoGlobal = setInterval(enviarPingGlobalNativo, 20000);
-                return;
+
+                let fallbackTimeout = null;
+
+                if (window.AndroidBridge) {
+                    console.log("Intentando ping global nativo...");
+                    window.AndroidBridge.requestSingleLocation("global");
+                    
+                    // Si en 5 segundos la app nativa no responde, forzamos fallback a HTML5
+                    fallbackTimeout = setTimeout(() => {
+                        console.log("La app nativa no respondió a tiempo para ping global. Usando fallback HTML5.");
+                        solicitarPingHTML5();
+                    }, 5000);
+                    
+                    window.ultimoTimeoutGlobal = fallbackTimeout;
+                } else {
+                    solicitarPingHTML5();
+                }
+
+                function solicitarPingHTML5() {
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                            function (position) {
+                                console.log("Enviando ping global (HTML5 Fallback/Web):", position.coords.latitude, position.coords.longitude);
+                                fetch('/api/tecnico/ping_global', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ latitud: position.coords.latitude, longitud: position.coords.longitude })
+                                })
+                                .then(res => {
+                                    if (res.status === 401) {
+                                        window.location.href = '/login';
+                                    }
+                                })
+                                .catch(err => console.log("Error de conexión ping global HTML5:", err));
+                            },
+                            function (error) {
+                                console.log("Error GPS ping global HTML5:", error.message);
+                            },
+                            { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+                        );
+                    }
+                }
             }
 
-            if (navigator.geolocation) {
-                function enviarPingGlobal() {
-                    const txtEstado = document.getElementById('txt-estado-jornada');
-                    if (txtEstado && txtEstado.classList.contains('descanso')) {
-                        console.log("El técnico está en descanso. Saltando ping global web.");
-                        return;
-                    }
-                    navigator.geolocation.getCurrentPosition(
-                        function (position) {
-                            console.log("Enviando ping global:", position.coords.latitude, position.coords.longitude);
-                            fetch('/api/tecnico/ping_global', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ latitud: position.coords.latitude, longitud: position.coords.longitude })
-                            })
-                            .catch(err => console.log("Error de conexión ping global:", err));
-                        },
-                        function (error) {
-                            console.log("Error GPS ping global:", error.message);
-                        },
-                        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-                    );
-                }
-                
-                // Enviar inmediatamente
-                enviarPingGlobal();
-                
-                // Bucle de ping global cada 20 segundos
-                intervaloRastreoGlobal = setInterval(enviarPingGlobal, 20000);
-            }
+            // Ejecutar inmediatamente
+            ejecutarPingHibrido();
+
+            // Bucle cada 20 segundos
+            intervaloRastreoGlobal = setInterval(ejecutarPingHibrido, 20000);
         }
         
         // Iniciar el rastreo global del técnico al cargar la página
@@ -1293,7 +1665,6 @@
             }
         }
 
-        // --- 3. GPS PARA CIERRE DE VISITA (El que ya tenías) ---
         function capturarGPS(idVisita) {
             const inputCoords = document.getElementById(`coords-${idVisita}`);
             const btn = document.getElementById(`btn-gps-${idVisita}`);
@@ -1301,28 +1672,58 @@
             btn.innerHTML = "⏳ Calculando satélites...";
             btn.disabled = true;
 
+            let timeoutNativo = null;
+
             if (window.AndroidBridge) {
+                // Si en 5 segundos no se ha llenado el campo de coordenadas, usamos el fallback HTML5
+                timeoutNativo = setTimeout(() => {
+                    if (inputCoords.value === "") {
+                        console.warn("⚠️ GPS Nativo tardó demasiado. Iniciando fallback HTML5 Geolocation...");
+                        intentarGPSHtml5();
+                    }
+                }, 5000);
+
                 window.AndroidBridge.stopTracking();
                 window.AndroidBridge.requestSingleLocation(idVisita.toString());
+                
+                // Sobrescribimos temporalmente recibirUbicacionNativa para limpiar el timeout si llega a tiempo
+                const originalRecibir = window.recibirUbicacionNativa;
+                window.recibirUbicacionNativa = function(tipo, lat, lon) {
+                    if (tipo.toString() === idVisita.toString()) {
+                        clearTimeout(timeoutNativo);
+                        // Restauramos original
+                        window.recibirUbicacionNativa = originalRecibir;
+                    }
+                    originalRecibir(tipo, lat, lon);
+                };
                 return;
             }
 
-            if (navigator.geolocation) {
-                if (intervaloRastreo !== null) clearInterval(intervaloRastreo);
+            intentarGPSHtml5();
 
-                navigator.geolocation.getCurrentPosition(
-                    function (position) {
-                        inputCoords.value = `${position.coords.latitude}, ${position.coords.longitude}`;
-                        btn.innerHTML = "✓ GPS Capturado con éxito";
-                        btn.style.backgroundColor = "#10b981";
-                    },
-                    function (error) {
-                        alert("Error al obtener ubicación. Active el GPS.");
-                        btn.innerHTML = textoOriginal;
-                        btn.disabled = false;
-                    },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                );
+            function intentarGPSHtml5() {
+                if (navigator.geolocation) {
+                    if (intervaloRastreo !== null) clearInterval(intervaloRastreo);
+
+                    navigator.geolocation.getCurrentPosition(
+                        function (position) {
+                            inputCoords.value = `${position.coords.latitude}, ${position.coords.longitude}`;
+                            btn.innerHTML = "✓ GPS Capturado con éxito";
+                            btn.style.backgroundColor = "#10b981";
+                            btn.disabled = false;
+                        },
+                        function (error) {
+                            alert("Error al obtener ubicación. Asegúrese de activar el GPS y la ubicación de su teléfono.");
+                            btn.innerHTML = textoOriginal;
+                            btn.disabled = false;
+                        },
+                        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+                    );
+                } else {
+                    alert("Su dispositivo no soporta geolocalización. Intente recargar.");
+                    btn.innerHTML = textoOriginal;
+                    btn.disabled = false;
+                }
             }
         }
 
@@ -1462,6 +1863,99 @@
                 });
         }
 
+        // Funciones para el control de los detalles en pantalla completa (Fullscreen Overlay)
+        function abrirDetallesVisita(idVisita) {
+            // Guardar ID en localStorage para recordar tras recarga
+            localStorage.setItem('active_visit_id', idVisita);
+            
+            const modal = document.getElementById(`modal-detalles-${idVisita}`);
+            if (modal) {
+                modal.style.display = 'flex';
+                document.body.style.overflow = 'hidden'; // Evita scroll de fondo de las tareas
+                
+                // Si la pestaña actual es acciones y el método es directa, inicializar canvas
+                const tabAcciones = document.getElementById(`tab-acciones-${idVisita}`);
+                if (tabAcciones && tabAcciones.classList.contains('active')) {
+                    const metodoFirma = document.getElementById(`metodo-firma-${idVisita}`);
+                    if (metodoFirma && metodoFirma.value === 'DIRECTA') {
+                        setTimeout(() => {
+                            inicializarCanvasFirma(idVisita);
+                        }, 200);
+                    }
+                }
+            }
+        }
+
+        function cerrarDetallesVisita(idVisita, event) {
+            if (event) {
+                event.stopPropagation(); // Evita clics no deseados en la tarjeta de abajo
+            }
+            // Eliminar ID de localStorage
+            localStorage.removeItem('active_visit_id');
+            
+            const modal = document.getElementById(`modal-detalles-${idVisita}`);
+            if (modal) {
+                modal.style.display = 'none';
+                document.body.style.overflow = ''; // Restaura scroll de fondo
+            }
+        }
+
+        function switchTab(event, tabPrefix, idVisita) {
+            if (event) {
+                event.stopPropagation();
+            }
+            const overlay = document.getElementById(`modal-detalles-${idVisita}`);
+            if (!overlay) return;
+            
+            // Desactivar botones de pestañas
+            const tabBtns = overlay.querySelectorAll('.tab-btn');
+            tabBtns.forEach(btn => btn.classList.remove('active'));
+            
+            // Desactivar paneles
+            const tabPanes = overlay.querySelectorAll('.tab-pane');
+            tabPanes.forEach(pane => pane.classList.remove('active'));
+            
+            // Activar botón actual
+            if (event) {
+                event.currentTarget.classList.add('active');
+            } else {
+                // Si es por llamada programática (reload), buscar y activar el botón correcto visualmente
+                const targetBtn = overlay.querySelector(`.tab-btn[onclick*="${tabPrefix}"]`);
+                if (targetBtn) targetBtn.classList.add('active');
+            }
+            
+            // Activar panel actual
+            const activePane = document.getElementById(`${tabPrefix}-${idVisita}`);
+            if (activePane) {
+                activePane.classList.add('active');
+                
+                // Inicializar canvas si es la sección de trabajo y firma directa está activa
+                if (tabPrefix === 'tab-acciones') {
+                    const metodoFirma = document.getElementById(`metodo-firma-${idVisita}`);
+                    if (metodoFirma && metodoFirma.value === 'DIRECTA') {
+                        setTimeout(() => {
+                            inicializarCanvasFirma(idVisita);
+                        }, 100);
+                    }
+                }
+            }
+        }
+
+        // Auto-reabrir modal de detalles tras recargar la página si estaba abierto
+        window.addEventListener('DOMContentLoaded', () => {
+            const activeVisitId = localStorage.getItem('active_visit_id');
+            if (activeVisitId) {
+                const modal = document.getElementById(`modal-detalles-${activeVisitId}`);
+                if (modal) {
+                    modal.style.display = 'flex';
+                    document.body.style.overflow = 'hidden';
+                    
+                    // Forzar el render en la pestaña de trabajo/acciones
+                    switchTab(null, 'tab-acciones', activeVisitId);
+                }
+            }
+        });
+
         // --- 4. NAVEGACIÓN INTELIGENTE (Google Maps) ---
         function abrirNavegador(direccion, sector) {
             if (!direccion) {
@@ -1510,8 +2004,7 @@
             // Creamos un ID único temporal para poder borrar esta fila específica si el técnico se equivoca
             const filaId = 'material_row_' + Date.now();
 
-            // Generamos las opciones del select dinámicamente desde nuestro catálogo de base de datos
-            let opcionesHTML = `<option value="" disabled selected>-- Seleccione material --</option>`;
+            let opcionesHTML = `<option value="" disabled selected>-- Seleccionar material --</option>`;
             catalogoMateriales.forEach(mat => {
                 opcionesHTML += `<option value="${mat.id}">${mat.nombre} (${mat.unidad})</option>`;
             });
@@ -1524,15 +2017,15 @@
 
             nuevaFila.innerHTML = `
                 <div style="flex: 2; min-width: 0;">
-                    <select name="materiales_seleccionados[]" class="form-control" required 
-                            style="font-size: 0.85rem; height: 42px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%;">
+                    <select name="materiales_seleccionados[]" id="select-material-${filaId}" class="form-control" required
+                            style="font-size: 0.85rem; height: 42px; border-radius: 8px; border: 1px solid #cbd5e1; width: 100%; padding: 6px 10px; background-color: #ffffff; color: #0f172a; outline: none;">
                         ${opcionesHTML}
                     </select>
                 </div>
                 
                 <div style="width: 70px; flex-shrink: 0;">
                     <input type="number" name="cantidades_materiales[]" class="form-control text-center" 
-                           placeholder="Cant." min="1" required 
+                           placeholder="Cant." min="1" value="1" required 
                            style="font-size: 0.9rem; height: 42px; border-radius: 8px; border: 1px solid #cbd5e1; padding: 5px;">
                 </div>
                 
@@ -1546,6 +2039,38 @@
             `;
 
             contenedor.appendChild(nuevaFila);
+        }
+
+        function actualizarIdMaterial(inputElement, filaId) {
+            const val = inputElement.value;
+            const dl = document.getElementById('lista-materiales-global');
+            if (!dl) return;
+            
+            const opts = dl.options;
+            let foundId = "";
+            
+            for (let i = 0; i < opts.length; i++) {
+                if (opts[i].value.trim() === val.trim()) {
+                    foundId = opts[i].getAttribute('data-id');
+                    break;
+                }
+            }
+            
+            const hiddenInput = document.getElementById(`hidden-material-${filaId}`);
+            if (hiddenInput) {
+                hiddenInput.value = foundId;
+                
+                // Retroalimentación visual
+                if (foundId) {
+                    inputElement.style.borderColor = '#10b981'; // Verde si es válido
+                    inputElement.style.boxShadow = '0 0 0 2px rgba(16, 185, 129, 0.2)';
+                    inputElement.setCustomValidity(''); // Válido
+                } else {
+                    inputElement.style.borderColor = '#ef4444'; // Rojo si es inválido
+                    inputElement.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.2)';
+                    inputElement.setCustomValidity('Seleccione un material válido del catálogo.'); // Inválido
+                }
+            }
         }
 
         function eliminarFilaMaterial(filaId, idVisita) {
@@ -1668,16 +2193,11 @@
             
             // Validar coordenadas si es cierre de visita
             if (tipo === 'finalizar') {
-                const coordsInput = document.getElementById(`coords-${idVisita}`);
-                if (coordsInput && !coordsInput.value) {
-                    alert("Por favor, capture su ubicación GPS antes de finalizar.");
-                    return;
-                }
-
                 // 1. Validar firma del cliente remota
+                const metodoFirma = document.getElementById(`metodo-firma-${idVisita}`).value;
                 const valFirmaRecibida = document.getElementById(`firma-recibida-val-${idVisita}`);
-                if (!valFirmaRecibida || valFirmaRecibida.value !== '1') {
-                    alert("Por favor, solicite y espere a que el cliente complete la firma remota antes de finalizar.");
+                if (metodoFirma !== 'SIN_FIRMA' && (!valFirmaRecibida || valFirmaRecibida.value !== '1')) {
+                    alert("Por favor, registre la firma de conformidad del cliente antes de finalizar.");
                     return;
                 }
 
@@ -1701,6 +2221,84 @@
                         return;
                     }
                 }
+
+                // 3. Validar coordenadas (se ejecuta al final de las validaciones de datos)
+                const coordsInput = document.getElementById(`coords-${idVisita}`);
+                if (coordsInput && !coordsInput.value) {
+                    const btnGps = document.getElementById(`btn-gps-${idVisita}`);
+                    if (btnGps) {
+                        btnGps.innerHTML = "⏳ Capturando GPS automático...";
+                        btnGps.disabled = true;
+                    }
+                    
+                    const submitBtn = form.querySelector('button[type="submit"]');
+                    const originalBtnHTML = submitBtn ? submitBtn.innerHTML : 'Guardar y Finalizar';
+                    if (submitBtn) {
+                        submitBtn.disabled = true;
+                        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Obteniendo ubicación GPS...';
+                    }
+                    
+                    const continuarCierre = (lat, lon) => {
+                        coordsInput.value = `${lat}, ${lon}`;
+                        if (btnGps) {
+                            btnGps.innerHTML = "✓ GPS Capturado";
+                            btnGps.style.backgroundColor = "#10b981";
+                        }
+                        // Volver a llamar para continuar el envío ya con las coordenadas cargadas
+                        procesarAccionFormulario(event, idVisita, endpoint, tipo);
+                    };
+
+                    if (window.AndroidBridge) {
+                        const originalRecibir = window.recibirUbicacionNativa;
+                        window.recibirUbicacionNativa = function(tipoVal, lat, lon) {
+                            if (tipoVal.toString() === idVisita.toString()) {
+                                window.recibirUbicacionNativa = originalRecibir;
+                                continuarCierre(lat, lon);
+                            }
+                            if (originalRecibir) originalRecibir(tipoVal, lat, lon);
+                        };
+                        window.AndroidBridge.stopTracking();
+                        window.AndroidBridge.requestSingleLocation(idVisita.toString());
+                        
+                        setTimeout(() => {
+                            if (!coordsInput.value) {
+                                console.warn("GPS nativo tardó demasiado en Guardar y Finalizar, intentando HTML5...");
+                                intentarHtml5Submit();
+                            }
+                        }, 6000);
+                    } else {
+                        intentarHtml5Submit();
+                    }
+                    
+                    function intentarHtml5Submit() {
+                        if (navigator.geolocation) {
+                            navigator.geolocation.getCurrentPosition(
+                                function (position) {
+                                    continuarCierre(position.coords.latitude, position.coords.longitude);
+                                },
+                                function (error) {
+                                    alert("Error al obtener ubicación GPS automática. Por favor, active la ubicación de su teléfono y presione 'Obtener mi ubicación' manualmente.");
+                                    if (submitBtn) {
+                                        submitBtn.disabled = false;
+                                        submitBtn.innerHTML = originalBtnHTML;
+                                    }
+                                    if (btnGps) {
+                                        btnGps.innerHTML = "Obtener mi ubicación";
+                                        btnGps.disabled = false;
+                                    }
+                                },
+                                { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+                            );
+                        } else {
+                            alert("Por favor, capture su ubicación GPS antes de finalizar.");
+                            if (submitBtn) {
+                                submitBtn.disabled = false;
+                                submitBtn.innerHTML = originalBtnHTML;
+                            }
+                        }
+                    }
+                    return;
+                }
             }
             
             // Activar/desactivar Wake Lock automáticamente según el flujo de la visita
@@ -1721,6 +2319,9 @@
             sendFormRequest(endpoint, data)
                 .then(response => {
                     if (response.ok) {
+                        if (tipo === 'finalizar') {
+                            localStorage.removeItem('active_visit_id');
+                        }
                         window.location.reload();
                     } else {
                         alert('El servidor respondió con un error. Intente nuevamente.');
@@ -1771,6 +2372,139 @@
             document.getElementById('modalQR').style.display = 'none';
         }
 
+        // --- NUEVAS FUNCIONES DE FIRMA Y CIERRE ---
+        function cambiarMetodoFirma(idVisita) {
+            const metodo = document.getElementById(`metodo-firma-${idVisita}`).value;
+            const remota = document.getElementById(`container-firma-remota-${idVisita}`);
+            const directa = document.getElementById(`container-firma-directa-${idVisita}`);
+            const sinFirma = document.getElementById(`container-cierre-sin-firma-${idVisita}`);
+            const valFirma = document.getElementById(`firma-recibida-val-${idVisita}`);
+
+            if (metodo === 'REMOTA') {
+                remota.style.display = 'block';
+                directa.style.display = 'none';
+                sinFirma.style.display = 'none';
+                consultarFirmaVisita(idVisita);
+            } else if (metodo === 'DIRECTA') {
+                remota.style.display = 'none';
+                directa.style.display = 'block';
+                sinFirma.style.display = 'none';
+                valFirma.value = '0';
+                inicializarCanvasFirma(idVisita);
+            } else if (metodo === 'SIN_FIRMA') {
+                remota.style.display = 'none';
+                directa.style.display = 'none';
+                sinFirma.style.display = 'block';
+                valFirma.value = '1';
+            }
+        }
+
+        function inicializarCanvasFirma(idVisita) {
+            const canvas = document.getElementById(`canvas-firma-${idVisita}`);
+            if (!canvas) return;
+            
+            if (canvas.dataset.initialized === 'true') return;
+            canvas.dataset.initialized = 'true';
+            
+            const ctx = canvas.getContext('2d');
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            
+            let drawing = false;
+            let lastX = 0;
+            let lastY = 0;
+            
+            function getCoordinates(e) {
+                const rect = canvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * (canvas.width / rect.width),
+                    y: (clientY - rect.top) * (canvas.height / rect.height)
+                };
+            }
+            
+            function startDrawing(e) {
+                drawing = true;
+                const coords = getCoordinates(e);
+                lastX = coords.x;
+                lastY = coords.y;
+                e.preventDefault();
+            }
+            
+            function draw(e) {
+                if (!drawing) return;
+                const coords = getCoordinates(e);
+                ctx.beginPath();
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(coords.x, coords.y);
+                ctx.stroke();
+                lastX = coords.x;
+                lastY = coords.y;
+                e.preventDefault();
+            }
+            
+            function stopDrawing() {
+                drawing = false;
+            }
+            
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseleave', stopDrawing);
+            
+            canvas.addEventListener('touchstart', startDrawing, { passive: false });
+            canvas.addEventListener('touchmove', draw, { passive: false });
+            canvas.addEventListener('touchend', stopDrawing);
+        }
+
+        function limpiarCanvasFirma(idVisita) {
+            const canvas = document.getElementById(`canvas-firma-${idVisita}`);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function guardarFirmaDirecta(idVisita, token) {
+            const canvas = document.getElementById(`canvas-firma-${idVisita}`);
+            if (!canvas) return;
+            
+            const dataUrl = canvas.toDataURL('image/png');
+            
+            const btn = event.currentTarget;
+            const origText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+            
+            fetch(`/api/cliente/firmar/${token}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ firma_base64: dataUrl })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    document.getElementById(`firma-recibida-val-${idVisita}`).value = '1';
+                    document.getElementById(`metodo-firma-${idVisita}`).value = 'REMOTA';
+                    cambiarMetodoFirma(idVisita);
+                    alert("Firma del cliente guardada con éxito.");
+                } else {
+                    alert("Error al guardar firma: " + data.message);
+                }
+            })
+            .catch(err => {
+                console.error("Error al enviar firma directa:", err);
+                alert("Error de red al guardar la firma.");
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = origText;
+            });
+        }
+
         function consultarFirmaVisita(idVisita) {
             fetch(`/api/tecnico/verificar_firma/${idVisita}`)
                 .then(res => res.json())
@@ -1813,9 +2547,18 @@
             const valInputs = document.querySelectorAll('input[id^="firma-recibida-val-"]');
             valInputs.forEach(input => {
                 const idVisita = input.id.replace('firma-recibida-val-', '');
-                consultarFirmaVisita(idVisita);
+                
+                const selectMetodo = document.getElementById(`metodo-firma-${idVisita}`);
+                const metodo = selectMetodo ? selectMetodo.value : 'REMOTA';
+                if (metodo === 'REMOTA') {
+                    consultarFirmaVisita(idVisita);
+                }
                 
                 setInterval(() => {
+                    const sel = document.getElementById(`metodo-firma-${idVisita}`);
+                    const m = sel ? sel.value : 'REMOTA';
+                    if (m !== 'REMOTA') return;
+                    
                     const valEl = document.getElementById(`firma-recibida-val-${idVisita}`);
                     const yaFirmado = valEl && valEl.value === '1';
                     if (!yaFirmado) {

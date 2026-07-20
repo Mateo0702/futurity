@@ -38,6 +38,17 @@ def panel_tecnico(nombre_tecnico):
     rol = session.get('user_role')
     nombre_usuario = session.get('user_name', '')
     
+    # DEBUG LOG
+    try:
+        with open("request_debug.log", "a", encoding="utf-8") as f:
+            f.write(f"--- ACCESS --- \n")
+            f.write(f"nombre_tecnico URL: {nombre_tecnico}\n")
+            f.write(f"session user_id: {session.get('user_id')}\n")
+            f.write(f"session user_name: {session.get('user_name')}\n")
+            f.write(f"session user_role: {session.get('user_role')}\n")
+    except Exception as log_err:
+        pass
+    
     nombre_real = nombre_tecnico.replace('_', ' ')
     
     # Si es rol TECNICO, solo puede ver su propio panel
@@ -62,25 +73,27 @@ def panel_tecnico(nombre_tecnico):
     lat_act = float(tec_estado_row['latitud_actual']) if tec_estado_row and tec_estado_row['latitud_actual'] is not None else None
     lon_act = float(tec_estado_row['longitud_actual']) if tec_estado_row and tec_estado_row['longitud_actual'] is not None else None
     
-    es_instalacion_val = 1 if area_trabajo == 'INSTALACIONES' else 0
-    
     # 2. Traemos TODAS las visitas de hoy para calcular los índices globales correctos
     query_all = """
         SELECT * FROM visitas_tecnicas 
-        WHERE fecha_programada = %s 
-        AND es_instalacion = %s
+        WHERE fecha_programada = %s
     """
-    cursor.execute(query_all, (hoy, es_instalacion_val))
+    cursor.execute(query_all, (hoy,))
     todas_las_visitas = cursor.fetchall()
+    
+    # Ordenar por id_visita de forma estable para asegurar el orden de registro
+    todas_las_visitas.sort(key=lambda x: x.get('id_visita', 0) or 0)
     
     # Asignar índice global numero_parada
     for idx, v in enumerate(todas_las_visitas, start=1):
         v['numero_parada'] = idx
         
-    # Filtrar solo las visitas asignadas a este técnico
+    # Filtrar solo las visitas asignadas a este técnico (de forma insensible a mayúsculas/minúsculas)
+    nombre_real_upper = nombre_real.upper()
     visitas_del_tecnico = [
         v for v in todas_las_visitas 
-        if (v.get('tecnico_principal') == nombre_real or v.get('tecnico_apoyo') == nombre_real)
+        if ((v.get('tecnico_principal') or '').upper() == nombre_real_upper or 
+            (v.get('tecnico_apoyo') or '').upper() == nombre_real_upper)
         and v.get('estado') not in ('CANCELADA', 'SOLVENTADA_REMOTA')
     ]
     
@@ -105,6 +118,14 @@ def panel_tecnico(nombre_tecnico):
 
     # Parsear información técnica (Caja, Hilo, IP, etc.) para visualización del técnico
     visitas_del_tecnico = parsear_informacion_tecnica(visitas_del_tecnico)
+
+    # DEBUG LOG
+    try:
+        with open("request_debug.log", "a", encoding="utf-8") as f:
+            f.write(f"Count of visits found: {len(visitas_del_tecnico)}\n")
+            f.write(f"Visits IDs: {[v['id_visita'] for v in visitas_del_tecnico]}\n\n")
+    except Exception as log_err:
+        pass
 
     # Mandamos al HTML la lista filtrada ('visitas_del_tecnico')
     return render_template('tecnico_panel.html', 
@@ -159,15 +180,21 @@ def en_camino_visita(id_visita):
             """, (tecnico_nombre, tecnico_nombre, id_visita, date.today().isoformat()))
             conexion.commit()
 
-        query = """
-            UPDATE visitas_tecnicas 
-            SET estado = 'EN_RUTA', 
-                hora_en_ruta = NOW(), 
-                token_rastreo = %s 
-            WHERE id_visita = %s
-        """
-        cursor.execute(query, (token_seguro, id_visita))
-        conexion.commit()
+        # Solo actualizar a EN_RUTA si la visita está PENDIENTE o REAGENDADA (evita regresiones por sincronización desfasada)
+        cursor.execute("SELECT estado FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        row_est = cursor.fetchone()
+        estado_actual = row_est[0] if row_est else None
+        
+        if estado_actual in ['PENDIENTE', 'REAGENDADA', None]:
+            query = """
+                UPDATE visitas_tecnicas 
+                SET estado = 'EN_RUTA', 
+                    hora_en_ruta = NOW(), 
+                    token_rastreo = %s 
+                WHERE id_visita = %s
+            """
+            cursor.execute(query, (token_seguro, id_visita))
+            conexion.commit()
 
         # Actualizar estado de actividad global del técnico
         cursor.execute("SELECT cliente FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
@@ -241,16 +268,22 @@ def iniciar_visita(id_visita):
             cursor.execute("UPDATE visitas_tecnicas SET token_rastreo = %s WHERE id_visita = %s", (token_seguro, id_visita))
             conexion.commit()
 
-        query = """
-            UPDATE visitas_tecnicas 
-            SET estado = 'EN_PROGRESO', 
-                hora_inicio_visita = NOW(),
-                latitud_inicio = %s,
-                longitud_inicio = %s
-            WHERE id_visita = %s
-        """
-        cursor.execute(query, (lat_val, lon_val, id_visita))
-        conexion.commit()
+        # Solo actualizar a EN_PROGRESO si el estado actual es PENDIENTE, REAGENDADA o EN_RUTA
+        cursor.execute("SELECT estado FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        row_est = cursor.fetchone()
+        estado_actual = row_est[0] if row_est else None
+        
+        if estado_actual in ['PENDIENTE', 'REAGENDADA', 'EN_RUTA', None]:
+            query = """
+                UPDATE visitas_tecnicas 
+                SET estado = 'EN_PROGRESO', 
+                    hora_inicio_visita = NOW(),
+                    latitud_inicio = %s,
+                    longitud_inicio = %s
+                WHERE id_visita = %s
+            """
+            cursor.execute(query, (lat_val, lon_val, id_visita))
+            conexion.commit()
 
         # Actualizar estado de actividad global del técnico
         cursor.execute("SELECT cliente FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
@@ -284,6 +317,9 @@ def finalizar_visita(id_visita):
     onu = request.form.get('modelo_onu')
     router = request.form.get('modelo_router')
     coordenadas = request.form.get('coordenadas_tecnico')
+    
+    metodo_firma = request.form.get('metodo_firma', 'REMOTA')
+    motivo_sin_firma = request.form.get('motivo_sin_firma', '')
     
     # Captura de fotos y firma
     equipos_juntos = request.form.get('equipos_juntos')  # '1' o '0'
@@ -339,12 +375,23 @@ def finalizar_visita(id_visita):
     conexion = get_db_connection()
     cursor = conexion.cursor(dictionary=True)
     try:
-        # Validar la firma del cliente (enviada ahora o guardada previamente de manera remota)
-        cursor.execute("SELECT firma_cliente FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
-        firma_row = cursor.fetchone()
-        firma_existente = firma_row['firma_cliente'] if (firma_row and firma_row['firma_cliente']) else None
-        
-        firma_final_filename = firma_cliente_filename or firma_existente
+        # Validar la firma del cliente (enviada ahora o guardada de manera remota)
+        if metodo_firma == 'SIN_FIRMA':
+            motivos_map = {
+                'TRABAJO_EXTERNO': 'Trabajo Externo (Caja de Distribución / Poste)',
+                'CLIENTE_AUSENTE': 'Cliente Ausente / No contesta',
+                'SOPORTE_REMOTO': 'Soporte Remoto / Configuración Lógica',
+                'TERCERA_EDAD_DISCAPACIDAD_SIN_FIRMA': 'Cliente de Tercera Edad / Discapacidad (No puede firmar)',
+                'OTROS': 'Otros'
+            }
+            motivo_texto = motivos_map.get(motivo_sin_firma, motivo_sin_firma or 'No especificado')
+            firma_final_filename = f"SIN_FIRMA: {motivo_texto}"
+        else:
+            cursor.execute("SELECT firma_cliente FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+            firma_row = cursor.fetchone()
+            firma_existente = firma_row['firma_cliente'] if (firma_row and firma_row['firma_cliente']) else None
+            firma_final_filename = firma_cliente_filename or firma_existente
+            
         if not firma_final_filename:
             raise Exception("No se puede finalizar la visita sin la firma de conformidad del cliente.")
 
@@ -381,13 +428,13 @@ def finalizar_visita(id_visita):
             # Obtener el nombre del técnico principal de esta visita
             cursor.execute("SELECT tecnico_principal FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
             tec_row = cursor.fetchone()
-            tecnico_nombre = tec_row[0] if tec_row else None
+            tecnico_nombre = tec_row['tecnico_principal'] if tec_row else None
             
             placa_vehiculo = 'S/P'
             if tecnico_nombre:
                 cursor.execute("SELECT placa_vehiculo FROM tecnicos WHERE nombre = %s", (tecnico_nombre,))
                 placa_row = cursor.fetchone()
-                placa_vehiculo = placa_row[0] if (placa_row and placa_row[0]) else 'S/P'
+                placa_vehiculo = placa_row['placa_vehiculo'] if (placa_row and placa_row['placa_vehiculo']) else 'S/P'
             
             query_materiales = """
                 INSERT INTO visitas_materiales (id_visita, id_material, cantidad_usada)
@@ -428,10 +475,10 @@ def finalizar_visita(id_visita):
             """, ("Disponible", tecnico_nombre))
             
         conexion.commit()
-        print(f"✅ Visita #{id_visita} finalizada e insumos actualizados.")
+        print(f"[Cierre] Visita #{id_visita} finalizada e insumos actualizados.")
     except Exception as e:
         conexion.rollback()
-        print(f"Error al finalizar visita con materiales: {e}")
+        print(f"[Cierre] Error al finalizar visita con materiales: {e}")
     finally:
         if 'conexion' in locals() and conexion.is_connected():
             cursor.close()
@@ -444,7 +491,7 @@ def finalizar_visita(id_visita):
 @tecnico_bp.route('/api/tecnico/rastreo_vivo/<int:id_visita>', methods=['POST'])
 def rastreo_vivo(id_visita):
     """Recibe la latitud y longitud del celular del técnico y fuerza su guardado."""
-    print(f"📡 ¡Alerta! Petición recibida para la visita #{id_visita}") # Ver en la terminal de la PC
+    print(f"[GPS] Alerta! Peticion recibida para la visita #{id_visita}") # Ver en la terminal de la PC
     
     # Manejo ultra flexible por si viene como JSON o Formulario clásico
     if request.is_json:
@@ -455,7 +502,7 @@ def rastreo_vivo(id_visita):
     lat = datos.get('latitud')
     lon = datos.get('longitud')
     
-    print(f"📍 Datos recibidos del celular -> Lat: {lat}, Lon: {lon}")
+    print(f"[GPS] Datos recibidos del celular -> Lat: {lat}, Lon: {lon}")
 
     if lat and lon:
         conexion = get_db_connection()
@@ -488,15 +535,15 @@ def rastreo_vivo(id_visita):
                 """, (lat, lon, tecnico_nombre))
 
             conexion.commit()
-            print("💾 ¡Ubicación guardada con éxito en MySQL!")
+            print("[GPS] Ubicacion guardada con exito en MySQL!")
         except Exception as e:
-            print(f"❌ Error crítico en la consulta MySQL: {e}")
+            print(f"[GPS] Error critico en la consulta MySQL: {e}")
         finally:
             if 'conexion' in locals() and conexion.is_connected():
                 cursor.close()
                 conexion.close()
     else:
-        print("⚠️ Advertencia: Llegó la petición pero los valores lat/lon vinieron vacíos.")
+        print("[GPS] Advertencia: Llego la peticion pero los valores lat/lon vinieron vacios.")
                 
     return jsonify({"status": "ok"})
 
@@ -548,11 +595,11 @@ def cerrar_visita_proceso(id_visita):
             """, ("Disponible", tecnico_nombre))
                     
         conexion.commit()
-        print(f"✅ Visita #{id_visita} cerrada y materiales registrados exitosamente.")
+        print(f"[Cierre] Visita #{id_visita} cerrada y materiales registrados exitosamente.")
         
     except Exception as e:
         conexion.rollback()
-        print(f"❌ Error al cerrar visita con materiales: {e}")
+        print(f"[Cierre] Error al cerrar visita con materiales: {e}")
     finally:
         cursor.close()
         conexion.close()
@@ -813,6 +860,71 @@ def verificar_firma(id_visita):
                 "token": visita['token_rastreo']
             })
     except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@tecnico_bp.route('/api/tecnico/posponer/<int:id_visita>', methods=['POST'])
+def posponer_visita(id_visita):
+    if 'user_id' not in session or session.get('user_role') != 'TECNICO':
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+        
+    if request.is_json:
+        datos = request.get_json() or {}
+    else:
+        datos = request.form
+        
+    motivo = datos.get('motivo')
+    motivo_otro = datos.get('motivo_otro')
+    
+    motivo_final = motivo
+    if motivo == 'Otro motivo' and motivo_otro:
+        motivo_final = motivo_otro
+        
+    tecnico_nombre = session.get('user_name')
+    
+    conexion = get_db_connection()
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        # 1. Obtener observacion actual de callcenter
+        cursor.execute("SELECT observacion_callcenter FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        visita = cursor.fetchone()
+        if not visita:
+            return jsonify({"status": "error", "message": "Visita no encontrada"}), 404
+            
+        obs_actual = visita['observacion_callcenter'] or ""
+        import datetime
+        now_str = datetime.datetime.now().strftime("%H:%M")
+        nota_pospuesta = f"\n[Pospuesta {now_str}]: {motivo_final}"
+        nueva_obs = (obs_actual + nota_pospuesta).strip()
+        
+        # 2. Restablecer visita a PENDIENTE, limpiando marcas de tiempo
+        cursor.execute("""
+            UPDATE visitas_tecnicas 
+            SET estado = 'PENDIENTE',
+                hora_en_ruta = NULL,
+                hora_inicio_visita = NULL,
+                observacion_callcenter = %s
+            WHERE id_visita = %s
+        """, (nueva_obs, id_visita))
+        
+        # 3. Liberar estado del técnico a Disponible
+        if tecnico_nombre:
+            cursor.execute("""
+                UPDATE tecnicos 
+                SET estado_actividad = %s,
+                    ultima_conexion = NOW() 
+                WHERE nombre = %s
+            """, ("Disponible", tecnico_nombre))
+            
+        conexion.commit()
+        print(f"[Posponer] Visita #{id_visita} pospuesta para más tarde por el técnico.")
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        conexion.rollback()
+        print(f"[Posponer] Error al posponer visita #{id_visita}: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()

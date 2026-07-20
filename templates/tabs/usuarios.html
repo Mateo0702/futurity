@@ -2,20 +2,34 @@
     <!-- Título Principal -->
     <div style="background: white; padding: 30px; border-radius: 20px; margin-bottom: 25px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
         <div>
-            <h1 style="margin: 0; font-size: 1.8rem; color: #0f172a; font-weight: 800; letter-spacing: -0.02em;">Gestión del Personal</h1>
-            <p style="margin-top: 5px; color: #64748b; font-size: 0.95rem; font-weight: 500;">Administración central de cuentas de usuarios, accesos y catálogo de técnicos de campo.</p>
+            <h1 style="margin: 0; font-size: 1.8rem; color: #0f172a; font-weight: 800; letter-spacing: -0.02em;">
+                {% if session.get('user_role') == 'ADMIN' %}
+                    Gestión del Personal
+                {% else %}
+                    Recordatorios y Bloqueos de Agenda
+                {% endif %}
+            </h1>
+            <p style="margin-top: 5px; color: #64748b; font-size: 0.95rem; font-weight: 500;">
+                {% if session.get('user_role') == 'ADMIN' %}
+                    Administración central de cuentas de usuarios, accesos y catálogo de técnicos de campo.
+                {% else %}
+                    Gestión de bloqueos horarios, reuniones, inventarios generales y recordatorios individuales de técnicos.
+                {% endif %}
+            </p>
         </div>
     </div>
 
     <!-- Navegación Interna (Sub-pestañas) -->
     <div style="display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; flex-wrap: wrap;">
+        {% if session.get('user_role') == 'ADMIN' %}
         <button id="btn-subtab-usuarios" type="button" onclick="switchUsuariosSubTab('usuarios')" style="background: none; border: none; padding: 10px 20px; font-weight: 800; font-size: 0.95rem; color: var(--primary); border-bottom: 3px solid var(--primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
             <i class="fa-solid fa-users-gear"></i> Cuentas de Usuarios
         </button>
         <button id="btn-subtab-tecnicos" type="button" onclick="switchUsuariosSubTab('tecnicos')" style="background: none; border: none; padding: 10px 20px; font-weight: 700; font-size: 0.95rem; color: #64748b; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
             <i class="fa-solid fa-helmet-safety"></i> Técnicos de Campo
         </button>
-        <button id="btn-subtab-recordatorios" type="button" onclick="switchUsuariosSubTab('recordatorios')" style="background: none; border: none; padding: 10px 20px; font-weight: 700; font-size: 0.95rem; color: #64748b; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
+        {% endif %}
+        <button id="btn-subtab-recordatorios" type="button" onclick="switchUsuariosSubTab('recordatorios')" style="background: none; border: none; padding: 10px 20px; {% if session.get('user_role') != 'ADMIN' %}font-weight: 800; color: var(--primary); border-bottom: 3px solid var(--primary);{% else %}font-weight: 700; color: #64748b;{% endif %} cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
             <i class="fa-solid fa-clock"></i> Recordatorios y Bloqueos
         </button>
     </div>
@@ -29,7 +43,7 @@
     <!-- =========================================================================
          SECCIÓN 1: USUARIOS
          ========================================================================= -->
-    <div id="subtab-content-usuarios" class="usuarios-subtab-content" style="display: block;">
+    <div id="subtab-content-usuarios" class="usuarios-subtab-content" style="display: {% if session.get('user_role') == 'ADMIN' %}block{% else %}none{% endif %};">
         <!-- Barra de herramientas (Buscador y Añadir) -->
         <div class="card" style="margin-bottom: 20px; padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap;">
             <div style="position: relative; flex-grow: 1; max-width: 400px;">
@@ -104,7 +118,7 @@
     <!-- =========================================================================
          SECCIÓN 3: RECORDATORIOS Y BLOQUEOS
          ========================================================================= -->
-    <div id="subtab-content-recordatorios" class="usuarios-subtab-content" style="display: none;">
+    <div id="subtab-content-recordatorios" class="usuarios-subtab-content" style="display: {% if session.get('user_role') != 'ADMIN' %}block{% else %}none{% endif %};">
         <!-- Barra de herramientas (Buscador y Añadir) -->
         <div class="card" style="margin-bottom: 20px; padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap;">
             <div style="position: relative; flex-grow: 1; max-width: 400px;">
@@ -169,7 +183,7 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                         <div>
                             <label for="usuario-rol" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Rol de Acceso</label>
-                            <select id="usuario-rol" required class="form-control" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit; background-color:#ffffff;">
+                            <select id="usuario-rol" required class="form-control" onchange="handleUsuarioRolChange(this.value)" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit; background-color:#ffffff;">
                                 <option value="ASESOR">ASESOR</option>
                                 <option value="ADMIN">ADMIN</option>
                                 <option value="BODEGA">BODEGA</option>
@@ -184,6 +198,13 @@
                                 <option value="0">INACTIVO</option>
                             </select>
                         </div>
+                    </div>
+                    <div id="usuario-area-trabajo-container" style="display: none; margin-top: 15px;">
+                        <label for="usuario-area-trabajo" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Área de Trabajo del Técnico</label>
+                        <select id="usuario-area-trabajo" class="form-control" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit; background-color:#ffffff;">
+                            <option value="SOPORTE">🛠️ SOPORTE TÉCNICO</option>
+                            <option value="INSTALACIONES">🔌 INSTALACIONES</option>
+                        </select>
                     </div>
                 </div>
                 <div style="padding: 15px 25px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; border-radius: 0 0 20px 20px; display: flex; justify-content: flex-end; gap: 10px;">
@@ -276,6 +297,7 @@
                                 <option value="INVENTARIO">INVENTARIO GENERAL</option>
                                 <option value="REUNION">REUNIÓN GENERAL</option>
                                 <option value="RECORDATORIO_TECNICO">RECORDATORIO TÉCNICO</option>
+                                <option value="LLAMAR_CLIENTE">LLAMAR A CLIENTE</option>
                             </select>
                         </div>
                         <div>
@@ -341,6 +363,7 @@
     .badge-role.bodega { background-color: #fef3c7; color: #b45309; }
     .badge-role.tecnico { background-color: #d1fae5; color: #047857; }
     .badge-role.calidad { background-color: #f3e8ff; color: #6b21a8; }
+    .badge-role.llamada { background-color: #e0f2fe; color: #0369a1; }
 
     .badge-status {
         padding: 4px 8px;
@@ -494,14 +517,16 @@
     // Escuchar la activación de la pestaña
     document.addEventListener("DOMContentLoaded", function() {
         const tabUsuarios = document.getElementById('tab-usuarios');
+        const defaultSubTab = "{% if session.get('user_role') == 'ADMIN' %}usuarios{% else %}recordatorios{% endif %}";
+        
         if (tabUsuarios && tabUsuarios.classList.contains('active')) {
-            switchUsuariosSubTab('usuarios');
+            switchUsuariosSubTab(defaultSubTab);
         }
 
         const navUsuarios = document.querySelector('.nav-item[data-tab="tab-usuarios"]');
         if (navUsuarios) {
             navUsuarios.addEventListener('click', function() {
-                switchUsuariosSubTab('usuarios');
+                switchUsuariosSubTab(defaultSubTab);
             });
         }
     });
@@ -592,6 +617,15 @@
         renderTablaUsuarios(filtrada);
     }
 
+    function handleUsuarioRolChange(rol) {
+        const container = document.getElementById('usuario-area-trabajo-container');
+        if (rol === 'TECNICO') {
+            container.style.display = 'block';
+        } else {
+            container.style.display = 'none';
+        }
+    }
+
     function abrirModalUsuario(editMode = false, idUsuario = null) {
         const modal = document.getElementById('modalCRUDUsuario');
         const title = document.getElementById('usuario-modal-title');
@@ -603,6 +637,10 @@
 
         form.reset();
         passInput.required = !editMode;
+
+        // Reset visibility of area trabajo field
+        document.getElementById('usuario-area-trabajo-container').style.display = 'none';
+        document.getElementById('usuario-area-trabajo').value = 'SOPORTE';
 
         if (editMode && idUsuario) {
             title.innerHTML = '<i class="fa-solid fa-user-gear"></i> Editar Datos de Usuario';
@@ -616,12 +654,18 @@
                 document.getElementById('usuario-email').value = usr.email;
                 document.getElementById('usuario-rol').value = usr.rol;
                 document.getElementById('usuario-activo').value = usr.activo ? "1" : "0";
+                
+                handleUsuarioRolChange(usr.rol);
+                if (usr.rol === 'TECNICO') {
+                    document.getElementById('usuario-area-trabajo').value = usr.area_trabajo || 'SOPORTE';
+                }
             }
         } else {
             title.innerHTML = '<i class="fa-solid fa-user-plus"></i> Crear Nuevo Usuario';
             passLabel.innerText = "Contraseña";
             passHint.style.display = 'none';
             idField.value = "";
+            handleUsuarioRolChange('ASESOR');
         }
 
         modal.style.display = 'flex';
@@ -640,8 +684,9 @@
         const password = document.getElementById('usuario-password').value.strip ? document.getElementById('usuario-password').value.strip() : document.getElementById('usuario-password').value;
         const rol = document.getElementById('usuario-rol').value;
         const activo = document.getElementById('usuario-activo').value;
+        const area_trabajo = document.getElementById('usuario-area-trabajo').value;
 
-        const bodyData = { nombre, email, password, rol, activo };
+        const bodyData = { nombre, email, password, rol, activo, area_trabajo };
         const url = idUsuario ? `/api/admin/usuarios/${idUsuario}` : '/api/admin/usuarios';
         const method = idUsuario ? 'PUT' : 'POST';
 
@@ -946,7 +991,8 @@
                 'INVENTARIO': 'INVENTARIO GENERAL',
                 'REUNION': 'REUNIÓN GENERAL',
                 'BLOQUEO_GENERAL': 'BLOQUEO GENERAL',
-                'RECORDATORIO_TECNICO': 'RECORDATORIO TÉCNICO'
+                'RECORDATORIO_TECNICO': 'RECORDATORIO TÉCNICO',
+                'LLAMAR_CLIENTE': 'LLAMAR A CLIENTE'
             }[rec.tipo] || rec.tipo;
 
             let horaStr = 'Todo el día';
@@ -963,7 +1009,7 @@
                         ${rec.descripcion ? `<p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #64748b; font-weight: 400;">${rec.descripcion}</p>` : ''}
                     </td>
                     <td style="padding: 14px 20px;">
-                        <span class="badge-role ${rec.tipo.toLowerCase().includes('bloqueo') || rec.tipo.toLowerCase().includes('inventario') || rec.tipo.toLowerCase().includes('reunion') ? 'admin' : 'tecnico'}">
+                        <span class="badge-role ${rec.tipo.toLowerCase().includes('bloqueo') || rec.tipo.toLowerCase().includes('inventario') || rec.tipo.toLowerCase().includes('reunion') ? 'admin' : (rec.tipo === 'LLAMAR_CLIENTE' ? 'llamada' : 'tecnico')}">
                             ${tipoLabel}
                         </span>
                     </td>

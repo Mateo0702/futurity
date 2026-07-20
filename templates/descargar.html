@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Descargar Futurity Atlas</title>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --primary: #e11d48;
+            --primary-hover: #be123c;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Decorative background glows */
+        .glow-1 {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(225, 29, 72, 0.15) 0%, transparent 70%);
+            top: -50px;
+            left: -50px;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .glow-2 {
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(56, 189, 248, 0.1) 0%, transparent 70%);
+            bottom: -100px;
+            right: -100px;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+            z-index: 2;
+            text-align: center;
+        }
+
+        .brand-header {
+            margin-bottom: 25px;
+        }
+
+        .brand-logo {
+            max-width: 160px;
+            height: auto;
+            margin-bottom: 10px;
+        }
+
+        .app-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 35px 25px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+        }
+
+        .app-icon-wrapper {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #fb7185 0%, #e11d48 100%);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px auto;
+            box-shadow: 0 8px 20px rgba(225, 29, 72, 0.4);
+        }
+
+        .app-icon-wrapper svg {
+            width: 42px;
+            height: 42px;
+            color: white;
+        }
+
+        .app-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        .app-subtitle {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+
+        .btn-download {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            background-color: var(--primary);
+            color: white;
+            text-decoration: none;
+            padding: 16px 24px;
+            border-radius: 16px;
+            font-weight: 600;
+            font-size: 1.05rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(225, 29, 72, 0.3);
+            border: none;
+            cursor: pointer;
+            margin-bottom: 25px;
+        }
+
+        .btn-download:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(225, 29, 72, 0.4);
+        }
+
+        .btn-download:active {
+            transform: translateY(0);
+        }
+
+        .qr-section {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .qr-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 12px;
+        }
+
+        .qr-container {
+            display: inline-flex;
+            background: white;
+            padding: 12px;
+            border-radius: 16px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.25);
+            margin-bottom: 10px;
+        }
+
+        .qr-container img {
+            display: block;
+        }
+
+        .qr-desc {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        .instructions-title {
+            font-size: 1rem;
+            font-weight: 600;
+            text-align: left;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+            color: var(--accent);
+        }
+
+        .instructions-list {
+            text-align: left;
+            list-style: none;
+        }
+
+        .instruction-step {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 14px;
+            font-size: 0.88rem;
+            line-height: 1.45;
+        }
+
+        .step-num {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--accent);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.78rem;
+            flex-shrink: 0;
+        }
+
+        .step-text {
+            color: var(--text-muted);
+        }
+
+        .step-text strong {
+            color: var(--text-main);
+        }
+
+        .footer {
+            margin-top: 25px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .footer a {
+            color: var(--text-muted);
+            text-decoration: underline;
+        }
+        
+        .footer a:hover {
+            color: var(--primary);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="glow-1"></div>
+    <div class="glow-2"></div>
+
+    <div class="container">
+        <div class="brand-header">
+            <img src="{{ url_for('static', filename='img/logo_futurity.png') }}" alt="Futurity Logo" class="brand-logo">
+        </div>
+
+        <div class="app-card">
+            <div class="app-icon-wrapper">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                    <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                </svg>
+            </div>
+
+            <h2 class="app-title">Futurity <span style="background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900;">Atlas</span></h2>
+            <p class="app-subtitle">Aplicación móvil oficial para técnicos de campo. Permite el registro de visitas, gestión de inventario y seguimiento de ubicación en ruta.</p>
+
+            <!-- Download Button -->
+            <a href="{{ url_for('static', filename='app/futurity_atlas.apk') }}" class="btn-download" download="futurity_atlas.apk">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span>Descargar para Android (.apk)</span>
+            </a>
+
+
+
+            <!-- Steps for Installation -->
+            <div class="instructions-title">Instrucciones de instalación</div>
+            <ul class="instructions-list">
+                <li class="instruction-step">
+                    <div class="step-num">1</div>
+                    <div class="step-text">Pulsa el botón de <strong>Descargar</strong> o escanea el código QR desde tu celular.</div>
+                </li>
+                <li class="instruction-step">
+                    <div class="step-num">2</div>
+                    <div class="step-text">Si Android te advierte que el archivo puede ser dañino, selecciona <strong>"Descargar de todos modos"</strong>.</div>
+                </li>
+                <li class="instruction-step">
+                    <div class="step-num">3</div>
+                    <div class="step-text"><strong>IMPORTANTE:</strong> Si ya tenías instalada una versión anterior de Futurity en tu celular, debes <strong>desinstalarla por completo</strong> antes de instalar esta nueva versión. De lo contrario, Android dará el error <em>"No se instaló la aplicación"</em> por conflicto de firmas.</div>
+                </li>
+                <li class="instruction-step">
+                    <div class="step-num">4</div>
+                    <div class="step-text">Abre el archivo descargado, concede los permisos de instalación si te los pide, y presiona <strong>Instalar</strong>.</div>
+                </li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            <p><a href="{{ url_for('login') }}">Volver al portal de acceso</a></p>
+        </div>
+    </div>
+</body>
+
+</html>

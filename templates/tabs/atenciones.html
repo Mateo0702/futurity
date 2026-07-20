@@ -188,7 +188,7 @@
                     <div class="form-group">
                         <label style="font-weight: 700;">Contrato:</label>
                         <div style="position: relative;">
-                            <input type="text" name="contrato" id="aten_contrato" placeholder="Ej. 47d" class="form-control" style="padding-right: 40px;">
+                            <input type="text" name="contrato" id="aten_contrato" placeholder="Ej. 47d" class="form-control" style="padding-right: 40px;" required>
                             <span id="aten_contrato_loading" style="position: absolute; right: 12px; top: 12px; display: none;" class="spinner"></span>
                             <span id="aten_contrato_ok" style="position: absolute; right: 12px; top: 12px; display: none; color: #10b981;"><i class="fa-solid fa-circle-check"></i></span>
                         </div>
@@ -430,7 +430,7 @@
                 <!-- Observaciones -->
                 <div class="form-group" style="margin-top: 20px;">
                     <label style="font-weight: 700;">Observación / Comentarios de la Atención:</label>
-                    <textarea name="observacion" id="aten_observacion" rows="3" class="form-control" style="resize: vertical; font-family: inherit; font-size: 0.95rem; width: 100%; box-sizing: border-box;" placeholder="Describe detalladamente el soporte brindado o el acuerdo al que se llegó..."></textarea>
+                    <textarea name="observacion" id="aten_observacion" rows="3" class="form-control" style="resize: vertical; font-family: inherit; font-size: 0.95rem; width: 100%; box-sizing: border-box;" placeholder="Describe detalladamente el soporte brindado o el acuerdo al que se llegó..." required></textarea>
                 </div>
 
                 <button type="submit" class="btn btn-block" style="margin-top: 25px; font-weight: 800; font-size: 1.05rem;"><i class="fa-solid fa-floppy-disk" style="margin-right: 8px;"></i> Registrar Atención Diaria</button>
@@ -791,8 +791,54 @@
         });
     }
 
+    // Evitar envío involuntario al presionar Enter en los inputs de texto
+    document.getElementById('form-registro-atencion').addEventListener('keydown', function(event) {
+        if (event.key === 'Enter' && event.target.tagName === 'INPUT') {
+            event.preventDefault();
+            return false;
+        }
+    });
+
     // --- GUARDAR ATENCIÓN (POST AJAX) ---
     function guardarAtencion() {
+        const contrato = document.getElementById('aten_contrato').value.trim();
+        const cliente = document.getElementById('aten_cliente').value.trim();
+        const accion = document.getElementById('aten_accion').value;
+        const motivo = document.getElementById('aten_motivo').value.trim();
+        const observacion = document.getElementById('aten_observacion').value.trim();
+
+        if (!contrato) {
+            mostrarToast('⚠️ Por favor, ingrese el número de contrato.', true);
+            document.getElementById('aten_contrato').focus();
+            return;
+        }
+        if (!cliente) {
+            mostrarToast('⚠️ Por favor, ingrese el nombre del cliente.', true);
+            document.getElementById('aten_cliente').focus();
+            return;
+        }
+        if (!accion) {
+            mostrarToast('⚠️ Por favor, seleccione la Acción Realizada.', true);
+            document.getElementById('aten_accion').focus();
+            return;
+        }
+        if (!motivo) {
+            mostrarToast('⚠️ Por favor, ingrese el Motivo de Consulta.', true);
+            document.getElementById('aten_motivo').focus();
+            return;
+        }
+        if (!observacion || observacion.length < 5) {
+            mostrarToast('⚠️ Por favor, complete la Observación/Comentarios (mínimo 5 caracteres).', true);
+            document.getElementById('aten_observacion').focus();
+            return;
+        }
+
+        // Si es Visita Técnica, transferir y registrar automáticamente
+        if (accion === 'VISITA TECNICA' || accion === 'VISITA TECNICA COBRADA') {
+            transferirARegistroVisitas();
+            return;
+        }
+
         const form = document.getElementById('form-registro-atencion');
         const formData = new FormData(form);
         const data = {};
