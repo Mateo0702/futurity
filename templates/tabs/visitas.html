@@ -298,31 +298,8 @@
                                     {% if visita.estado in ['PENDIENTE', 'EN_RUTA'] %}
                                     <button type="button" class="btn"
                                         style="background-color: #0f172a; padding: 6px 12px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 4px; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold; margin-bottom: 5px; margin-right: 5px;"
-                                        onclick="abrirModalEditar(
-                                            '{{ visita.id_visita }}',
-                                            '{{ (visita.cliente or "") | escape }}',
-                                            '{{ (visita.contrato or "") | escape }}',
-                                            '{{ (visita.telefonos or "") | escape }}',
-                                            '{{ (visita.sector or "") | escape }}',
-                                            '{{ (visita.direccion or "") | escape }}',
-                                            '{{ (visita.latitud or "") }}',
-                                            '{{ (visita.longitud or "") }}',
-                                            '{{ (visita.preferencia_horaria or "") | escape }}',
-                                            '{{ (visita.servicio or "") | escape }}',
-                                            '{{ (visita.velocidad_mbps or "") }}',
-                                            '{{ (visita.problema or "") | escape }}',
-                                            '{{ (visita.observacion_callcenter or "") | escape }}',
-                                            '{{ (visita.info_caja or "") | escape }}',
-                                            '{{ (visita.info_hilo or "") | escape }}',
-                                            '{{ (visita.info_ip or "") | escape }}',
-                                            '{{ (visita.info_vlan or "") | escape }}',
-                                            '{{ (visita.info_usr or "") | escape }}',
-                                            '{{ (visita.info_pas or "") | escape }}',
-                                            '{{ (visita.tecnico_principal or "") | escape }}',
-                                            '{{ (visita.tecnico_apoyo or "") | escape }}',
-                                            '{{ (visita.estado or "") }}',
-                                            '{{ (visita.fecha_programada or "") }}'
-                                        )">
+                                        data-visita='{{ visita | tojson | forceescape }}'
+                                        onclick="abrirModalEditarConData(this)">
                                         <i class="fa-solid fa-pen-to-square"></i> Editar Visita
                                     </button>
                                     {% endif %}
@@ -783,6 +760,59 @@
         document.getElementById('edit-estado').value = estado;
         document.getElementById('edit-fecha-programada').value = fecha;
         document.getElementById('edit-tecnico-principal').value = tecnico;
+        
+        document.getElementById('form-editar-visita').action = `/api/admin/visitas/${id}/editar`;
+        document.getElementById('modalEditarVisita').style.display = 'flex';
+    }
+
+    function abrirModalEditarConData(btn) {
+        let visita;
+        try {
+            visita = JSON.parse(btn.getAttribute('data-visita'));
+        } catch (e) {
+            console.error("Error al obtener datos de la visita:", e);
+            return;
+        }
+
+        const id = visita.id_visita || '';
+        document.getElementById('edit-titulo-id').innerText = id;
+        document.getElementById('edit-id-visita').value = id;
+        document.getElementById('edit-cliente').value = visita.cliente || '';
+        document.getElementById('edit-contrato').value = visita.contrato || '';
+        document.getElementById('edit-telefonos').value = visita.telefonos || '';
+        document.getElementById('edit-sector').value = visita.sector || '';
+        document.getElementById('edit-direccion').value = visita.direccion || '';
+        document.getElementById('edit-latitud').value = visita.latitud || '';
+        document.getElementById('edit-longitud').value = visita.longitud || '';
+        document.getElementById('edit-preferencia-horaria').value = visita.preferencia_horaria || '';
+        document.getElementById('edit-servicio').value = visita.servicio || '';
+        document.getElementById('edit-velocidad-mbps').value = visita.velocidad_mbps || '';
+        document.getElementById('edit-problema').value = visita.problema || '';
+        document.getElementById('edit-observacion-callcenter').value = visita.observacion_callcenter || '';
+        document.getElementById('edit-info-caja').value = visita.info_caja || '';
+        document.getElementById('edit-info-hilo').value = visita.info_hilo || '';
+        document.getElementById('edit-info-ip').value = visita.info_ip || '';
+        document.getElementById('edit-info-vlan').value = visita.info_vlan || '';
+        document.getElementById('edit-info-usr').value = visita.info_usr || '';
+        document.getElementById('edit-info-pas').value = visita.info_pas || '';
+        document.getElementById('edit-estado').value = visita.estado || '';
+
+        let fecha = '';
+        if (visita.fecha_programada) {
+            if (typeof visita.fecha_programada === 'string' && /^\d{4}-\d{2}-\d{2}/.test(visita.fecha_programada)) {
+                fecha = visita.fecha_programada.substring(0, 10);
+            } else {
+                let d = new Date(visita.fecha_programada);
+                if (!isNaN(d.getTime())) {
+                    let y = d.getUTCFullYear();
+                    let m = String(d.getUTCMonth() + 1).padStart(2, '0');
+                    let day = String(d.getUTCDate()).padStart(2, '0');
+                    fecha = `${y}-${m}-${day}`;
+                }
+            }
+        }
+        document.getElementById('edit-fecha-programada').value = fecha;
+        document.getElementById('edit-tecnico-principal').value = visita.tecnico_principal || '';
         
         document.getElementById('form-editar-visita').action = `/api/admin/visitas/${id}/editar`;
         document.getElementById('modalEditarVisita').style.display = 'flex';

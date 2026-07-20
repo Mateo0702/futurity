@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Futurity Atlas</string>
     <!-- Change this URL to your PC's IP or production domain -->
-    <string name="server_url">https://activated-satisfactory-christmas-pty.trycloudflare.com</string>
+    <string name="server_url">https://fighters-adjust-closing-criterion.trycloudflare.com</string>
     <string name="location_service_channel_id">location_service_channel</string>
     <string name="location_service_channel_name">Futurity Atlas Location Tracking</string>
     <string name="location_service_notification_title">Futurity Atlas - Rastreo en Ruta</string>

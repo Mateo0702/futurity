@@ -40,7 +40,7 @@
             <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--sidebar-text); margin-bottom: 6px; font-weight: 700;">
                 <i class="fa-solid fa-network-wired"></i> Área Operativa
             </div>
-            {% if session.get('user_role') == 'ADMIN' %}
+            {% if session.get('user_role') in ['ADMIN', 'ASESOR'] %}
                 <div class="segmented-control" id="area-switcher">
                     <div class="segmented-slider" style="transform: translateX({% if session.get('active_area') == 'INSTALACIONES' %}100%{% else %}0%{% endif %});"></div>
                     <button type="button" class="segmented-btn {% if session.get('active_area') != 'INSTALACIONES' %}active{% endif %}" data-area="SOPORTE">

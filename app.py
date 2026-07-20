@@ -156,12 +156,13 @@ def check_user_active_area():
         if rol == 'CALIDAD':
             session['active_area'] = 'INSTALACIONES'
         elif rol in ['ASESOR', 'ADMIN']:
-            session['active_area'] = 'SOPORTE'
+            if 'active_area' not in session:
+                session['active_area'] = 'SOPORTE'
 
 
 @app.route('/api/admin/cambiar_area_vista', methods=['POST'])
 def cambiar_area_vista():
-    if 'user_id' not in session or session.get('user_role') != 'ADMIN':
+    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     if request.is_json:
@@ -659,7 +660,7 @@ def dashboard():
         SELECT COUNT(*) as total 
         FROM visitas_tecnicas 
         WHERE fecha_programada = DATE_SUB(CURDATE(), INTERVAL 1 DAY) 
-          AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
+          AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA', 'REAGENDADA')
           AND es_instalacion = %s
     """, (es_instalacion_val,))
     cant_pendientes_atrasadas = cursor.fetchone()['total'] or 0

@@ -73,15 +73,12 @@ def panel_tecnico(nombre_tecnico):
     lat_act = float(tec_estado_row['latitud_actual']) if tec_estado_row and tec_estado_row['latitud_actual'] is not None else None
     lon_act = float(tec_estado_row['longitud_actual']) if tec_estado_row and tec_estado_row['longitud_actual'] is not None else None
     
-    es_instalacion_val = 1 if area_trabajo == 'INSTALACIONES' else 0
-    
     # 2. Traemos TODAS las visitas de hoy para calcular los índices globales correctos
     query_all = """
         SELECT * FROM visitas_tecnicas 
-        WHERE fecha_programada = %s 
-        AND es_instalacion = %s
+        WHERE fecha_programada = %s
     """
-    cursor.execute(query_all, (hoy, es_instalacion_val))
+    cursor.execute(query_all, (hoy,))
     todas_las_visitas = cursor.fetchall()
     
     # Ordenar por id_visita de forma estable para asegurar el orden de registro

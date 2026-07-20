@@ -183,7 +183,7 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                         <div>
                             <label for="usuario-rol" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Rol de Acceso</label>
-                            <select id="usuario-rol" required class="form-control" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit; background-color:#ffffff;">
+                            <select id="usuario-rol" required class="form-control" onchange="handleUsuarioRolChange(this.value)" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit; background-color:#ffffff;">
                                 <option value="ASESOR">ASESOR</option>
                                 <option value="ADMIN">ADMIN</option>
                                 <option value="BODEGA">BODEGA</option>
@@ -198,6 +198,13 @@
                                 <option value="0">INACTIVO</option>
                             </select>
                         </div>
+                    </div>
+                    <div id="usuario-area-trabajo-container" style="display: none; margin-top: 15px;">
+                        <label for="usuario-area-trabajo" style="font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 6px; display: block;">Área de Trabajo del Técnico</label>
+                        <select id="usuario-area-trabajo" class="form-control" style="width:100%; padding:10px 15px; border-radius:10px; border:1px solid #cbd5e1; outline:none; font-family:inherit; background-color:#ffffff;">
+                            <option value="SOPORTE">🛠️ SOPORTE TÉCNICO</option>
+                            <option value="INSTALACIONES">🔌 INSTALACIONES</option>
+                        </select>
                     </div>
                 </div>
                 <div style="padding: 15px 25px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; border-radius: 0 0 20px 20px; display: flex; justify-content: flex-end; gap: 10px;">
@@ -610,6 +617,15 @@
         renderTablaUsuarios(filtrada);
     }
 
+    function handleUsuarioRolChange(rol) {
+        const container = document.getElementById('usuario-area-trabajo-container');
+        if (rol === 'TECNICO') {
+            container.style.display = 'block';
+        } else {
+            container.style.display = 'none';
+        }
+    }
+
     function abrirModalUsuario(editMode = false, idUsuario = null) {
         const modal = document.getElementById('modalCRUDUsuario');
         const title = document.getElementById('usuario-modal-title');
@@ -621,6 +637,10 @@
 
         form.reset();
         passInput.required = !editMode;
+
+        // Reset visibility of area trabajo field
+        document.getElementById('usuario-area-trabajo-container').style.display = 'none';
+        document.getElementById('usuario-area-trabajo').value = 'SOPORTE';
 
         if (editMode && idUsuario) {
             title.innerHTML = '<i class="fa-solid fa-user-gear"></i> Editar Datos de Usuario';
@@ -634,12 +654,18 @@
                 document.getElementById('usuario-email').value = usr.email;
                 document.getElementById('usuario-rol').value = usr.rol;
                 document.getElementById('usuario-activo').value = usr.activo ? "1" : "0";
+                
+                handleUsuarioRolChange(usr.rol);
+                if (usr.rol === 'TECNICO') {
+                    document.getElementById('usuario-area-trabajo').value = usr.area_trabajo || 'SOPORTE';
+                }
             }
         } else {
             title.innerHTML = '<i class="fa-solid fa-user-plus"></i> Crear Nuevo Usuario';
             passLabel.innerText = "Contraseña";
             passHint.style.display = 'none';
             idField.value = "";
+            handleUsuarioRolChange('ASESOR');
         }
 
         modal.style.display = 'flex';
@@ -658,8 +684,9 @@
         const password = document.getElementById('usuario-password').value.strip ? document.getElementById('usuario-password').value.strip() : document.getElementById('usuario-password').value;
         const rol = document.getElementById('usuario-rol').value;
         const activo = document.getElementById('usuario-activo').value;
+        const area_trabajo = document.getElementById('usuario-area-trabajo').value;
 
-        const bodyData = { nombre, email, password, rol, activo };
+        const bodyData = { nombre, email, password, rol, activo, area_trabajo };
         const url = idUsuario ? `/api/admin/usuarios/${idUsuario}` : '/api/admin/usuarios';
         const method = idUsuario ? 'PUT' : 'POST';
 

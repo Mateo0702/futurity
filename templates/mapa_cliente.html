@@ -9,7 +9,106 @@
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;950&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        .body-mapa-cliente {
+            font-family: 'Outfit', sans-serif !important;
+            background-color: #07090e !important;
+            color: #f8fafc !important;
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+
+        .body-mapa-cliente .header {
+            background: rgba(15, 23, 42, 0.7) !important;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+            padding: 16px 20px !important;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+            position: relative;
+            z-index: 1000;
+        }
+
+        .body-mapa-cliente .header h1 {
+            font-weight: 900 !important;
+            letter-spacing: -0.03em;
+            background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 1.5rem !important;
+        }
+
+        .body-mapa-cliente .header p {
+            color: #cbd5e1 !important;
+            font-size: 0.9rem !important;
+            font-weight: 500;
+        }
+
+        .body-mapa-cliente #mapa {
+            height: 52vh !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .body-mapa-cliente .info-card {
+            background: rgba(15, 23, 42, 0.8) !important;
+            backdrop-filter: blur(20px) !important;
+            -webkit-backdrop-filter: blur(20px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 28px 28px 0 0 !important;
+            padding: 24px !important;
+            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5) !important;
+            color: #f8fafc !important;
+        }
+
+        .body-mapa-cliente .status-badge {
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%) !important;
+            color: white !important;
+            padding: 6px 14px !important;
+            border-radius: 20px !important;
+            font-size: 0.82rem !important;
+            font-weight: 800 !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25) !important;
+            display: inline-flex !important;
+            align-items: center;
+            gap: 6px;
+            animation: pulse-glow 2s infinite;
+        }
+
+        @keyframes pulse-glow {
+            0% {
+                box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+                transform: scale(1);
+            }
+            50% {
+                box-shadow: 0 4px 20px rgba(220, 38, 38, 0.5);
+                transform: scale(1.02);
+            }
+            100% {
+                box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+                transform: scale(1);
+            }
+        }
+
+        .body-mapa-cliente .tech-name {
+            font-size: 1.25rem !important;
+            font-weight: 800 !important;
+            color: white !important;
+        }
+
+        .body-mapa-cliente .mensaje {
+            color: #94a3b8 !important;
+            font-size: 0.88rem !important;
+        }
+
+        .body-mapa-cliente .llegada {
+            background: linear-gradient(135deg, #064e3b 0%, #022c22 100%) !important;
+        }
+    </style>
 
 </head>
 
