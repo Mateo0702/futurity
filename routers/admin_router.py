@@ -3412,6 +3412,7 @@ def crear_recordatorio():
         conexion.close()
 
 @admin_bp.route('/api/admin/recordatorios/<int:id_recordatorio>', methods=['DELETE'])
+@admin_bp.route('/api/admin/recordatorios/<int:id_recordatorio>/atender', methods=['POST'])
 def eliminar_recordatorio(id_recordatorio):
     if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401

@@ -51,16 +51,16 @@
     {% endif %}
 
     {% if recordatorios_hoy %}
-    <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border-left: 5px solid #d97706; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); display: flex; gap: 15px; align-items: flex-start;">
+    <div id="banner-recordatorios-hoy" style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border-left: 5px solid #d97706; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); display: flex; gap: 15px; align-items: flex-start;">
         <div style="color: #d97706; flex-shrink: 0; margin-top: 2px;">
             <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
         </div>
         <div style="flex-grow: 1;">
             <h4 style="margin: 0 0 8px 0; color: #78350f; font-size: 1.1rem; font-weight: 700;">Recordatorios y Bloqueos de hoy</h4>
-            <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div id="contenedor-recordatorios-hoy" style="display: flex; flex-direction: column; gap: 10px;">
                 {% for rec in recordatorios_hoy %}
-                <div style="background: rgba(255, 255, 255, 0.6); padding: 12px 15px; border-radius: 8px; border: 1px solid rgba(217, 119, 6, 0.15); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                    <div>
+                <div data-rec-item="{{ rec.id_recordatorio }}" style="background: rgba(255, 255, 255, 0.65); padding: 12px 15px; border-radius: 8px; border: 1px solid rgba(217, 119, 6, 0.2); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
+                    <div style="flex: 1; min-width: 200px;">
                         <strong style="color: #92400e; font-size: 0.95rem;">
                             {% if rec.tipo == 'INVENTARIO' %}
                                 [Inventario]
@@ -79,22 +79,34 @@
                         <p style="margin: 4px 0 0 0; color: #451a03; font-size: 0.85rem; line-height: 1.4;">{{ rec.descripcion }}</p>
                         {% endif %}
                     </div>
-                    {% if rec.hora_inicio_str or rec.hora_fin_str %}
-                    <span style="background-color: #fef3c7; color: #b45309; border: 1px solid #f59e0b; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; display: inline-flex; align-items: center; gap: 5px;">
-                        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        {% if rec.hora_inicio_str and rec.hora_fin_str %}
-                            {{ rec.hora_inicio_str }} - {{ rec.hora_fin_str }}
-                        {% elif rec.hora_inicio_str %}
-                            Desde {{ rec.hora_inicio_str }}
+                    
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        {% if rec.hora_inicio_str or rec.hora_fin_str %}
+                        <span style="background-color: #fef3c7; color: #b45309; border: 1px solid #f59e0b; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; display: inline-flex; align-items: center; gap: 5px;">
+                            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            {% if rec.hora_inicio_str and rec.hora_fin_str %}
+                                {{ rec.hora_inicio_str }} - {{ rec.hora_fin_str }}
+                            {% elif rec.hora_inicio_str %}
+                                Desde {{ rec.hora_inicio_str }}
+                            {% else %}
+                                Hasta {{ rec.hora_fin_str }}
+                            {% endif %}
+                        </span>
                         {% else %}
-                            Hasta {{ rec.hora_fin_str }}
+                        <span style="background-color: #fef3c7; color: #b45309; border: 1px solid #f59e0b; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; display: inline-flex; align-items: center; gap: 5px;">
+                            Todo el día
+                        </span>
                         {% endif %}
-                    </span>
-                    {% else %}
-                    <span style="background-color: #fef3c7; color: #b45309; border: 1px solid #f59e0b; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; display: inline-flex; align-items: center; gap: 5px;">
-                        Todo el día
-                    </span>
-                    {% endif %}
+
+                        <button type="button" 
+                                onclick="marcarRecordatorioAtendido({{ rec.id_recordatorio }}, this)"
+                                style="background: #059669; color: white; border: none; padding: 5px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"
+                                onmouseover="this.style.background='#047857'; this.style.transform='translateY(-1px)'"
+                                onmouseout="this.style.background='#059669'; this.style.transform='translateY(0)'"
+                                title="Marcar este recordatorio como atendido">
+                            <i class="fa-solid fa-check"></i> Atendido
+                        </button>
+                    </div>
                 </div>
                 {% endfor %}
             </div>
@@ -820,6 +832,49 @@
 
     function cerrarModalEditar() {
         document.getElementById('modalEditarVisita').style.display = 'none';
+    }
+
+    function marcarRecordatorioAtendido(idRecordatorio, btn) {
+        if (!confirm('¿Deseas marcar este recordatorio/bloqueo como atendido?')) return;
+        
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
+        
+        fetch(`/api/admin/recordatorios/${idRecordatorio}/atender`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                const itemContainer = btn.closest('[data-rec-item]');
+                if (itemContainer) {
+                    itemContainer.style.transition = 'all 0.3s ease';
+                    itemContainer.style.opacity = '0';
+                    itemContainer.style.transform = 'scale(0.95)';
+                    setTimeout(() => {
+                        itemContainer.remove();
+                        const listContainer = document.getElementById('contenedor-recordatorios-hoy');
+                        if (listContainer && listContainer.children.length === 0) {
+                            const mainBanner = document.getElementById('banner-recordatorios-hoy');
+                            if (mainBanner) mainBanner.remove();
+                        }
+                    }, 300);
+                } else {
+                    location.reload();
+                }
+            } else {
+                alert('Error: ' + (data.message || 'No se pudo marcar como atendido'));
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-check"></i> Atendido';
+            }
+        })
+        .catch(err => {
+            console.error('Error al atender recordatorio:', err);
+            alert('Ocurrió un error al procesar la solicitud.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Atendido';
+        });
     }
 </script>
 
