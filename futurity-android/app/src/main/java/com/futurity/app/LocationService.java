@@ -31,17 +31,18 @@ import org.json.JSONObject;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import android.os.PowerManager;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class
-LocationService extends Service {
+public class LocationService extends Service {
     private static final String TAG = "LocationService";
     private static final int NOTIFICATION_ID = 1001;
 
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
     private ExecutorService executorService;
+    private PowerManager.WakeLock wakeLock;
 
     private String idVisita = "";
     private String serverUrl = "";
@@ -81,6 +82,17 @@ LocationService extends Service {
         };
 
         createNotificationChannel();
+
+        try {
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm != null && wakeLock == null) {
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Futurity:LocationServiceWakeLock");
+                wakeLock.acquire();
+                Log.d(TAG, "PARTIAL_WAKE_LOCK acquired for background tracking");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error acquiring WakeLock: " + e.getMessage());
+        }
     }
 
     @Override
@@ -232,6 +244,15 @@ LocationService extends Service {
         }
         if (executorService != null) {
             executorService.shutdown();
+        }
+        if (wakeLock != null && wakeLock.isHeld()) {
+            try {
+                wakeLock.release();
+                Log.d(TAG, "PARTIAL_WAKE_LOCK released");
+            } catch (Exception e) {
+                Log.e(TAG, "Error releasing WakeLock: " + e.getMessage());
+            }
+            wakeLock = null;
         }
         stopForeground(true);
     }

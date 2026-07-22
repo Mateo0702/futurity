@@ -14,6 +14,10 @@
     
     <!-- Permission to show notifications (Required for Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    
+    <!-- Permissions to keep CPU awake and bypass Doze mode during tracking -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="true"

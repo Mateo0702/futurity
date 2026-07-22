@@ -469,7 +469,24 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void checkBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+                if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                    Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                    intent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error requesting ignore battery optimization: " + e.getMessage());
+            }
+        }
+    }
+
     public void startTrackingService(String idVisita, String serverUrl) {
+        checkBatteryOptimizations();
+        
         // Double check permissions
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             checkAndRequestPermissions();
