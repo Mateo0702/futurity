@@ -386,6 +386,22 @@
                                     <span style="font-size: 0.95rem; font-weight: 600; color: #f8fafc;">Contrato: {{ visita.contrato or 'N/A' }} | Ref: #VT-{{ visita.id_visita }}</span>
                                 </div>
                             </div>
+
+                            <!-- Información Comercial del Cliente -->
+                            <div style="margin-top: 12px; background: rgba(15, 23, 42, 0.6); padding: 12px; border-radius: 10px; border: 1px solid rgba(56, 189, 248, 0.2); display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center;">
+                                <div>
+                                    <span style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; display: block;">💵 Pago Mensual</span>
+                                    <strong style="color: #10b981; font-size: 0.95rem; font-weight: 800;">{% if visita.total_mensual %}${{ "%.2f"|format(visita.total_mensual) }}{% else %}N/D{% endif %}</strong>
+                                </div>
+                                <div>
+                                    <span style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; display: block;">⏳ Antigüedad</span>
+                                    <strong style="color: #38bdf8; font-size: 0.85rem; font-weight: 700;">{{ visita.antiguedad_fmt or 'N/D' }}</strong>
+                                </div>
+                                <div>
+                                    <span style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; display: block;">🏷️ SN (Serie)</span>
+                                    <strong style="color: #f59e0b; font-size: 0.82rem; font-weight: 700; word-break: break-all;">{{ visita.numero_serie or 'S/N' }}</strong>
+                                </div>
+                            </div>
                             
                             <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; padding-bottom: 4px;">
                                 <div>

@@ -99,7 +99,9 @@ def panel_tecnico(nombre_tecnico):
     
     # 3. Optimizar las visitas de este técnico geográficamente
     from optimizador import optimizar_ruta_tecnico
+    from utils import parsear_informacion_tecnica
     visitas_del_tecnico = optimizar_ruta_tecnico(visitas_del_tecnico, lat_act, lon_act)
+    visitas_del_tecnico = parsear_informacion_tecnica(visitas_del_tecnico)
     
     # --- Carga de catálogos y soluciones (Queda igual) ---
     soluciones = obtener_soluciones_activas()

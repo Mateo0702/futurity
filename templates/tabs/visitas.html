@@ -276,6 +276,22 @@
                                                 visita.observacion_callcenter }}</span>
                                         </p>
                                         
+                                        <!-- Datos Comerciales del Cliente -->
+                                        <div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; margin-top: 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 0.82rem; text-align: center;">
+                                            <div>
+                                                <span style="color: #64748b; font-weight: 700; display: block;">💵 Pago Mensual</span>
+                                                <strong style="color: #059669; font-size: 0.9rem;">{% if visita.total_mensual %}${{ "%.2f"|format(visita.total_mensual) }}{% else %}N/D{% endif %}</strong>
+                                            </div>
+                                            <div>
+                                                <span style="color: #64748b; font-weight: 700; display: block;">⏳ Antigüedad</span>
+                                                <strong style="color: #0284c7; font-size: 0.85rem;">{{ visita.antiguedad_fmt or 'N/D' }}</strong>
+                                            </div>
+                                            <div>
+                                                <span style="color: #64748b; font-weight: 700; display: block;">🏷️ SN (Serie)</span>
+                                                <strong style="color: #d97706; font-size: 0.82rem; word-break: break-all;">{{ visita.numero_serie or 'S/N' }}</strong>
+                                            </div>
+                                        </div>
+                                        
                                         {% if visita.info_caja or visita.info_hilo or visita.info_ip or visita.info_usr or visita.info_vlan %}
                                         <div style="background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px; margin-top: 10px;">
                                             <strong style="color: #0f172a; font-size: 0.8rem; margin-bottom: 6px; display: block;">🔌 Datos de Conexión (Poste/Nodo)</strong>

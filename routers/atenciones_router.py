@@ -19,8 +19,10 @@ def buscar_contrato_json():
     cursor = conn.cursor(dictionary=True)
     try:
         # Buscar en directorio_clientes el contrato exacto (con F para Fibracom, sin F para Servicable)
+        from utils import format_antiguedad
         query = """
-            SELECT nombre_cliente AS cliente, zona AS sector, telefono1, telefono2, fecha_instalacion 
+            SELECT nombre_cliente AS cliente, zona AS sector, telefono1, telefono2, fecha_instalacion,
+                   total_mensual, antiguedad, numero_serie 
             FROM directorio_clientes 
             WHERE contrato = %s
         """
@@ -28,6 +30,10 @@ def buscar_contrato_json():
         cliente = cursor.fetchone()
         
         if cliente:
+            cliente['antiguedad_fmt'] = format_antiguedad(cliente.get('antiguedad'), cliente.get('fecha_instalacion'))
+            cliente['total_mensual'] = float(cliente['total_mensual']) if cliente.get('total_mensual') is not None else None
+            cliente['numero_serie'] = cliente.get('numero_serie') or 'S/N'
+
             # Formatear fecha si existe
             if isinstance(cliente['fecha_instalacion'], (datetime, date)):
                 cliente['fecha_instalacion'] = cliente['fecha_instalacion'].isoformat()
