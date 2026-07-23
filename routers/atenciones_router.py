@@ -645,13 +645,41 @@ def diagnostico_smartolt(sn):
             port = details.get("port")
             pon_port = f"T:{board} / P:{port}" if board is not None and port is not None else "N/D"
             
+            # Formatear el uptime (duración desde el último cambio de estado)
+            uptime_str = "N/D"
+            last_change = details.get("last_status_change")
+            if last_change and str(last_change) not in ["None", "N/D"]:
+                try:
+                    clean_str = str(last_change).split(".")[0]
+                    dt = datetime.strptime(clean_str, "%Y-%m-%d %H:%M:%S")
+                    diff = datetime.now() - dt
+                    
+                    days = diff.days
+                    hours = diff.seconds // 3600
+                    minutes = (diff.seconds % 3600) // 60
+                    
+                    parts = []
+                    if days > 0:
+                        parts.append(f"{days}d")
+                    if hours > 0:
+                        parts.append(f"{hours}h")
+                    if minutes > 0:
+                        parts.append(f"{minutes}m")
+                        
+                    duration = " ".join(parts) if parts else "0m"
+                    date_fmt = dt.strftime("%d/%m/%Y %H:%M")
+                    uptime_str = f"{duration} ({date_fmt})"
+                except Exception as ex:
+                    print("Error parsing last_status_change:", ex)
+                    uptime_str = str(last_change)
+            
             # Estructurar diagnóstico
             diagnostico = {
                 "sn": sn,
                 "nombre_equipo": details.get("name", "N/D"),
                 "modelo": details.get("onu_type_name", "N/D"),
                 "estado": details.get("status", "Offline"),
-                "uptime": details.get("last_status_change", "N/D"),
+                "uptime": uptime_str,
                 "distancia": f"{details.get('distance')} m" if details.get('distance') else "N/D",
                 "ip_wan": details.get("address") or "N/D",
                 "potencia_rx": rx_power,

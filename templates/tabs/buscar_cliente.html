@@ -114,14 +114,18 @@
                 <div id="smartolt-resultados" style="display: none;">
                     
                     <!-- Estado y Potencia de Fibra -->
-                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 15px;">
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; margin-bottom: 20px; display: grid; grid-template-columns: 1fr 1.2fr 1.2fr; align-items: center; gap: 15px;">
                         <div>
-                            <span style="color: #64748b; font-size: 0.78rem; font-weight: 700; display: block; margin-bottom: 6px; text-transform: uppercase;">Estado del Equipo</span>
-                            <span id="smartolt-badge-estado" class="status-badge" style="display: inline-flex; font-size: 0.85rem; padding: 6px 14px; border-radius: 20px; font-weight: 800; color: white;">Online</span>
+                            <span style="color: #64748b; font-size: 0.75rem; font-weight: 700; display: block; margin-bottom: 6px; text-transform: uppercase;">Estado</span>
+                            <span id="smartolt-badge-estado" class="status-badge" style="display: inline-flex; font-size: 0.82rem; padding: 6px 12px; border-radius: 20px; font-weight: 800; color: white;">Online</span>
                         </div>
-                        <div style="text-align: right;">
-                            <span style="color: #64748b; font-size: 0.78rem; font-weight: 700; display: block; margin-bottom: 4px; text-transform: uppercase;">Potencia de Recepción (Rx)</span>
-                            <strong id="smartolt-rx-potencia" style="font-size: 1.4rem; font-weight: 900; color: #0f172a;">-21.61 dBm</strong>
+                        <div style="text-align: right; border-left: 1.5px solid #e2e8f0; padding-left: 10px;">
+                            <span style="color: #64748b; font-size: 0.75rem; font-weight: 700; display: block; margin-bottom: 4px; text-transform: uppercase;">Enganche (Rx)</span>
+                            <strong id="smartolt-rx-potencia" style="font-size: 1.25rem; font-weight: 900; color: #0f172a;">-21.61 dBm</strong>
+                        </div>
+                        <div style="text-align: right; border-left: 1.5px solid #e2e8f0; padding-left: 10px;">
+                            <span style="color: #64748b; font-size: 0.75rem; font-weight: 700; display: block; margin-bottom: 4px; text-transform: uppercase;">Retorno (Tx)</span>
+                            <strong id="smartolt-tx-potencia" style="font-size: 1.25rem; font-weight: 900; color: #475569;">-26.96 dBm</strong>
                         </div>
                     </div>
 
@@ -329,6 +333,7 @@
                         // Estado Badge
                         const badge = document.getElementById('smartolt-badge-estado');
                         const rx_txt = document.getElementById('smartolt-rx-potencia');
+                        const tx_txt = document.getElementById('smartolt-tx-potencia');
                         
                         badge.innerText = diag.estado.toUpperCase();
                         
@@ -341,6 +346,8 @@
                             badge.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.25)';
                             rx_txt.innerText = diag.potencia_rx;
                             rx_txt.style.color = '#0f172a';
+                            tx_txt.innerText = diag.potencia_tx;
+                            tx_txt.style.color = '#475569';
 
                             // Extraer valor de Rx (ej: "-21.61 dBm")
                             const rx_match = diag.potencia_rx.match(/-?\d+\.?\d*/);
@@ -374,6 +381,8 @@
                             badge.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.25)';
                             rx_txt.innerText = 'DESCONECTADO';
                             rx_txt.style.color = '#dc2626';
+                            tx_txt.innerText = 'DESCONECTADO';
+                            tx_txt.style.color = '#dc2626';
 
                             pBar.style.width = '0%';
                             pBar.style.backgroundColor = '#64748b';
