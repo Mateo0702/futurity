@@ -129,17 +129,32 @@
                         </div>
                     </div>
 
-                    <!-- Barra de Potencia Visual -->
-                    <div style="margin-bottom: 25px;">
-                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 700; color: #64748b; margin-bottom: 6px;">
+                    <!-- Barra de Potencia Visual (Rx - Enganche) -->
+                    <div style="margin-bottom: 18px; background: #f8fafc; padding: 12px 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                        <strong style="color: #475569; font-size: 0.8rem; font-weight: 700; display: block; margin-bottom: 8px; text-transform: uppercase;">📶 Nivel de Enganche (Rx / Bajada)</strong>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.72rem; font-weight: 700; color: #64748b; margin-bottom: 4px;">
                             <span>Excelente (-15 a -25)</span>
                             <span>Atenuado (-26 a -28)</span>
                             <span>Crítico (-29 a -35)</span>
                         </div>
-                        <div style="height: 12px; background: #e2e8f0; border-radius: 10px; overflow: hidden; display: flex; border: 1px solid #cbd5e1;">
-                            <div id="smartolt-potencia-bar" style="height: 100%; width: 0%; transition: width 0.4s ease, background-color 0.4s ease;"></div>
+                        <div style="height: 10px; background: #e2e8f0; border-radius: 10px; overflow: hidden; display: flex; border: 1px solid #cbd5e1;">
+                            <div id="smartolt-rx-bar" style="height: 100%; width: 0%; transition: width 0.4s ease, background-color 0.4s ease;"></div>
                         </div>
-                        <span id="smartolt-potencia-label" style="font-size: 0.78rem; font-weight: 700; display: block; margin-top: 6px;">Cargando...</span>
+                        <span id="smartolt-rx-label" style="font-size: 0.75rem; font-weight: 700; display: block; margin-top: 6px;">Cargando...</span>
+                    </div>
+
+                    <!-- Barra de Potencia Visual (Tx - Retorno) -->
+                    <div style="margin-bottom: 25px; background: #f8fafc; padding: 12px 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                        <strong style="color: #475569; font-size: 0.8rem; font-weight: 700; display: block; margin-bottom: 8px; text-transform: uppercase;">🔄 Nivel de Retorno (Tx / Subida)</strong>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.72rem; font-weight: 700; color: #64748b; margin-bottom: 4px;">
+                            <span>Excelente (-15 a -25)</span>
+                            <span>Atenuado (-26 a -28)</span>
+                            <span>Crítico (-29 a -35)</span>
+                        </div>
+                        <div style="height: 10px; background: #e2e8f0; border-radius: 10px; overflow: hidden; display: flex; border: 1px solid #cbd5e1;">
+                            <div id="smartolt-tx-bar" style="height: 100%; width: 0%; transition: width 0.4s ease, background-color 0.4s ease;"></div>
+                        </div>
+                        <span id="smartolt-tx-label" style="font-size: 0.75rem; font-weight: 700; display: block; margin-top: 6px;">Cargando...</span>
                     </div>
 
                     <!-- Ficha Técnica OLT -->
@@ -337,10 +352,54 @@
                         
                         badge.innerText = diag.estado.toUpperCase();
                         
-                        // Barra de Potencia Visual y Lógica
-                        const pBar = document.getElementById('smartolt-potencia-bar');
-                        const pLabel = document.getElementById('smartolt-potencia-label');
-                        
+                        // Función reutilizable para actualizar barras de nivel óptico
+                        function actualizarBarraFibra(valorStr, barId, labelId, tipoName) {
+                            const bar = document.getElementById(barId);
+                            const label = document.getElementById(labelId);
+                            if (!bar || !label) return;
+
+                            if (!valorStr || valorStr === 'N/D' || valorStr === 'DESCONECTADO' || valorStr === '-') {
+                                bar.style.width = '0%';
+                                bar.style.backgroundColor = '#64748b';
+                                label.innerText = `🚨 ${tipoName} Desconectado / Sin señal`;
+                                label.style.color = '#dc2626';
+                                return;
+                            }
+
+                            const match = valorStr.match(/-?\d+\.?\d*/);
+                            if (!match) {
+                                bar.style.width = '0%';
+                                bar.style.backgroundColor = '#64748b';
+                                label.innerText = `Valor no válido: ${valorStr}`;
+                                label.style.color = '#64748b';
+                                return;
+                            }
+
+                            const val = parseFloat(match[0]);
+                            let pct = 0;
+                            let color = '';
+                            let text = '';
+
+                            if (val >= -25) { // Excelente
+                                pct = 90;
+                                color = '#10b981';
+                                text = `🟢 Excelente (${val} dBm) - Nivel Óptimo`;
+                            } else if (val > -28) { // Atenuado
+                                pct = 55;
+                                color = '#f59e0b';
+                                text = `🟡 Atenuado (${val} dBm) - Alerta de señal`;
+                            } else { // Crítico
+                                pct = 25;
+                                color = '#ef4444';
+                                text = `🔴 Crítico (${val} dBm) - Falla física o doblez`;
+                            }
+
+                            bar.style.width = `${pct}%`;
+                            bar.style.backgroundColor = color;
+                            label.innerText = text;
+                            label.style.color = color;
+                        }
+
                         if (diag.estado.toLowerCase() === 'online') {
                             badge.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
                             badge.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.25)';
@@ -349,33 +408,8 @@
                             tx_txt.innerText = diag.potencia_tx;
                             tx_txt.style.color = '#475569';
 
-                            // Extraer valor de Rx (ej: "-21.61 dBm")
-                            const rx_match = diag.potencia_rx.match(/-?\d+\.?\d*/);
-                            if (rx_match) {
-                                const rx_val = parseFloat(rx_match[0]);
-                                let pct = 0;
-                                let color = '';
-                                let text = '';
-
-                                if (rx_val >= -25) { // Excelente
-                                    pct = 90;
-                                    color = '#10b981';
-                                    text = '🟢 Conexión Excelente (Nivel Óptimo)';
-                                } else if (rx_val > -28) { // Atenuado
-                                    pct = 55;
-                                    color = '#f59e0b';
-                                    text = '🟡 Señal Atenuada (Revisar conector/uniones)';
-                                } else { // Crítico
-                                    pct = 25;
-                                    color = '#ef4444';
-                                    text = '🔴 Señal Crítica (Posible falla física o doblez)';
-                                }
-
-                                pBar.style.width = `${pct}%`;
-                                pBar.style.backgroundColor = color;
-                                pLabel.innerText = text;
-                                pLabel.style.color = color;
-                            }
+                            actualizarBarraFibra(diag.potencia_rx, 'smartolt-rx-bar', 'smartolt-rx-label', 'Enganche (Rx)');
+                            actualizarBarraFibra(diag.potencia_tx, 'smartolt-tx-bar', 'smartolt-tx-label', 'Retorno (Tx)');
                         } else {
                             badge.style.background = 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)';
                             badge.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.25)';
@@ -384,10 +418,8 @@
                             tx_txt.innerText = 'DESCONECTADO';
                             tx_txt.style.color = '#dc2626';
 
-                            pBar.style.width = '0%';
-                            pBar.style.backgroundColor = '#64748b';
-                            pLabel.innerText = '🚨 Equipo Apagado o sin Fibra (LOS)';
-                            pLabel.style.color = '#dc2626';
+                            actualizarBarraFibra('DESCONECTADO', 'smartolt-rx-bar', 'smartolt-rx-label', 'Enganche (Rx)');
+                            actualizarBarraFibra('DESCONECTADO', 'smartolt-tx-bar', 'smartolt-tx-label', 'Retorno (Tx)');
                         }
                     }
                 })
