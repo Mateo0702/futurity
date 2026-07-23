@@ -602,7 +602,7 @@ def buscar_completo_json():
 def diagnostico_smartolt(sn):
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'TECNICO']:
         return jsonify({"status": "error", "message": "No tienes privilegios para consultar diagnóstico"}), 403
         
     import urllib.request
