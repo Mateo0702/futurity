@@ -489,6 +489,80 @@
                                     <strong style="color: #f8fafc; font-size: 1.05rem;">{{ visita.info_pas or 'No asignada' }}</strong>
                                 </div>
                             </div>
+
+                            <!-- Diagnóstico OLT en Vivo (SmartOLT) -->
+                            <div style="margin-top: 20px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 18px;">
+                                <strong style="color: #38bdf8; font-size: 0.95rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                                    <i class="fa-solid fa-square-poll-vertical"></i> Diagnóstico de Señal OLT (En Vivo)
+                                </strong>
+                                
+                                <div style="text-align: center; padding: 5px 0 15px 0;">
+                                    <button type="button" class="theme-btn-tecnico theme-refresh" id="btn-medir-tecnico-{{ visita.id_visita }}" 
+                                            onclick="ejecutarMedicionTecnico('{{ visita.id_visita }}', '{{ visita.numero_serie }}', event)"
+                                            style="width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 800; font-size: 0.9rem; padding: 12px 20px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: none; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3); border-radius: 10px; color: white; cursor: pointer;">
+                                        <i class="fa-solid fa-bolt"></i> Medir Potencia en Central
+                                    </button>
+                                </div>
+
+                                <!-- Loader -->
+                                <div id="loader-tecnico-{{ visita.id_visita }}" style="display: none; text-align: center; padding: 20px 0;">
+                                    <i class="fa-solid fa-spinner fa-spin" style="color: #38bdf8; font-size: 2rem; margin-bottom: 10px;"></i>
+                                    <p style="margin: 0; color: #94a3b8; font-weight: 700; font-size: 0.85rem;">Consultando potencia de fibra en la OLT...</p>
+                                </div>
+
+                                <!-- Resultados -->
+                                <div id="resultados-tecnico-{{ visita.id_visita }}" style="display: none; background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 15px; margin-bottom: 10px;">
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                                        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 8px 10px;">
+                                            <span style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; display: block; margin-bottom: 2px;">ESTADO</span>
+                                            <strong id="estado-tecnico-{{ visita.id_visita }}" style="font-size: 0.88rem; font-weight: 800; color: #f8fafc;">ONLINE</strong>
+                                        </div>
+                                        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 8px 10px; text-align: right;">
+                                            <span style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; display: block; margin-bottom: 2px;">DISTANCIA</span>
+                                            <strong id="distancia-tecnico-{{ visita.id_visita }}" style="font-size: 0.88rem; font-weight: 800; color: #f8fafc;">N/D</strong>
+                                        </div>
+                                        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 8px 10px;">
+                                            <span style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; display: block; margin-bottom: 2px;">ENGANCHE (RX)</span>
+                                            <strong id="rx-tecnico-{{ visita.id_visita }}" style="font-size: 1.05rem; font-weight: 900; color: #10b981;">N/D</strong>
+                                        </div>
+                                        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 8px 10px; text-align: right;">
+                                            <span style="color: #94a3b8; font-size: 0.72rem; font-weight: 700; display: block; margin-bottom: 2px;">RETORNO (TX)</span>
+                                            <strong id="tx-tecnico-{{ visita.id_visita }}" style="font-size: 1.05rem; font-weight: 900; color: #cbd5e1;">N/D</strong>
+                                        </div>
+                                    </div>
+
+                                    <!-- Barra de Enganche -->
+                                    <div style="margin-bottom: 12px;">
+                                        <div style="display: flex; justify-content: space-between; font-size: 0.65rem; font-weight: 700; color: #94a3b8; margin-bottom: 4px;">
+                                            <span>Crítico (-29 a -35)</span>
+                                            <span>Atenuado (-26 a -28)</span>
+                                            <span>Excelente (-15 a -25)</span>
+                                        </div>
+                                        <div style="height: 8px; background: rgba(255,255,255,0.1); border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">
+                                            <div id="rx-bar-tecnico-{{ visita.id_visita }}" style="height: 100%; width: 0%; transition: width 0.4s ease, background-color 0.4s ease;"></div>
+                                        </div>
+                                        <span id="rx-label-tecnico-{{ visita.id_visita }}" style="font-size: 0.72rem; font-weight: 700; display: block; margin-top: 4px;"></span>
+                                    </div>
+
+                                    <!-- Barra de Retorno -->
+                                    <div style="margin-bottom: 14px;">
+                                        <div style="display: flex; justify-content: space-between; font-size: 0.65rem; font-weight: 700; color: #94a3b8; margin-bottom: 4px;">
+                                            <span>Crítico (-29 a -35)</span>
+                                            <span>Atenuado (-26 a -28)</span>
+                                            <span>Excelente (-15 a -25)</span>
+                                        </div>
+                                        <div style="height: 8px; background: rgba(255,255,255,0.1); border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">
+                                            <div id="tx-bar-tecnico-{{ visita.id_visita }}" style="height: 100%; width: 0%; transition: width 0.4s ease, background-color 0.4s ease;"></div>
+                                        </div>
+                                        <span id="tx-label-tecnico-{{ visita.id_visita }}" style="font-size: 0.72rem; font-weight: 700; display: block; margin-top: 4px;"></span>
+                                    </div>
+
+                                    <div style="font-size: 0.75rem; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px; color: #94a3b8; display: flex; justify-content: space-between; align-items: center;">
+                                        <span>Último cambio (Uptime):</span>
+                                        <strong id="uptime-tecnico-{{ visita.id_visita }}" style="color: #f8fafc;">N/D</strong>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
@@ -2944,6 +3018,118 @@
                     `;
                 }
             }
+        }
+
+        // Función reutilizable para actualizar barras de nivel óptico en el panel técnico
+        function actualizarBarraFibraTecnico(valorStr, barId, labelId, tipoName) {
+            const bar = document.getElementById(barId);
+            const label = document.getElementById(labelId);
+            if (!bar || !label) return;
+
+            if (!valorStr || valorStr === 'N/D' || valorStr === 'DESCONECTADO' || valorStr === '-') {
+                bar.style.width = '0%';
+                bar.style.backgroundColor = '#64748b';
+                label.innerText = `🚨 ${tipoName} Desconectado`;
+                label.style.color = '#ef4444';
+                return;
+            }
+
+            const match = valorStr.match(/-?\d+\.?\d*/);
+            if (!match) {
+                bar.style.width = '0%';
+                bar.style.backgroundColor = '#64748b';
+                label.innerText = `Valor no válido: ${valorStr}`;
+                label.style.color = '#94a3b8';
+                return;
+            }
+
+            const val = parseFloat(match[0]);
+            let pct = 0;
+            let color = '';
+            let text = '';
+
+            if (val >= -25) { // Excelente
+                pct = 90;
+                color = '#10b981';
+                text = `🟢 Excelente (${val} dBm)`;
+            } else if (val > -28) { // Atenuado
+                pct = 55;
+                color = '#f59e0b';
+                text = `🟡 Atenuado (${val} dBm)`;
+            } else { // Crítico
+                pct = 25;
+                color = '#ef4444';
+                text = `🔴 Crítico (${val} dBm)`;
+            }
+
+            bar.style.width = `${pct}%`;
+            bar.style.backgroundColor = color;
+            label.innerText = text;
+            label.style.color = color;
+        }
+
+        function ejecutarMedicionTecnico(idVisita, sn, event) {
+            if (event) {
+                event.stopPropagation();
+            }
+
+            if (!sn || sn.trim() === '' || sn === 'S/N' || sn === 'None') {
+                alert("Esta visita no tiene un número de serie (SN) registrado para consultar en la OLT.");
+                return;
+            }
+
+            const btn = document.getElementById(`btn-medir-tecnico-${idVisita}`);
+            const loader = document.getElementById(`loader-tecnico-${idVisita}`);
+            const resultados = document.getElementById(`resultados-tecnico-${idVisita}`);
+
+            if (btn) btn.style.display = 'none';
+            if (resultados) resultados.style.display = 'none';
+            if (loader) loader.style.display = 'block';
+
+            fetch(`/api/admin/smartolt/diagnostico/${encodeURIComponent(sn.trim())}`)
+                .then(res => {
+                    if (!res.ok) {
+                        return res.json().then(errData => { throw new Error(errData.message || 'Error en diagnóstico') });
+                    }
+                    return res.json();
+                })
+                .then(data => {
+                    if (loader) loader.style.display = 'none';
+                    if (btn) btn.style.display = 'inline-flex';
+
+                    if (data.status === 'success' && data.diagnostico) {
+                        const diag = data.diagnostico;
+                        if (resultados) resultados.style.display = 'block';
+
+                        // Actualizar textos
+                        document.getElementById(`estado-tecnico-${idVisita}`).innerText = diag.estado.toUpperCase();
+                        document.getElementById(`distancia-tecnico-${idVisita}`).innerText = diag.distancia || 'N/D';
+                        document.getElementById(`rx-tecnico-${idVisita}`).innerText = diag.potencia_rx || 'N/D';
+                        document.getElementById(`tx-tecnico-${idVisita}`).innerText = diag.potencia_tx || 'N/D';
+                        document.getElementById(`uptime-tecnico-${idVisita}`).innerText = diag.uptime || 'N/D';
+
+                        // Colores de estado
+                        const estadoEl = document.getElementById(`estado-tecnico-${idVisita}`);
+                        if (diag.estado.toLowerCase() === 'online') {
+                            estadoEl.style.color = '#10b981';
+                            document.getElementById(`rx-tecnico-${idVisita}`).style.color = '#10b981';
+                            document.getElementById(`tx-tecnico-${idVisita}`).style.color = '#cbd5e1';
+                        } else {
+                            estadoEl.style.color = '#ef4444';
+                            document.getElementById(`rx-tecnico-${idVisita}`).style.color = '#ef4444';
+                            document.getElementById(`tx-tecnico-${idVisita}`).style.color = '#ef4444';
+                        }
+
+                        // Actualizar barras (semaforización visual)
+                        actualizarBarraFibraTecnico(diag.potencia_rx, `rx-bar-tecnico-${idVisita}`, `rx-label-tecnico-${idVisita}`, 'Enganche (Rx)');
+                        actualizarBarraFibraTecnico(diag.potencia_tx, `tx-bar-tecnico-${idVisita}`, `tx-label-tecnico-${idVisita}`, 'Retorno (Tx)');
+                    }
+                })
+                .catch(err => {
+                    if (loader) loader.style.display = 'none';
+                    if (btn) btn.style.display = 'inline-flex';
+                    alert(err.message || "Error al conectar con SmartOLT.");
+                });
         }
 
         window.addEventListener('online', () => {
