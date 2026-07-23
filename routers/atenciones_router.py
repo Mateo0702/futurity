@@ -523,3 +523,190 @@ def registrar_atenciones_masivo():
         conn.close()
 
 
+@atenciones_bp.route('/api/cliente/buscar_completo_json', methods=['GET'])
+def buscar_completo_json():
+    if 'user_id' not in session:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({"status": "success", "clientes": []})
+        
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    cursor = conn.cursor(dictionary=True)
+    try:
+        from utils import format_antiguedad
+        # Búsqueda parcial por contrato, nombre, teléfono o identificación
+        query = """
+            SELECT contrato, nombre_cliente AS cliente, zona AS sector, 
+                   telefono1, telefono2, telefono3, fecha_instalacion,
+                   total_mensual, antiguedad, numero_serie, producto, direccion
+            FROM directorio_clientes 
+            WHERE contrato LIKE %s 
+               OR nombre_cliente LIKE %s 
+               OR telefono1 LIKE %s 
+               OR telefono2 LIKE %s 
+               OR telefono3 LIKE %s
+            LIMIT 15
+        """
+        like_q = f"%{q}%"
+        cursor.execute(query, (like_q, like_q, like_q, like_q, like_q))
+        rows = cursor.fetchall()
+        
+        clientes = []
+        for row in rows:
+            # Formatear fecha
+            f_inst = ""
+            if isinstance(row['fecha_instalacion'], (datetime, date)):
+                f_inst = row['fecha_instalacion'].isoformat()
+            elif isinstance(row['fecha_instalacion'], str) and len(row['fecha_instalacion']) >= 10:
+                f_inst = row['fecha_instalacion'][:10]
+                
+            # Limpiar teléfonos
+            tels = []
+            for k in ['telefono1', 'telefono2', 'telefono3']:
+                val = row[k]
+                if val:
+                    val_str = str(val).strip()
+                    if val_str.endswith('.0') or val_str.endswith(',0'):
+                        val_str = val_str[:-2]
+                    if val_str and val_str not in tels:
+                        tels.append(val_str)
+            telefonos_str = ", ".join(tels)
+            
+            clientes.append({
+                "contrato": row['contrato'],
+                "cliente": row['cliente'],
+                "sector": row['sector'] or "N/D",
+                "direccion": row['direccion'] or "N/D",
+                "telefonos": telefonos_str or "No registrado",
+                "fecha_instalacion": f_inst or "N/D",
+                "total_mensual": float(row['total_mensual']) if row.get('total_mensual') is not None else None,
+                "antiguedad_fmt": format_antiguedad(row.get('antiguedad'), row.get('fecha_instalacion')),
+                "numero_serie": row.get('numero_serie') or "S/N",
+                "producto": row.get('producto') or "N/D"
+            })
+            
+        return jsonify({"status": "success", "clientes": clientes})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@atenciones_bp.route('/api/admin/smartolt/diagnostico/<sn>', methods=['GET'])
+def diagnostico_smartolt(sn):
+    if 'user_id' not in session:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para consultar diagnóstico"}), 403
+        
+    import urllib.request
+    import ssl
+    import json
+    
+    api_key = "e2b23976ae0649a1a1d767915fd90002"
+    dom = "diyer.smartolt.com"
+    
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    
+    # 1. Consultar señal
+    url_signal = f"https://{dom}/api/onu/get_onu_signal/{sn}"
+    req_signal = urllib.request.Request(url_signal)
+    req_signal.add_header("X-Token", api_key)
+    req_signal.add_header("User-Agent", "FuturityAtlas/1.0")
+    
+    signal_data = {}
+    try:
+        with urllib.request.urlopen(req_signal, timeout=6, context=ctx) as resp:
+            signal_data = json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        print(f"Error querying SmartOLT signal for {sn}: {e}")
+        
+    # 2. Consultar información completa de estado
+    url_status = f"https://{dom}/api/onu/get_onu_full_status_info/{sn}"
+    req_status = urllib.request.Request(url_status)
+    req_status.add_header("X-Token", api_key)
+    req_status.add_header("User-Agent", "FuturityAtlas/1.0")
+    
+    status_data = {}
+    try:
+        with urllib.request.urlopen(req_status, timeout=6, context=ctx) as resp:
+            status_data = json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        print(f"Error querying SmartOLT full status for {sn}: {e}")
+        
+    # Verificar si ambas fallaron de manera crítica (por ejemplo, ONU no existe)
+    if not signal_data.get("status") and not status_data.get("status"):
+        msg = "No se pudo obtener información del equipo de SmartOLT. Verifique el SN."
+        return jsonify({"status": "error", "message": msg}), 404
+        
+    # Procesar y unificar los datos
+    full_json = status_data.get("full_status_json", {})
+    onu_details = full_json.get("ONU details", {})
+    optical_status = full_json.get("Optical status", {})
+    wan_interfaces = full_json.get("ONU WAN Interfaces", {})
+    
+    # Determinar estado
+    phase_state = onu_details.get("Phase state", "OffLine")
+    if phase_state.lower() == "working":
+        status_display = "Online"
+    elif phase_state.lower() == "offline":
+        status_display = "Offline"
+    else:
+        status_display = phase_state
+        
+    # Extraer IP WAN
+    ip_wan = "N/D"
+    if wan_interfaces:
+        for k, v in wan_interfaces.items():
+            ip_val = v.get("IPv4 address")
+            if ip_val and ip_val != "N/A" and ip_val != "0.0.0.0":
+                ip_wan = ip_val
+                break
+                
+    rx_power = "N/D"
+    tx_power = "N/D"
+    
+    if signal_data.get("onu_signal_1490") and signal_data.get("onu_signal_1490") != "-":
+        rx_power = signal_data.get("onu_signal_1490")
+    elif optical_status.get("ONU Rx") and optical_status.get("ONU Rx") != "N/A(dBm)":
+        rx_power = optical_status.get("ONU Rx")
+        
+    if signal_data.get("onu_signal_1310") and signal_data.get("onu_signal_1310") != "-":
+        tx_power = signal_data.get("onu_signal_1310")
+    elif optical_status.get("OLT Rx") and optical_status.get("OLT Rx") != "N/A(dBm)":
+        tx_power = optical_status.get("OLT Rx")
+        
+    for p in ['rx_power', 'tx_power']:
+        val = locals()[p]
+        if val:
+            val = val.replace("(dbm)", " dBm").replace("(dBm)", " dBm").replace("(dB)", " dB")
+            if p == 'rx_power': rx_power = val
+            else: tx_power = val
+            
+    # Extraer OLT, Tarjeta, Puerto
+    olt_name = onu_details.get("Description", "").split("descr_")[0].split("zone_")[-1] if "zone_" in onu_details.get("Description", "") else "KONNEK"
+    
+    diagnostico = {
+        "sn": sn,
+        "nombre_equipo": onu_details.get("Name", "N/D"),
+        "modelo": onu_details.get("Detected ONU type") or onu_details.get("Type") or "N/D",
+        "estado": status_display,
+        "uptime": onu_details.get("Online Duration", "N/D"),
+        "distancia": onu_details.get("ONU Distance", "N/D"),
+        "ip_wan": ip_wan,
+        "potencia_rx": rx_power,
+        "potencia_tx": tx_power,
+        "vlan": onu_details.get("Description", "").split("vlan_")[-1].split("_")[0] if "vlan_" in onu_details.get("Description", "") else "N/D"
+    }
+    
+    return jsonify({"status": "success", "diagnostico": diagnostico})
+
+

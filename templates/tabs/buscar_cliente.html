@@ -1,0 +1,402 @@
+<div id="tab-buscar-cliente" class="tab-content {% if active_tab == 'buscar-cliente' %}active{% endif %}">
+    
+    <div style="background: white; padding: 30px; border-radius: 20px; margin-bottom: 25px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm);">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div style="background: #e0f2fe; color: #0284c7; width: 50px; height: 50px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                <i class="fa-solid fa-users-gear"></i>
+            </div>
+            <div>
+                <h1 style="margin: 0; font-size: 1.8rem; color: #0f172a; font-weight: 800; letter-spacing: -0.02em;">Buscador y Diagnóstico de Clientes</h1>
+                <p style="margin-top: 5px; color: #64748b; font-size: 0.95rem; font-weight: 500;">Busca fichas comerciales de clientes y realiza diagnósticos de señal óptica en tiempo real en la OLT.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Buscador Principal -->
+    <div style="background: white; padding: 25px; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: var(--shadow-sm); margin-bottom: 25px; position: relative;">
+        <label style="font-weight: 800; color: #1e293b; font-size: 0.95rem; display: block; margin-bottom: 10px;">
+            🔍 Buscar Cliente (Contrato, Nombre, Teléfono o Identificación):
+        </label>
+        <div style="display: flex; gap: 12px; position: relative;">
+            <input type="text" id="buscador-cliente-input" class="form-control" 
+                   placeholder="Escribe para buscar... Ej: 290 o Beatri..." 
+                   style="padding: 14px 20px; font-size: 1rem; border-radius: 12px; border: 1.5px solid #cbd5e1; width: 100%; font-weight: 600;" 
+                   oninput="buscarClientesDinamico(this.value)">
+            <div id="buscador-cliente-spinner" style="display: none; position: absolute; right: 20px; top: 15px;">
+                <i class="fa-solid fa-spinner fa-spin" style="color: #64748b; font-size: 1.2rem;"></i>
+            </div>
+        </div>
+
+        <!-- Lista flotante de resultados -->
+        <div id="buscador-resultados-lista" 
+             style="display: none; position: absolute; left: 25px; right: 25px; top: 100%; background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); z-index: 9999; max-height: 280px; overflow-y: auto; margin-top: 8px;">
+        </div>
+    </div>
+
+    <!-- Contenedor de Fichas (Datos del Cliente + SmartOLT) -->
+    <div id="ficha-cliente-contenedor" style="display: none; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 30px;">
+        
+        <!-- Ficha Comercial (Izquierda) -->
+        <div style="background: white; border-radius: 24px; border: 1px solid #e2e8f0; padding: 25px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <div style="display: flex; justify-content: space-between; align-items: start; border-bottom: 2px solid #f1f5f9; padding-bottom: 15px; margin-bottom: 20px;">
+                    <div>
+                        <span id="ficha-cliente-contrato" style="background: #e0f2fe; color: #0369a1; font-weight: 800; font-size: 0.85rem; padding: 4px 10px; border-radius: 8px; display: inline-block; margin-bottom: 8px;">CONTRATO: -</span>
+                        <h3 id="ficha-cliente-nombre" style="margin: 0; color: #0f172a; font-size: 1.35rem; font-weight: 850; letter-spacing: -0.01em;">-</h3>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px 25px;">
+                    <div>
+                        <strong style="color: #64748b; font-size: 0.78rem; font-weight: 700; display: block; margin-bottom: 4px; text-transform: uppercase;">💵 Pago Mensual</strong>
+                        <span id="ficha-cliente-pago" style="color: #059669; font-size: 1.15rem; font-weight: 800;">-</span>
+                    </div>
+                    <div>
+                        <strong style="color: #64748b; font-size: 0.78rem; font-weight: 700; display: block; margin-bottom: 4px; text-transform: uppercase;">⏳ Antigüedad</strong>
+                        <span id="ficha-cliente-antiguedad" style="color: #0284c7; font-size: 1rem; font-weight: 700;">-</span>
+                    </div>
+                    <div style="grid-column: span 2;">
+                        <strong style="color: #64748b; font-size: 0.78rem; font-weight: 700; display: block; margin-bottom: 4px; text-transform: uppercase;">📦 Paquete Contratado</strong>
+                        <span id="ficha-cliente-producto" style="color: #1e293b; font-size: 0.95rem; font-weight: 700;">-</span>
+                    </div>
+                    <div>
+                        <strong style="color: #64748b; font-size: 0.78rem; font-weight: 700; display: block; margin-bottom: 4px; text-transform: uppercase;">📅 Fecha Instalación</strong>
+                        <span id="ficha-cliente-instalacion" style="color: #475569; font-size: 0.95rem; font-weight: 600;">-</span>
+                    </div>
+                    <div>
+                        <strong style="color: #64748b; font-size: 0.78rem; font-weight: 700; display: block; margin-bottom: 4px; text-transform: uppercase;">🏷️ Serie ONU (SN)</strong>
+                        <span id="ficha-cliente-sn" style="color: #d97706; font-size: 0.95rem; font-weight: 700; word-break: break-all;">-</span>
+                    </div>
+                    <div style="grid-column: span 2; border-top: 1px solid #f1f5f9; padding-top: 12px;">
+                        <strong style="color: #64748b; font-size: 0.78rem; font-weight: 700; display: block; margin-bottom: 4px; text-transform: uppercase;">📍 Dirección</strong>
+                        <span id="ficha-cliente-direccion" style="color: #334155; font-size: 0.9rem; font-weight: 600; line-height: 1.4; display: block;">-</span>
+                        <span id="ficha-cliente-sector" style="color: #64748b; font-size: 0.8rem; font-weight: 700; margin-top: 2px; display: block;">Sector: -</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contactos -->
+            <div id="ficha-cliente-contactos-box" style="margin-top: 25px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 15px; display: flex; align-items: center; justify-content: space-between; gap: 15px;">
+                <div style="flex: 1;">
+                    <strong style="color: #64748b; font-size: 0.75rem; font-weight: 700; display: block; margin-bottom: 4px;">TELEFONOS DE CONTACTO</strong>
+                    <span id="ficha-cliente-telefonos" style="color: #1e293b; font-size: 0.9rem; font-weight: 700;">-</span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <a id="btn-call-cliente" href="#" class="btn-call" style="padding: 10px 14px; font-size: 0.85rem; border-radius: 10px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none;">
+                        <i class="fa-solid fa-phone"></i> Llamar
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Diagnóstico SmartOLT (Derecha) -->
+        <div style="background: white; border-radius: 24px; border: 1px solid #e2e8f0; padding: 25px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <h3 style="margin: 0 0 15px 0; color: #0f172a; font-size: 1.25rem; font-weight: 850; border-bottom: 2px solid #f1f5f9; padding-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-network-wired" style="color: #0284c7;"></i> Diagnóstico OLT en Vivo
+                </h3>
+
+                <!-- Botón de consulta -->
+                <div style="text-align: center; padding: 10px 0 20px 0;">
+                    <button type="button" id="btn-medir-smartolt" onclick="ejecutarMedicionSmartOLT()" 
+                            style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; border: none; padding: 14px 28px; font-size: 1rem; font-weight: 800; border-radius: 14px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(2, 132, 199, 0.25); display: inline-flex; align-items: center; gap: 10px;">
+                        <i class="fa-solid fa-bolt"></i> Medir Señal Óptica
+                    </button>
+                </div>
+
+                <!-- Loader de Medición -->
+                <div id="smartolt-loader" style="display: none; text-align: center; padding: 30px 0;">
+                    <i class="fa-solid fa-spinner fa-spin" style="color: #0284c7; font-size: 2.5rem; margin-bottom: 15px;"></i>
+                    <p style="margin: 0; color: #475569; font-weight: 700; font-size: 0.95rem;">Consultando potencia de fibra en la OLT...</p>
+                </div>
+
+                <!-- Resultados de Diagnóstico -->
+                <div id="smartolt-resultados" style="display: none;">
+                    
+                    <!-- Estado y Potencia de Fibra -->
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 15px;">
+                        <div>
+                            <span style="color: #64748b; font-size: 0.78rem; font-weight: 700; display: block; margin-bottom: 6px; text-transform: uppercase;">Estado del Equipo</span>
+                            <span id="smartolt-badge-estado" class="status-badge" style="display: inline-flex; font-size: 0.85rem; padding: 6px 14px; border-radius: 20px; font-weight: 800; color: white;">Online</span>
+                        </div>
+                        <div style="text-align: right;">
+                            <span style="color: #64748b; font-size: 0.78rem; font-weight: 700; display: block; margin-bottom: 4px; text-transform: uppercase;">Potencia de Recepción (Rx)</span>
+                            <strong id="smartolt-rx-potencia" style="font-size: 1.4rem; font-weight: 900; color: #0f172a;">-21.61 dBm</strong>
+                        </div>
+                    </div>
+
+                    <!-- Barra de Potencia Visual -->
+                    <div style="margin-bottom: 25px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 700; color: #64748b; margin-bottom: 6px;">
+                            <span>Excelente (-15 a -25)</span>
+                            <span>Atenuado (-26 a -28)</span>
+                            <span>Crítico (-29 a -35)</span>
+                        </div>
+                        <div style="height: 12px; background: #e2e8f0; border-radius: 10px; overflow: hidden; display: flex; border: 1px solid #cbd5e1;">
+                            <div id="smartolt-potencia-bar" style="height: 100%; width: 0%; transition: width 0.4s ease, background-color 0.4s ease;"></div>
+                        </div>
+                        <span id="smartolt-potencia-label" style="font-size: 0.78rem; font-weight: 700; display: block; margin-top: 6px;">Cargando...</span>
+                    </div>
+
+                    <!-- Ficha Técnica OLT -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; font-size: 0.88rem; background: #f8fafc; border-radius: 16px; padding: 18px; border: 1px solid #e2e8f0;">
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                            <span style="color: #64748b;">IP WAN:</span>
+                            <strong id="smartolt-ip" style="color: #0f172a;">N/D</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                            <span style="color: #64748b;">Distancia:</span>
+                            <strong id="smartolt-distancia" style="color: #0f172a;">N/D</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                            <span style="color: #64748b;">OLT Asignada:</span>
+                            <strong id="smartolt-olt" style="color: #0f172a;">N/D</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                            <span style="color: #64748b;">Uptime:</span>
+                            <strong id="smartolt-uptime" style="color: #0f172a;">N/D</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding-bottom: 2px;">
+                            <span style="color: #64748b;">Modelo ONU:</span>
+                            <strong id="smartolt-modelo" style="color: #0f172a;">N/D</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding-bottom: 2px;">
+                            <span style="color: #64748b;">VLAN ONU:</span>
+                            <strong id="smartolt-vlan" style="color: #0f172a;">N/D</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Estado Inicial / Vacío -->
+                <div id="smartolt-inicial" style="text-align: center; padding: 40px 20px; color: #94a3b8;">
+                    <i class="fa-solid fa-wifi" style="font-size: 3rem; margin-bottom: 15px;"></i>
+                    <p style="margin: 0; font-size: 0.95rem; font-weight: 600;">Presiona el botón superior para realizar el diagnóstico óptico del cliente en tiempo real.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estado Vacío General -->
+    <div id="buscador-cliente-vacio" style="background: white; border-radius: 24px; border: 1px solid #e2e8f0; padding: 60px 20px; text-align: center; box-shadow: var(--shadow-sm);">
+        <i class="fa-solid fa-magnifying-glass" style="font-size: 4rem; color: #cbd5e1; margin-bottom: 20px;"></i>
+        <h3 style="margin: 0; color: #475569; font-size: 1.25rem; font-weight: 800;">Escribe un contrato para iniciar</h3>
+        <p style="margin: 5px 0 0 0; color: #94a3b8; font-size: 0.95rem; font-weight: 500;">Ingresa el número de contrato o el nombre del cliente en el buscador superior para cargar su ficha técnica.</p>
+    </div>
+
+    <script>
+        let clienteSeleccionado = null;
+        let busquedaTimeout = null;
+
+        function buscarClientesDinamico(query) {
+            const listContainer = document.getElementById('buscador-resultados-lista');
+            const spinner = document.getElementById('buscador-cliente-spinner');
+            
+            if (busquedaTimeout) clearTimeout(busquedaTimeout);
+            
+            query = query.trim();
+            if (!query || query.length < 2) {
+                listContainer.style.display = 'none';
+                listContainer.innerHTML = '';
+                return;
+            }
+
+            spinner.style.display = 'block';
+            
+            busquedaTimeout = setTimeout(() => {
+                fetch(`/api/cliente/buscar_completo_json?q=${encodeURIComponent(query)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        spinner.style.display = 'none';
+                        if (data.status === 'success' && data.clientes.length > 0) {
+                            listContainer.innerHTML = '';
+                            data.clientes.forEach(cli => {
+                                const row = document.createElement('div');
+                                row.style.padding = '12px 18px';
+                                row.style.borderBottom = '1px solid #f1f5f9';
+                                row.style.cursor = 'pointer';
+                                row.style.display = 'flex';
+                                row.style.justifyContent = 'space-between';
+                                row.style.alignItems = 'center';
+                                row.style.transition = 'background 0.2s';
+                                
+                                row.addEventListener('mouseenter', () => row.style.background = '#f8fafc');
+                                row.addEventListener('mouseleave', () => row.style.background = 'white');
+                                row.addEventListener('click', () => seleccionarCliente(cli));
+                                
+                                row.innerHTML = `
+                                    <div>
+                                        <strong style="color: #0f172a; font-size: 0.95rem; display: block;">${cli.cliente}</strong>
+                                        <span style="color: #64748b; font-size: 0.78rem;">Sector: ${cli.sector} | Plan: ${cli.producto}</span>
+                                    </div>
+                                    <span style="background: #e0f2fe; color: #0369a1; font-weight: 800; font-size: 0.78rem; padding: 4px 8px; border-radius: 6px;">
+                                        Contrato: ${cli.contrato}
+                                    </span>
+                                `;
+                                listContainer.appendChild(row);
+                            });
+                            listContainer.style.display = 'block';
+                        } else {
+                            listContainer.style.display = 'block';
+                            listContainer.innerHTML = `<div style="padding: 15px; text-align: center; color: #94a3b8; font-size: 0.9rem; font-weight: 600;">No se encontraron coincidencias.</div>`;
+                        }
+                    })
+                    .catch(err => {
+                        spinner.style.display = 'none';
+                        console.error("Error buscando clientes:", err);
+                    });
+            }, 300);
+        }
+
+        function seleccionarCliente(cliente) {
+            clienteSeleccionado = cliente;
+            
+            // Ocultar buscador flotante
+            document.getElementById('buscador-resultados-lista').style.display = 'none';
+            document.getElementById('buscador-cliente-input').value = '';
+
+            // Mostrar ficha y ocultar estado vacío
+            document.getElementById('buscador-cliente-vacio').style.display = 'none';
+            document.getElementById('ficha-cliente-contenedor').style.display = 'grid';
+
+            // Popular Ficha Comercial
+            document.getElementById('ficha-cliente-contrato').innerText = `CONTRATO: ${cliente.contrato}`;
+            document.getElementById('ficha-cliente-nombre').innerText = cliente.cliente;
+            document.getElementById('ficha-cliente-pago').innerText = cliente.total_mensual ? `$${parseFloat(cliente.total_mensual).toFixed(2)}` : 'N/D';
+            document.getElementById('ficha-cliente-antiguedad').innerText = cliente.antiguedad_fmt || 'N/D';
+            document.getElementById('ficha-cliente-producto').innerText = cliente.producto || 'N/D';
+            document.getElementById('ficha-cliente-instalacion').innerText = cliente.fecha_instalacion || 'N/D';
+            document.getElementById('ficha-cliente-sn').innerText = cliente.numero_serie || 'S/N';
+            document.getElementById('ficha-cliente-direccion').innerText = cliente.direccion || 'N/D';
+            document.getElementById('ficha-cliente-sector').innerText = `Sector: ${cliente.sector}`;
+            document.getElementById('ficha-cliente-telefonos').innerText = cliente.telefonos || 'No registrado';
+            
+            // Botón de llamada
+            const btnCall = document.getElementById('btn-call-cliente');
+            if (cliente.telefonos && cliente.telefonos !== 'No registrado') {
+                btnCall.href = `tel:${cliente.telefonos.split(',')[0].trim()}`;
+                btnCall.style.display = 'inline-flex';
+            } else {
+                btnCall.style.display = 'none';
+            }
+
+            // Resetear tarjeta SmartOLT
+            document.getElementById('smartolt-resultados').style.display = 'none';
+            document.getElementById('smartolt-inicial').style.display = 'block';
+            document.getElementById('smartolt-loader').style.display = 'none';
+            document.getElementById('btn-medir-smartolt').style.display = 'inline-flex';
+        }
+
+        function ejecutarMedicionSmartOLT() {
+            if (!clienteSeleccionado || !clienteSeleccionado.numero_serie || clienteSeleccionado.numero_serie === 'S/N') {
+                mostrarToast("El cliente no tiene registrado un número de serie (SN) para consultar en la OLT.", true);
+                return;
+            }
+
+            const sn = clienteSeleccionado.numero_serie.trim();
+            const btn = document.getElementById('btn-medir-smartolt');
+            const loader = document.getElementById('smartolt-loader');
+            const resultados = document.getElementById('smartolt-resultados');
+            const inicial = document.getElementById('smartolt-inicial');
+
+            btn.style.display = 'none';
+            inicial.style.display = 'none';
+            resultados.style.display = 'none';
+            loader.style.display = 'block';
+
+            fetch(`/api/admin/smartolt/diagnostico/${encodeURIComponent(sn)}`)
+                .then(res => {
+                    if (!res.ok) {
+                        return res.json().then(errData => { throw new Error(errData.message || 'Error en diagnóstico') });
+                    }
+                    return res.json();
+                })
+                .then(data => {
+                    loader.style.display = 'none';
+                    btn.style.display = 'inline-flex';
+                    
+                    if (data.status === 'success' && data.diagnostico) {
+                        const diag = data.diagnostico;
+                        resultados.style.display = 'block';
+
+                        // Actualizar Campos
+                        document.getElementById('smartolt-ip').innerText = diag.ip_wan || 'N/D';
+                        document.getElementById('smartolt-distancia').innerText = diag.distancia || 'N/D';
+                        document.getElementById('smartolt-olt').innerText = diag.olt_name || 'N/D';
+                        document.getElementById('smartolt-uptime').innerText = diag.uptime || 'N/D';
+                        document.getElementById('smartolt-modelo').innerText = diag.modelo || 'N/D';
+                        document.getElementById('smartolt-vlan').innerText = diag.vlan || 'N/D';
+                        
+                        // Estado Badge
+                        const badge = document.getElementById('smartolt-badge-estado');
+                        const rx_txt = document.getElementById('smartolt-rx-potencia');
+                        
+                        badge.innerText = diag.estado.toUpperCase();
+                        
+                        // Barra de Potencia Visual y Lógica
+                        const pBar = document.getElementById('smartolt-potencia-bar');
+                        const pLabel = document.getElementById('smartolt-potencia-label');
+                        
+                        if (diag.estado.toLowerCase() === 'online') {
+                            badge.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+                            badge.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.25)';
+                            rx_txt.innerText = diag.potencia_rx;
+                            rx_txt.style.color = '#0f172a';
+
+                            // Extraer valor de Rx (ej: "-21.61 dBm")
+                            const rx_match = diag.potencia_rx.match(/-?\d+\.?\d*/);
+                            if (rx_match) {
+                                const rx_val = parseFloat(rx_match[0]);
+                                let pct = 0;
+                                let color = '';
+                                let text = '';
+
+                                if (rx_val >= -25) { // Excelente
+                                    pct = 90;
+                                    color = '#10b981';
+                                    text = '🟢 Conexión Excelente (Nivel Óptimo)';
+                                } else if (rx_val > -28) { // Atenuado
+                                    pct = 55;
+                                    color = '#f59e0b';
+                                    text = '🟡 Señal Atenuada (Revisar conector/uniones)';
+                                } else { // Crítico
+                                    pct = 25;
+                                    color = '#ef4444';
+                                    text = '🔴 Señal Crítica (Posible falla física o doblez)';
+                                }
+
+                                pBar.style.width = `${pct}%`;
+                                pBar.style.backgroundColor = color;
+                                pLabel.innerText = text;
+                                pLabel.style.color = color;
+                            }
+                        } else {
+                            badge.style.background = 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)';
+                            badge.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.25)';
+                            rx_txt.innerText = 'DESCONECTADO';
+                            rx_txt.style.color = '#dc2626';
+
+                            pBar.style.width = '0%';
+                            pBar.style.backgroundColor = '#64748b';
+                            pLabel.innerText = '🚨 Equipo Apagado o sin Fibra (LOS)';
+                            pLabel.style.color = '#dc2626';
+                        }
+                    }
+                })
+                .catch(err => {
+                    loader.style.display = 'none';
+                    btn.style.display = 'inline-flex';
+                    inicial.style.display = 'block';
+                    mostrarToast(err.message || "Error al conectar con SmartOLT.", true);
+                });
+        }
+
+        // Cerrar buscador flotante si se hace clic fuera
+        document.addEventListener('click', (e) => {
+            const list = document.getElementById('buscador-resultados-lista');
+            const input = document.getElementById('buscador-cliente-input');
+            if (e.target !== list && e.target !== input) {
+                list.style.display = 'none';
+            }
+        });
+    </script>
+</div>

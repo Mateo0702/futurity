@@ -107,6 +107,13 @@
             </svg>
             <span>Registrar Atención</span>
         </div>
+        <div class="nav-item {% if active_tab == 'buscar-cliente' %}active{% endif %}" data-tab="tab-buscar-cliente">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <span>Buscador de Clientes</span>
+        </div>
         {% endif %}
 
         <div class="nav-item {% if active_tab == 'metricas' %}active{% endif %}" data-tab="tab-metricas">
@@ -224,6 +231,9 @@
         {% include 'tabs/mapa_tecnicos.html' %}
         {% include 'tabs/registro.html' %}
         {% include 'tabs/atenciones.html' %}
+        {% if session.get('user_role') in ['ADMIN', 'ASESOR'] %}
+            {% include 'tabs/buscar_cliente.html' %}
+        {% endif %}
         {% include 'tabs/reportes.html' %}
         {% include 'tabs/control_calidad.html' %}
         {% include 'tabs/metricas.html' %}
