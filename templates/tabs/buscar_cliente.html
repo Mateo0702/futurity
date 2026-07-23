@@ -321,7 +321,7 @@
                         // Actualizar Campos
                         document.getElementById('smartolt-ip').innerText = diag.ip_wan || 'N/D';
                         document.getElementById('smartolt-distancia').innerText = diag.distancia || 'N/D';
-                        document.getElementById('smartolt-olt').innerText = diag.olt_name || 'N/D';
+                        document.getElementById('smartolt-olt').innerText = `${diag.olt_name} (${diag.pon_port})`;
                         document.getElementById('smartolt-uptime').innerText = diag.uptime || 'N/D';
                         document.getElementById('smartolt-modelo').innerText = diag.modelo || 'N/D';
                         document.getElementById('smartolt-vlan').innerText = diag.vlan || 'N/D';

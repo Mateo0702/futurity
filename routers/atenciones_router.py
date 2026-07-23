@@ -616,97 +616,60 @@ def diagnostico_smartolt(sn):
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     
-    # 1. Consultar señal
-    url_signal = f"https://{dom}/api/onu/get_onu_signal/{sn}"
-    req_signal = urllib.request.Request(url_signal)
-    req_signal.add_header("X-Token", api_key)
-    req_signal.add_header("User-Agent", "FuturityAtlas/1.0")
+    # Consultar get_onu_details (que es rápido, confiable y no causa timeout)
+    url = f"https://{dom}/api/onu/get_onu_details/{sn}"
+    req = urllib.request.Request(url)
+    req.add_header("X-Token", api_key)
+    req.add_header("User-Agent", "FuturityAtlas/1.0")
     
-    signal_data = {}
     try:
-        with urllib.request.urlopen(req_signal, timeout=6, context=ctx) as resp:
-            signal_data = json.loads(resp.read().decode('utf-8'))
-    except Exception as e:
-        print(f"Error querying SmartOLT signal for {sn}: {e}")
-        
-    # 2. Consultar información completa de estado
-    url_status = f"https://{dom}/api/onu/get_onu_full_status_info/{sn}"
-    req_status = urllib.request.Request(url_status)
-    req_status.add_header("X-Token", api_key)
-    req_status.add_header("User-Agent", "FuturityAtlas/1.0")
-    
-    status_data = {}
-    try:
-        with urllib.request.urlopen(req_status, timeout=6, context=ctx) as resp:
-            status_data = json.loads(resp.read().decode('utf-8'))
-    except Exception as e:
-        print(f"Error querying SmartOLT full status for {sn}: {e}")
-        
-    # Verificar si ambas fallaron de manera crítica (por ejemplo, ONU no existe)
-    if not signal_data.get("status") and not status_data.get("status"):
-        msg = "No se pudo obtener información del equipo de SmartOLT. Verifique el SN."
-        return jsonify({"status": "error", "message": msg}), 404
-        
-    # Procesar y unificar los datos
-    full_json = status_data.get("full_status_json", {})
-    onu_details = full_json.get("ONU details", {})
-    optical_status = full_json.get("Optical status", {})
-    wan_interfaces = full_json.get("ONU WAN Interfaces", {})
-    
-    # Determinar estado
-    phase_state = onu_details.get("Phase state", "OffLine")
-    if phase_state.lower() == "working":
-        status_display = "Online"
-    elif phase_state.lower() == "offline":
-        status_display = "Offline"
-    else:
-        status_display = phase_state
-        
-    # Extraer IP WAN
-    ip_wan = "N/D"
-    if wan_interfaces:
-        for k, v in wan_interfaces.items():
-            ip_val = v.get("IPv4 address")
-            if ip_val and ip_val != "N/A" and ip_val != "0.0.0.0":
-                ip_wan = ip_val
-                break
-                
-    rx_power = "N/D"
-    tx_power = "N/D"
-    
-    if signal_data.get("onu_signal_1490") and signal_data.get("onu_signal_1490") != "-":
-        rx_power = signal_data.get("onu_signal_1490")
-    elif optical_status.get("ONU Rx") and optical_status.get("ONU Rx") != "N/A(dBm)":
-        rx_power = optical_status.get("ONU Rx")
-        
-    if signal_data.get("onu_signal_1310") and signal_data.get("onu_signal_1310") != "-":
-        tx_power = signal_data.get("onu_signal_1310")
-    elif optical_status.get("OLT Rx") and optical_status.get("OLT Rx") != "N/A(dBm)":
-        tx_power = optical_status.get("OLT Rx")
-        
-    for p in ['rx_power', 'tx_power']:
-        val = locals()[p]
-        if val:
-            val = val.replace("(dbm)", " dBm").replace("(dBm)", " dBm").replace("(dB)", " dB")
-            if p == 'rx_power': rx_power = val
-            else: tx_power = val
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
+            raw_data = resp.read().decode('utf-8')
+            data = json.loads(raw_data)
             
-    # Extraer OLT, Tarjeta, Puerto
-    olt_name = onu_details.get("Description", "").split("descr_")[0].split("zone_")[-1] if "zone_" in onu_details.get("Description", "") else "KONNEK"
-    
-    diagnostico = {
-        "sn": sn,
-        "nombre_equipo": onu_details.get("Name", "N/D"),
-        "modelo": onu_details.get("Detected ONU type") or onu_details.get("Type") or "N/D",
-        "estado": status_display,
-        "uptime": onu_details.get("Online Duration", "N/D"),
-        "distancia": onu_details.get("ONU Distance", "N/D"),
-        "ip_wan": ip_wan,
-        "potencia_rx": rx_power,
-        "potencia_tx": tx_power,
-        "vlan": onu_details.get("Description", "").split("vlan_")[-1].split("_")[0] if "vlan_" in onu_details.get("Description", "") else "N/D"
-    }
-    
-    return jsonify({"status": "success", "diagnostico": diagnostico})
+            if not data.get("status") or "onu_details" not in data:
+                return jsonify({"status": "error", "message": data.get("error", "No se encontró el equipo en SmartOLT.")}), 404
+                
+            details = data["onu_details"]
+            
+            # Formatear potencias
+            rx_val = details.get("signal_1490")
+            tx_val = details.get("signal_1310")
+            
+            rx_power = f"{rx_val} dBm" if rx_val is not None and str(rx_val) != "-" else "N/D"
+            tx_power = f"{tx_val} dBm" if tx_val is not None and str(tx_val) != "-" else "N/D"
+            
+            # Formatear OLT y puerto PON
+            olt_name = details.get("olt_name", "N/D")
+            board = details.get("board")
+            port = details.get("port")
+            pon_port = f"T:{board} / P:{port}" if board is not None and port is not None else "N/D"
+            
+            # Estructurar diagnóstico
+            diagnostico = {
+                "sn": sn,
+                "nombre_equipo": details.get("name", "N/D"),
+                "modelo": details.get("onu_type_name", "N/D"),
+                "estado": details.get("status", "Offline"),
+                "uptime": details.get("last_status_change", "N/D"),
+                "distancia": f"{details.get('distance')} m" if details.get('distance') else "N/D",
+                "ip_wan": details.get("address") or "N/D",
+                "potencia_rx": rx_power,
+                "potencia_tx": tx_power,
+                "vlan": details.get("vlan") or "N/D",
+                "pon_port": pon_port,
+                "olt_name": olt_name
+            }
+            return jsonify({"status": "success", "diagnostico": diagnostico})
+            
+    except urllib.error.HTTPError as e:
+        try:
+            err_data = json.loads(e.read().decode('utf-8'))
+            msg = err_data.get("error", f"Error HTTP {e.code}")
+        except:
+            msg = f"Error HTTP {e.code} al consultar SmartOLT"
+        return jsonify({"status": "error", "message": msg}), e.code
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Error de conexión con SmartOLT: {str(e)}"}), 500
 
 
