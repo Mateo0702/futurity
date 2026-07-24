@@ -543,7 +543,7 @@ def buscar_completo_json():
         query = """
             SELECT contrato, nombre_cliente AS cliente, zona AS sector, 
                    telefono1, telefono2, telefono3, fecha_instalacion,
-                   total_mensual, antiguedad, numero_serie, producto, direccion
+                   total_mensual, antiguedad, numero_serie, producto, direccion, forma_pago
             FROM directorio_clientes 
             WHERE contrato LIKE %s 
                OR nombre_cliente LIKE %s 
@@ -587,7 +587,8 @@ def buscar_completo_json():
                 "total_mensual": float(row['total_mensual']) if row.get('total_mensual') is not None else None,
                 "antiguedad_fmt": format_antiguedad(row.get('antiguedad'), row.get('fecha_instalacion')),
                 "numero_serie": row.get('numero_serie') or "S/N",
-                "producto": row.get('producto') or "N/D"
+                "producto": row.get('producto') or "N/D",
+                "forma_pago": row.get('forma_pago') or "N/D"
             })
             
         return jsonify({"status": "success", "clientes": clientes})

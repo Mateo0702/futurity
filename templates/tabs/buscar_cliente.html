@@ -55,6 +55,12 @@
                         <strong style="color: #64748b; font-size: 0.78rem; font-weight: 700; display: block; margin-bottom: 4px; text-transform: uppercase;">⏳ Antigüedad</strong>
                         <span id="ficha-cliente-antiguedad" style="color: #0284c7; font-size: 1rem; font-weight: 700;">-</span>
                     </div>
+                    {% if session.get('user_role') in ['ADMIN', 'ASESOR'] %}
+                    <div style="grid-column: span 2;">
+                        <strong style="color: #64748b; font-size: 0.78rem; font-weight: 700; display: block; margin-bottom: 4px; text-transform: uppercase;">💳 Forma de Pago</strong>
+                        <span id="ficha-cliente-forma-pago" style="color: #4f46e5; font-size: 1rem; font-weight: 700;">-</span>
+                    </div>
+                    {% endif %}
                     <div style="grid-column: span 2;">
                         <strong style="color: #64748b; font-size: 0.78rem; font-weight: 700; display: block; margin-bottom: 4px; text-transform: uppercase;">📦 Paquete Contratado</strong>
                         <span id="ficha-cliente-producto" style="color: #1e293b; font-size: 0.95rem; font-weight: 700;">-</span>
@@ -282,6 +288,12 @@
             document.getElementById('ficha-cliente-nombre').innerText = cliente.cliente;
             document.getElementById('ficha-cliente-pago').innerText = cliente.total_mensual ? `$${parseFloat(cliente.total_mensual).toFixed(2)}` : 'N/D';
             document.getElementById('ficha-cliente-antiguedad').innerText = cliente.antiguedad_fmt || 'N/D';
+            
+            const formaPagoEl = document.getElementById('ficha-cliente-forma-pago');
+            if (formaPagoEl) {
+                formaPagoEl.innerText = cliente.forma_pago || 'N/D';
+            }
+
             document.getElementById('ficha-cliente-producto').innerText = cliente.producto || 'N/D';
             document.getElementById('ficha-cliente-instalacion').innerText = cliente.fecha_instalacion || 'N/D';
             document.getElementById('ficha-cliente-sn').innerText = cliente.numero_serie || 'S/N';
