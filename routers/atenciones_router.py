@@ -608,96 +608,113 @@ def diagnostico_smartolt(sn):
     import urllib.request
     import ssl
     import json
+    import concurrent.futures
     
-    api_key = "e2b23976ae0649a1a1d767915fd90002"
-    dom = "diyer.smartolt.com"
+    SMARTOLT_CREDENTIALS = [
+        {"domain": "diyer.smartolt.com", "api_key": "e2b23976ae0649a1a1d767915fd90002"},
+        {"domain": "servicablegz.smartolt.com", "api_key": "ae287af051d349a68db0aec4b11cc933"}
+    ]
     
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    
-    # Consultar get_onu_details (que es rápido, confiable y no causa timeout)
-    url = f"https://{dom}/api/onu/get_onu_details/{sn}"
-    req = urllib.request.Request(url)
-    req.add_header("X-Token", api_key)
-    req.add_header("User-Agent", "FuturityAtlas/1.0")
-    
-    try:
-        with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
-            raw_data = resp.read().decode('utf-8')
-            data = json.loads(raw_data)
-            
-            if not data.get("status") or "onu_details" not in data:
-                return jsonify({"status": "error", "message": data.get("error", "No se encontró el equipo en SmartOLT.")}), 404
-                
-            details = data["onu_details"]
-            
-            # Formatear potencias
-            rx_val = details.get("signal_1490")
-            tx_val = details.get("signal_1310")
-            
-            rx_power = f"{rx_val} dBm" if rx_val is not None and str(rx_val) != "-" else "N/D"
-            tx_power = f"{tx_val} dBm" if tx_val is not None and str(tx_val) != "-" else "N/D"
-            
-            # Formatear OLT y puerto PON
-            olt_name = details.get("olt_name", "N/D")
-            board = details.get("board")
-            port = details.get("port")
-            pon_port = f"T:{board} / P:{port}" if board is not None and port is not None else "N/D"
-            
-            # Formatear el uptime (duración desde el último cambio de estado)
-            uptime_str = "N/D"
-            last_change = details.get("last_status_change")
-            if last_change and str(last_change) not in ["None", "N/D"]:
-                try:
-                    clean_str = str(last_change).split(".")[0]
-                    dt = datetime.strptime(clean_str, "%Y-%m-%d %H:%M:%S")
-                    diff = datetime.now() - dt
-                    
-                    days = diff.days
-                    hours = diff.seconds // 3600
-                    minutes = (diff.seconds % 3600) // 60
-                    
-                    parts = []
-                    if days > 0:
-                        parts.append(f"{days}d")
-                    if hours > 0:
-                        parts.append(f"{hours}h")
-                    if minutes > 0:
-                        parts.append(f"{minutes}m")
-                        
-                    duration = " ".join(parts) if parts else "0m"
-                    date_fmt = dt.strftime("%d/%m/%Y %H:%M")
-                    uptime_str = f"{duration} ({date_fmt})"
-                except Exception as ex:
-                    print("Error parsing last_status_change:", ex)
-                    uptime_str = str(last_change)
-            
-            # Estructurar diagnóstico
-            diagnostico = {
-                "sn": sn,
-                "nombre_equipo": details.get("name", "N/D"),
-                "modelo": details.get("onu_type_name", "N/D"),
-                "estado": details.get("status", "Offline"),
-                "uptime": uptime_str,
-                "distancia": f"{details.get('distance')} m" if details.get('distance') else "N/D",
-                "ip_wan": details.get("address") or "N/D",
-                "potencia_rx": rx_power,
-                "potencia_tx": tx_power,
-                "vlan": details.get("vlan") or "N/D",
-                "pon_port": pon_port,
-                "olt_name": olt_name
-            }
-            return jsonify({"status": "success", "diagnostico": diagnostico})
-            
-    except urllib.error.HTTPError as e:
+    def check_single_smartolt(cred):
+        dom = cred["domain"]
+        api_key = cred["api_key"]
+        
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        
+        url = f"https://{dom}/api/onu/get_onu_details/{sn}"
+        req = urllib.request.Request(url)
+        req.add_header("X-Token", api_key)
+        req.add_header("User-Agent", "FuturityAtlas/1.0")
+        
         try:
-            err_data = json.loads(e.read().decode('utf-8'))
-            msg = err_data.get("error", f"Error HTTP {e.code}")
-        except:
-            msg = f"Error HTTP {e.code} al consultar SmartOLT"
-        return jsonify({"status": "error", "message": msg}), e.code
-    except Exception as e:
-        return jsonify({"status": "error", "message": f"Error de conexión con SmartOLT: {str(e)}"}), 500
+            with urllib.request.urlopen(req, timeout=4, context=ctx) as resp:
+                if resp.status == 200:
+                    raw = resp.read().decode('utf-8')
+                    data = json.loads(raw)
+                    if data.get("status") == True and "onu_details" in data:
+                        return {"domain": dom, "data": data}
+        except Exception:
+            pass
+        return None
+
+    # Consulta en paralelo
+    found_result = None
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(SMARTOLT_CREDENTIALS)) as executor:
+        futures = [executor.submit(check_single_smartolt, cred) for cred in SMARTOLT_CREDENTIALS]
+        for future in concurrent.futures.as_completed(futures):
+            res = future.result()
+            if res is not None:
+                found_result = res
+                # Cancela el resto de hilos de ser posible
+                break
+                
+    if not found_result:
+        return jsonify({
+            "status": "error", 
+            "message": f"El equipo con serie {sn} no se encuentra registrado en ninguna central de SmartOLT activa."
+        }), 404
+        
+    data = found_result["data"]
+    details = data["onu_details"]
+    
+    # Formatear potencias
+    rx_val = details.get("signal_1490")
+    tx_val = details.get("signal_1310")
+    
+    rx_power = f"{rx_val} dBm" if rx_val is not None and str(rx_val) != "-" else "N/D"
+    tx_power = f"{tx_val} dBm" if tx_val is not None and str(tx_val) != "-" else "N/D"
+    
+    # Formatear OLT y puerto PON
+    olt_name = details.get("olt_name", "N/D")
+    board = details.get("board")
+    port = details.get("port")
+    pon_port = f"T:{board} / P:{port}" if board is not None and port is not None else "N/D"
+    
+    # Formatear el uptime (duración desde el último cambio de estado)
+    uptime_str = "N/D"
+    last_change = details.get("last_status_change")
+    if last_change and str(last_change) not in ["None", "N/D"]:
+        try:
+            clean_str = str(last_change).split(".")[0]
+            dt = datetime.strptime(clean_str, "%Y-%m-%d %H:%M:%S")
+            diff = datetime.now() - dt
+            
+            days = diff.days
+            hours = diff.seconds // 3600
+            minutes = (diff.seconds % 3600) // 60
+            
+            parts = []
+            if days > 0:
+                parts.append(f"{days}d")
+            if hours > 0:
+                parts.append(f"{hours}h")
+            if minutes > 0:
+                parts.append(f"{minutes}m")
+                
+            duration = " ".join(parts) if parts else "0m"
+            date_fmt = dt.strftime("%d/%m/%Y %H:%M")
+            uptime_str = f"{duration} ({date_fmt})"
+        except Exception as ex:
+            print("Error parsing last_status_change:", ex)
+            uptime_str = str(last_change)
+    
+    # Estructurar diagnóstico
+    diagnostico = {
+        "sn": sn,
+        "nombre_equipo": details.get("name", "N/D"),
+        "modelo": details.get("onu_type_name", "N/D"),
+        "estado": details.get("status", "Offline"),
+        "uptime": uptime_str,
+        "distancia": f"{details.get('distance')} m" if details.get('distance') else "N/D",
+        "ip_wan": details.get("address") or "N/D",
+        "potencia_rx": rx_power,
+        "potencia_tx": tx_power,
+        "vlan": details.get("vlan") or "N/D",
+        "pon_port": pon_port,
+        "olt_name": olt_name
+    }
+    return jsonify({"status": "success", "diagnostico": diagnostico})
 
 
