@@ -209,7 +209,8 @@ def login_por_token():
         # Redireccionar según el rol
         rol = usuario.get('rol', 'ASESOR')
         if rol == 'TECNICO':
-            return redirect(url_for('tecnico.panel_tecnico'))
+            nombre_url = usuario['nombre'].replace(' ', '_')
+            return redirect(url_for('tecnico.panel_tecnico', nombre_tecnico=nombre_url))
         else:
             return redirect(url_for('dashboard'))
             
