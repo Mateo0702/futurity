@@ -393,6 +393,7 @@ def metricas_globales():
                               AND solucion_tecnico NOT LIKE '%GENERAR CAMBIO DE FO%'
                               AND solucion_tecnico NOT LIKE '%SIN RESPUESTA%'
                               AND solucion_tecnico NOT LIKE '%NO SE PUEDE REALIZAR VISITA%'
+                              AND solucion_tecnico NOT LIKE '%NOC%'
                           )) THEN 1 ELSE 0 END) as visitas_efectivas,
                 AVG(CASE WHEN estado = 'FINALIZADA' AND hora_inicio_visita IS NOT NULL AND hora_fin_visita IS NOT NULL 
                          THEN TIMESTAMPDIFF(MINUTE, hora_inicio_visita, hora_fin_visita) ELSE NULL END) as tiempo_promedio
@@ -894,7 +895,9 @@ def reporte_pdf():
                 
                 sol_raw = (v.get('solucion_tecnico') or '').upper()
                 estado_lbl = v['estado']
-                if 'SOLUCIÓN PARCIAL' in sol_raw or 'SOLUCION PARCIAL' in sol_raw or 'GESTIONAR ARREGLO' in sol_raw:
+                if 'NOC' in sol_raw:
+                    estado_lbl = 'Ticket NOC'
+                elif 'SOLUCIÓN PARCIAL' in sol_raw or 'SOLUCION PARCIAL' in sol_raw or 'GESTIONAR ARREGLO' in sol_raw:
                     estado_lbl = 'Solución Parcial'
                 elif estado_lbl == 'FINALIZADA': 
                     estado_lbl = 'Efectiva'
@@ -3153,6 +3156,7 @@ def metricas_tiempos():
                               AND solucion_tecnico NOT LIKE '%GENERAR CAMBIO DE FO%'
                               AND solucion_tecnico NOT LIKE '%SIN RESPUESTA%'
                               AND solucion_tecnico NOT LIKE '%NO SE PUEDE REALIZAR VISITA%'
+                              AND solucion_tecnico NOT LIKE '%NOC%'
                           )) THEN 1 ELSE 0 END) as total_finalizadas,
                 AVG(CASE WHEN estado = 'FINALIZADA' AND hora_en_ruta IS NOT NULL AND hora_inicio_visita IS NOT NULL 
                          THEN TIMESTAMPDIFF(MINUTE, hora_en_ruta, hora_inicio_visita) ELSE NULL END) as avg_traslado,
@@ -3194,6 +3198,7 @@ def metricas_tiempos():
                                   AND solucion_tecnico NOT LIKE '%GENERAR CAMBIO DE FO%'
                                   AND solucion_tecnico NOT LIKE '%SIN RESPUESTA%'
                                   AND solucion_tecnico NOT LIKE '%NO SE PUEDE REALIZAR VISITA%'
+                                  AND solucion_tecnico NOT LIKE '%NOC%'
                               )) THEN 1 ELSE 0 END) as finalizadas,
                     AVG(CASE WHEN estado = 'FINALIZADA' AND hora_en_ruta IS NOT NULL AND hora_inicio_visita IS NOT NULL 
                              THEN TIMESTAMPDIFF(MINUTE, hora_en_ruta, hora_inicio_visita) ELSE NULL END) as avg_traslado,
