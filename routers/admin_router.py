@@ -385,7 +385,15 @@ def metricas_globales():
         query_kpis = f"""
             SELECT 
                 COUNT(*) as total_visitas,
-                SUM(CASE WHEN estado IN ('FINALIZADA', 'SOLVENTADA_REMOTA') THEN 1 ELSE 0 END) as visitas_efectivas,
+                SUM(CASE WHEN estado IN ('FINALIZADA', 'SOLVENTADA_REMOTA') 
+                          AND (solucion_tecnico IS NULL OR (
+                              solucion_tecnico NOT LIKE '%GESTIONAR ARREGLO%'
+                              AND solucion_tecnico NOT LIKE '%SOLUCIÓN PARCIAL%'
+                              AND solucion_tecnico NOT LIKE '%SOLUCION PARCIAL%'
+                              AND solucion_tecnico NOT LIKE '%GENERAR CAMBIO DE FO%'
+                              AND solucion_tecnico NOT LIKE '%SIN RESPUESTA%'
+                              AND solucion_tecnico NOT LIKE '%NO SE PUEDE REALIZAR VISITA%'
+                          )) THEN 1 ELSE 0 END) as visitas_efectivas,
                 AVG(CASE WHEN estado = 'FINALIZADA' AND hora_inicio_visita IS NOT NULL AND hora_fin_visita IS NOT NULL 
                          THEN TIMESTAMPDIFF(MINUTE, hora_inicio_visita, hora_fin_visita) ELSE NULL END) as tiempo_promedio
             FROM visitas_tecnicas
@@ -884,9 +892,14 @@ def reporte_pdf():
                 f_val = v['fecha_programada']
                 f_str = f_val.strftime('%d/%m/%Y') if isinstance(f_val, (datetime, date)) else str(f_val)
                 
+                sol_raw = (v.get('solucion_tecnico') or '').upper()
                 estado_lbl = v['estado']
-                if estado_lbl == 'FINALIZADA': estado_lbl = 'Efectiva'
-                elif estado_lbl == 'SOLVENTADA_REMOTA': estado_lbl = 'Solv. Remota'
+                if 'SOLUCIÓN PARCIAL' in sol_raw or 'SOLUCION PARCIAL' in sol_raw or 'GESTIONAR ARREGLO' in sol_raw:
+                    estado_lbl = 'Solución Parcial'
+                elif estado_lbl == 'FINALIZADA': 
+                    estado_lbl = 'Efectiva'
+                elif estado_lbl == 'SOLVENTADA_REMOTA': 
+                    estado_lbl = 'Solv. Remota'
                 
                 tech_lbl = v['tecnico_principal'] or 'Sin asignar'
                 if v['tecnico_apoyo']:
@@ -3132,7 +3145,15 @@ def metricas_tiempos():
         query_kpis = f"""
             SELECT 
                 COUNT(*) as total_asignadas,
-                SUM(CASE WHEN estado IN ('FINALIZADA', 'SOLVENTADA_REMOTA') THEN 1 ELSE 0 END) as total_finalizadas,
+                SUM(CASE WHEN estado IN ('FINALIZADA', 'SOLVENTADA_REMOTA') 
+                          AND (solucion_tecnico IS NULL OR (
+                              solucion_tecnico NOT LIKE '%GESTIONAR ARREGLO%'
+                              AND solucion_tecnico NOT LIKE '%SOLUCIÓN PARCIAL%'
+                              AND solucion_tecnico NOT LIKE '%SOLUCION PARCIAL%'
+                              AND solucion_tecnico NOT LIKE '%GENERAR CAMBIO DE FO%'
+                              AND solucion_tecnico NOT LIKE '%SIN RESPUESTA%'
+                              AND solucion_tecnico NOT LIKE '%NO SE PUEDE REALIZAR VISITA%'
+                          )) THEN 1 ELSE 0 END) as total_finalizadas,
                 AVG(CASE WHEN estado = 'FINALIZADA' AND hora_en_ruta IS NOT NULL AND hora_inicio_visita IS NOT NULL 
                          THEN TIMESTAMPDIFF(MINUTE, hora_en_ruta, hora_inicio_visita) ELSE NULL END) as avg_traslado,
                 AVG(CASE WHEN estado = 'FINALIZADA' AND hora_inicio_visita IS NOT NULL AND hora_fin_visita IS NOT NULL 
@@ -3165,7 +3186,15 @@ def metricas_tiempos():
                 SELECT 
                     tecnico_principal AS tecnico,
                     COUNT(*) as asignadas,
-                    SUM(CASE WHEN estado IN ('FINALIZADA', 'SOLVENTADA_REMOTA') THEN 1 ELSE 0 END) as finalizadas,
+                    SUM(CASE WHEN estado IN ('FINALIZADA', 'SOLVENTADA_REMOTA') 
+                              AND (solucion_tecnico IS NULL OR (
+                                  solucion_tecnico NOT LIKE '%GESTIONAR ARREGLO%'
+                                  AND solucion_tecnico NOT LIKE '%SOLUCIÓN PARCIAL%'
+                                  AND solucion_tecnico NOT LIKE '%SOLUCION PARCIAL%'
+                                  AND solucion_tecnico NOT LIKE '%GENERAR CAMBIO DE FO%'
+                                  AND solucion_tecnico NOT LIKE '%SIN RESPUESTA%'
+                                  AND solucion_tecnico NOT LIKE '%NO SE PUEDE REALIZAR VISITA%'
+                              )) THEN 1 ELSE 0 END) as finalizadas,
                     AVG(CASE WHEN estado = 'FINALIZADA' AND hora_en_ruta IS NOT NULL AND hora_inicio_visita IS NOT NULL 
                              THEN TIMESTAMPDIFF(MINUTE, hora_en_ruta, hora_inicio_visita) ELSE NULL END) as avg_traslado,
                     AVG(CASE WHEN estado = 'FINALIZADA' AND hora_inicio_visita IS NOT NULL AND hora_fin_visita IS NOT NULL 

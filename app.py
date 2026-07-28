@@ -767,7 +767,7 @@ def obtener_color_reporte(visita):
         return 'fila-naranja'
     
     # 4. Morado Claro (Solución Parcial)
-    if 'SOLUCIÓN PARCIAL' in solucion:
+    if 'SOLUCIÓN PARCIAL' in solucion or 'SOLUCION PARCIAL' in solucion or 'GESTIONAR ARREGLO' in solucion:
         return 'fila-morada'
     
     # 5. Amarillo (Ticket NOC)
