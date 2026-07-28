@@ -1226,6 +1226,8 @@ def preview_reporte_calidad():
                       'GENERAR ARREGLO DE INSTALACIÓN',
                       'GESTIONAR ARREGLO DE INSTALACIÓN'
                   )
+                  AND solucion_tecnico NOT LIKE '%NOC%'
+                  AND solucion_tecnico NOT LIKE '%PARCIAL%'
                   AND es_instalacion = %s
                 ORDER BY COALESCE(DATE(hora_fin_visita), fecha_programada) ASC, hora_fin_visita ASC
             """
@@ -1270,6 +1272,8 @@ def preview_reporte_calidad():
                       'GENERAR ARREGLO DE INSTALACIÓN',
                       'GESTIONAR ARREGLO DE INSTALACIÓN'
                   )
+                  AND solucion_tecnico NOT LIKE '%NOC%'
+                  AND solucion_tecnico NOT LIKE '%PARCIAL%'
                   AND es_instalacion = %s
                 ORDER BY hora_fin_visita ASC
             """
@@ -1335,6 +1339,8 @@ def download_excel_reporte_calidad():
                       'GENERAR ARREGLO DE INSTALACIÓN',
                       'GESTIONAR ARREGLO DE INSTALACIÓN'
                   )
+                  AND solucion_tecnico NOT LIKE '%NOC%'
+                  AND solucion_tecnico NOT LIKE '%PARCIAL%'
                   AND es_instalacion = %s
                 ORDER BY COALESCE(DATE(hora_fin_visita), fecha_programada) ASC, hora_fin_visita ASC
             """
@@ -1365,6 +1371,8 @@ def download_excel_reporte_calidad():
                       'GENERAR ARREGLO DE INSTALACIÓN',
                       'GESTIONAR ARREGLO DE INSTALACIÓN'
                   )
+                  AND solucion_tecnico NOT LIKE '%NOC%'
+                  AND solucion_tecnico NOT LIKE '%PARCIAL%'
                   AND es_instalacion = %s
                 ORDER BY hora_fin_visita ASC
             """
