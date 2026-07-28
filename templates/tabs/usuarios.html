@@ -1048,7 +1048,10 @@
         form.reset();
         
         // Poner la fecha de hoy por defecto
-        const hoy = new Date().toISOString().split('T')[0];
+        const d = new Date();
+        const offset = d.getTimezoneOffset();
+        const dLocal = new Date(d.getTime() - (offset*60*1000));
+        const hoy = dLocal.toISOString().split('T')[0];
         document.getElementById('rec-fecha').value = hoy;
         
         // Cargar y poblar técnicos

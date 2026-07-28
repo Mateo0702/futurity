@@ -1026,7 +1026,10 @@
 
     // --- LÓGICA DE CARGA MASIVA DE ATENCIONES ---
     function abrirModalCargaMasivaAtenciones() {
-        const today = new Date().toISOString().split('T')[0];
+        const hoy = new Date();
+        const offset = hoy.getTimezoneOffset();
+        const hoyLocal = new Date(hoy.getTime() - (offset*60*1000));
+        const today = hoyLocal.toISOString().split('T')[0];
         document.getElementById('masivo_fecha').value = today;
         document.getElementById('masivo_contratos').value = '';
         document.getElementById('masivo_motivo').value = 'VALIDACIÓN DE SC';
