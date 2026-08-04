@@ -389,12 +389,25 @@
     }
 
     function actualizarMapaRegistro(lat, lon, zoom = 16) {
+        // Validar que las coordenadas sean números válidos y no contengan "None" u otros valores incorrectos
+        const parsedLat = parseFloat(lat);
+        const parsedLon = parseFloat(lon);
+        if (isNaN(parsedLat) || isNaN(parsedLon)) {
+            console.warn("actualizarMapaRegistro llamada con coordenadas inválidas:", lat, lon);
+            return;
+        }
+
         if (!mapaRegistro) {
             inicializarMapaRegistro();
         }
         if (mapaRegistro && marcadorRegistro) {
-            marcadorRegistro.setLatLng([lat, lon]);
-            mapaRegistro.setView([lat, lon], zoom);
+            marcadorRegistro.setLatLng([parsedLat, parsedLon]);
+            mapaRegistro.setView([parsedLat, parsedLon], zoom);
+            
+            // Forzar actualización de tamaño del mapa para evitar que se quede en gris/blanco
+            setTimeout(() => {
+                mapaRegistro.invalidateSize();
+            }, 100);
         }
     }
 
@@ -499,16 +512,19 @@
             const lat = option.getAttribute('data-lat');
             const lon = option.getAttribute('data-lon');
             
-            if (lat && lon) {
-                inputLat.value = lat;
-                inputLon.value = lon;
-                console.log(`Coordenadas auto-completadas para el sector: ${lat}, ${lon}`);
+            const parsedLat = parseFloat(lat);
+            const parsedLon = parseFloat(lon);
+            
+            if (lat && lon && lat !== 'None' && lon !== 'None' && !isNaN(parsedLat) && !isNaN(parsedLon)) {
+                inputLat.value = parsedLat.toFixed(6);
+                inputLon.value = parsedLon.toFixed(6);
+                console.log(`Coordenadas auto-completadas para el sector: ${parsedLat}, ${parsedLon}`);
                 
                 // Ocultar recomendaciones anteriores por si cambió el sector
                 document.getElementById('contenedor-recomendaciones-tecnicos').style.display = 'none';
                 
                 // Actualizar mapa y marcador con zoom intermedio (15) para sectores
-                actualizarMapaRegistro(parseFloat(lat), parseFloat(lon), 15);
+                actualizarMapaRegistro(parsedLat, parsedLon, 15);
             } else {
                 inputLat.value = '';
                 inputLon.value = '';

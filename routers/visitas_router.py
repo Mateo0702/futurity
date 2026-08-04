@@ -318,8 +318,12 @@ def cancelar_visita(id_visita):
         flash('No tienes permiso para cancelar visitas.', 'danger')
         return redirect(url_for('dashboard'))
     
-    estado_cancelacion = request.form.get('estado_cancelacion') # CANCELADA o SOLVENTADA_REMOTA
+    estado_cancelacion = request.form.get('estado_cancelacion')
     motivo = request.form.get('motivo')
+    
+    if estado_cancelacion == 'SOLVENTADA_OTRO_DEP':
+        estado_cancelacion = 'SOLVENTADA_REMOTA'
+        motivo = f"SOLVENTADO POR OTRO DEPARTAMENTO. {motivo}" if motivo else "SOLVENTADO POR OTRO DEPARTAMENTO"
     
     conexion = get_db_connection()
     cursor = conexion.cursor()
