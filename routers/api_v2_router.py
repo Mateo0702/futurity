@@ -217,7 +217,6 @@ def api_v2_get_visitas():
                 v['hora_fin_visita'] = str(v['hora_fin_visita'])
             if v.get('total_mensual'):
                 v['total_mensual'] = float(v['total_mensual'])
-            v['antiguedad_fmt'] = format_antiguedad(v.get('antiguedad_meses'), v.get('fecha_instalacion'))
 
         cursor.execute("""
             SELECT estado, COUNT(*) as total 
