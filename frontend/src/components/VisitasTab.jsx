@@ -41,6 +41,37 @@ function VisitasTab({ token, user }) {
     observacionCallcenter: 'Coordinación previa de revisión técnica. Trabajo a realizar: CAMBIO DE FO'
   });
 
+  // Action states for inline forms & edit modal
+  const [activeActionForm, setActiveActionForm] = useState({}); // { [idVisita]: 'reagendar' | 'reasignar' | 'cancelar' | null }
+  const [formReagendar, setFormReagendar] = useState({}); // { [id]: { fecha: '', prioridad: 'MEDIA', observacion: '' } }
+  const [formReasignar, setFormReasignar] = useState({}); // { [id]: { tecnico: '', apoyo: '' } }
+  const [formCancelar, setFormCancelar] = useState({}); // { [id]: { motivo: '', estado: 'CANCELADA' } }
+
+  const [modalEditar, setModalEditar] = useState({
+    isOpen: false,
+    idVisita: '',
+    cliente: '',
+    contrato: '',
+    telefonos: '',
+    sector: '',
+    direccion: '',
+    latitud: '',
+    longitud: '',
+    fechaProgramada: '',
+    preferenciaHoraria: '',
+    servicio: '',
+    velocidadMbps: '',
+    problema: '',
+    observacionCallcenter: '',
+    infoCaja: '',
+    infoHilo: '',
+    infoIp: '',
+    infoVlan: '',
+    infoUsr: '',
+    infoPas: '',
+    estado: 'PENDIENTE'
+  });
+
   // Initial load & filter effect + auto-refresh every 30s
   useEffect(() => {
     fetchVisitas();
@@ -143,6 +174,176 @@ function VisitasTab({ token, user }) {
         fetchVisitas();
       } else {
         alert("Error al agendar: " + data.message);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error al conectar con el servidor.");
+    }
+  };
+
+  const handleReagendar = async (idVisita) => {
+    const data = formReagendar[idVisita];
+    if (!data || !data.fecha) {
+      alert("Por favor selecciona una fecha válida.");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/visitas/reagendar/${idVisita}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          nueva_fecha: data.fecha,
+          nueva_prioridad: data.prioridad || 'MEDIA',
+          observacion_reagendado: data.observacion || ''
+        })
+      });
+      const resData = await res.json();
+      if (resData.status === 'success') {
+        alert("¡Visita reagendada exitosamente!");
+        setActiveActionForm(prev => ({ ...prev, [idVisita]: null }));
+        fetchVisitas();
+      } else {
+        alert("Error al reagendar: " + (resData.message || ''));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error de conexión.");
+    }
+  };
+
+  const handleReasignar = async (idVisita) => {
+    const data = formReasignar[idVisita];
+    if (!data || !data.tecnico) {
+      alert("Por favor selecciona al menos el técnico principal.");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/visitas/${idVisita}/reasignar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          tecnico_principal: data.tecnico,
+          tecnico_apoyo: data.apoyo || ''
+        })
+      });
+      const resData = await res.json();
+      if (resData.status === 'success') {
+        alert("¡Técnicos actualizados exitosamente!");
+        setActiveActionForm(prev => ({ ...prev, [idVisita]: null }));
+        fetchVisitas();
+      } else {
+        alert("Error al reasignar: " + (resData.message || ''));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error de conexión.");
+    }
+  };
+
+  const handleCancelar = async (idVisita) => {
+    const data = formCancelar[idVisita];
+    if (!data || !data.motivo) {
+      alert("Por favor escribe el motivo.");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/visitas/${idVisita}/cancelar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          motivo: data.motivo,
+          estado_cancelacion: data.estado || 'CANCELADA'
+        })
+      });
+      const resData = await res.json();
+      if (resData.status === 'success') {
+        alert("¡Visita cerrada/cancelada exitosamente!");
+        setActiveActionForm(prev => ({ ...prev, [idVisita]: null }));
+        fetchVisitas();
+      } else {
+        alert("Error al cerrar: " + (resData.message || ''));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error de conexión.");
+    }
+  };
+
+  const abrirModalEditar = (v) => {
+    let fecha = '';
+    if (v.fecha_programada) {
+      fecha = v.fecha_programada.substring(0, 10);
+    }
+    setModalEditar({
+      isOpen: true,
+      idVisita: v.id_visita,
+      cliente: v.cliente || '',
+      contrato: v.contrato || '',
+      telefonos: v.telefonos || '',
+      sector: v.sector || '',
+      direccion: v.direccion || '',
+      latitud: v.latitud || '',
+      longitud: v.longitud || '',
+      fechaProgramada: fecha,
+      preferenciaHoraria: v.preferencia_horaria || '',
+      servicio: v.servicio || '',
+      velocidadMbps: v.velocidad_mbps || '',
+      problema: v.problema || '',
+      observacionCallcenter: v.observacion_callcenter || '',
+      infoCaja: v.info_caja || '',
+      infoHilo: v.info_hilo || '',
+      infoIp: v.info_ip || '',
+      infoVlan: v.info_vlan || '',
+      infoUsr: v.info_usr || '',
+      infoPas: v.info_pas || '',
+      estado: v.estado || 'PENDIENTE'
+    });
+  };
+
+  const handleGuardarEditar = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`/api/admin/visitas/${modalEditar.idVisita}/editar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          cliente: modalEditar.cliente,
+          contrato: modalEditar.contrato,
+          telefonos: modalEditar.telefonos,
+          sector: modalEditar.sector,
+          direccion: modalEditar.direccion,
+          latitud: modalEditar.latitud,
+          longitud: modalEditar.longitud,
+          fecha_programada: modalEditar.fechaProgramada,
+          preferencia_horaria: modalEditar.preferenciaHoraria,
+          servicio: modalEditar.servicio,
+          velocidad_mbps: modalEditar.velocidadMbps,
+          problema: modalEditar.problema,
+          observacion_callcenter: modalEditar.observacionCallcenter,
+          info_caja: modalEditar.infoCaja,
+          info_hilo: modalEditar.infoHilo,
+          info_ip: modalEditar.infoIp,
+          info_vlan: modalEditar.infoVlan,
+          info_usr: modalEditar.infoUsr,
+          info_pas: modalEditar.infoPas,
+          estado: modalEditar.estado
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'success' || data.status === 'ok') {
+        alert("¡Visita modificada exitosamente!");
+        setModalEditar(prev => ({ ...prev, isOpen: false }));
+        fetchVisitas();
+      } else {
+        alert("Error al guardar: " + data.message);
       }
     } catch (err) {
       console.error(err);
@@ -862,6 +1063,191 @@ function VisitasTab({ token, user }) {
 
                                   </div>
                                 )}
+
+                                {/* Botones de Acción (Editar, Reagendar, Reasignar, Cancelar) */}
+                                {(v.estado === 'PENDIENTE' || v.estado === 'REAGENDADA' || v.estado === 'EN_RUTA') && (
+                                  <div style={{ marginTop: '20px', borderTop: '1px solid var(--border-color)', paddingTop: '15px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    
+                                    {/* Botones de Selección */}
+                                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                                      {(v.estado === 'PENDIENTE' || v.estado === 'EN_RUTA') && (
+                                        <button 
+                                          type="button" 
+                                          onClick={() => abrirModalEditar(v)}
+                                          style={{ background: '#0f172a', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                                        >
+                                          <i className="fa-solid fa-pen-to-square"></i> Editar Visita
+                                        </button>
+                                      )}
+
+                                      {(v.estado === 'PENDIENTE' || v.estado === 'REAGENDADA') && (
+                                        <>
+                                          <button 
+                                            type="button" 
+                                            onClick={() => setActiveActionForm(prev => ({ ...prev, [v.id_visita]: activeActionForm[v.id_visita] === 'cancelar' ? null : 'cancelar' }))}
+                                            style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 'bold', cursor: 'pointer' }}
+                                          >
+                                            Terminar / Cancelar
+                                          </button>
+                                          
+                                          <button 
+                                            type="button" 
+                                            onClick={() => setActiveActionForm(prev => ({ ...prev, [v.id_visita]: activeActionForm[v.id_visita] === 'reagendar' ? null : 'reagendar' }))}
+                                            style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 'bold', cursor: 'pointer' }}
+                                          >
+                                            {activeArea === 'INSTALACIONES' ? 'Reagendar Instalación' : 'Reagendar Visita'}
+                                          </button>
+
+                                          <button 
+                                            type="button" 
+                                            onClick={() => setActiveActionForm(prev => ({ ...prev, [v.id_visita]: activeActionForm[v.id_visita] === 'reasignar' ? null : 'reasignar' }))}
+                                            style={{ background: '#6366f1', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 'bold', cursor: 'pointer' }}
+                                          >
+                                            Cambiar Técnicos
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+
+                                    {/* Formulario Reagendar */}
+                                    {activeActionForm[v.id_visita] === 'reagendar' && (
+                                      <div style={{ background: 'rgba(245, 158, 11, 0.05)', border: '1px solid #fcd34d', padding: '15px', borderRadius: '12px', marginTop: '10px' }}>
+                                        <div style={{ fontWeight: 'bold', color: '#d97706', marginBottom: '10px', fontSize: '0.88rem' }}>
+                                          {activeArea === 'INSTALACIONES' ? 'Reagendar Instalación' : 'Reagendar Visita'}
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '10px' }}>
+                                          <div>
+                                            <label style={{ fontSize: '0.78rem', fontWeight: 'bold', display: 'block', marginBottom: '5px', color: 'var(--text-main)' }}>Nueva Fecha:</label>
+                                            <input 
+                                              type="date" 
+                                              style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)' }}
+                                              value={formReagendar[v.id_visita]?.fecha || ''}
+                                              onChange={e => setFormReagendar(prev => ({ ...prev, [v.id_visita]: { ...prev[v.id_visita], fecha: e.target.value } }))}
+                                            />
+                                          </div>
+                                          {activeArea !== 'INSTALACIONES' && (
+                                            <div>
+                                              <label style={{ fontSize: '0.78rem', fontWeight: 'bold', display: 'block', marginBottom: '5px', color: 'var(--text-main)' }}>Prioridad:</label>
+                                              <select 
+                                                style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)' }}
+                                                value={formReagendar[v.id_visita]?.prioridad || 'MEDIA'}
+                                                onChange={e => setFormReagendar(prev => ({ ...prev, [v.id_visita]: { ...prev[v.id_visita], prioridad: e.target.value } }))}
+                                              >
+                                                <option value="ALTA">ALTA</option>
+                                                <option value="MEDIA">MEDIA</option>
+                                                <option value="BAJA">BAJA</option>
+                                              </select>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div style={{ marginBottom: '10px' }}>
+                                          <label style={{ fontSize: '0.78rem', fontWeight: 'bold', display: 'block', marginBottom: '5px', color: 'var(--text-main)' }}>Motivo del cambio:</label>
+                                          <textarea 
+                                            rows="2"
+                                            placeholder="Ej: Cliente no estaba en casa / Pidió reagendar"
+                                            style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                                            value={formReagendar[v.id_visita]?.observacion || ''}
+                                            onChange={e => setFormReagendar(prev => ({ ...prev, [v.id_visita]: { ...prev[v.id_visita], observacion: e.target.value } }))}
+                                          />
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                                          <button 
+                                            type="button" 
+                                            onClick={() => handleReagendar(v.id_visita)}
+                                            style={{ background: '#d97706', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+                                          >
+                                            Confirmar Reagendamiento
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Formulario Reasignar (Cambiar Técnicos) */}
+                                    {activeActionForm[v.id_visita] === 'reasignar' && (
+                                      <div style={{ background: 'rgba(99, 102, 241, 0.05)', border: '1px solid #c7d2fe', padding: '15px', borderRadius: '12px', marginTop: '10px' }}>
+                                        <div style={{ fontWeight: 'bold', color: '#4f46e5', marginBottom: '10px', fontSize: '0.88rem' }}>Cambiar Técnicos Asignados</div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '12px' }}>
+                                          <div>
+                                            <label style={{ fontSize: '0.78rem', fontWeight: 'bold', display: 'block', marginBottom: '5px', color: 'var(--text-main)' }}>Técnico Principal:</label>
+                                            <select 
+                                              style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)' }}
+                                              value={formReasignar[v.id_visita]?.tecnico || v.tecnico_principal || ''}
+                                              onChange={e => setFormReasignar(prev => ({ ...prev, [v.id_visita]: { ...prev[v.id_visita], tecnico: e.target.value } }))}
+                                            >
+                                              <option value="">-- Selecciona Técnico --</option>
+                                              {tecnicos.map(t => (
+                                                <option key={t.id_tecnico} value={t.nombre}>{t.nombre}</option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                          <div>
+                                            <label style={{ fontSize: '0.78rem', fontWeight: 'bold', display: 'block', marginBottom: '5px', color: 'var(--text-main)' }}>Apoyo (Cuadrilla):</label>
+                                            <select 
+                                              style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)' }}
+                                              value={formReasignar[v.id_visita]?.apoyo || v.tecnico_apoyo || ''}
+                                              onChange={e => setFormReasignar(prev => ({ ...prev, [v.id_visita]: { ...prev[v.id_visita], apoyo: e.target.value } }))}
+                                            >
+                                              <option value="">-- Sin Apoyo --</option>
+                                              {tecnicos.map(t => (
+                                                <option key={t.id_tecnico} value={t.nombre}>{t.nombre}</option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                          <button 
+                                            type="button" 
+                                            onClick={() => handleReasignar(v.id_visita)}
+                                            style={{ background: '#4f46e5', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+                                          >
+                                            Actualizar Técnicos
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Formulario Terminar / Cancelar */}
+                                    {activeActionForm[v.id_visita] === 'cancelar' && (
+                                      <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid #fca5a5', padding: '15px', borderRadius: '12px', marginTop: '10px' }}>
+                                        <div style={{ fontWeight: 'bold', color: '#b91c1c', marginBottom: '10px', fontSize: '0.88rem' }}>Terminar / Cancelar Visita</div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '12px' }}>
+                                          <div>
+                                            <label style={{ fontSize: '0.78rem', fontWeight: 'bold', display: 'block', marginBottom: '5px', color: 'var(--text-main)' }}>Motivo / Resolución:</label>
+                                            <input 
+                                              type="text" 
+                                              placeholder="Ej: Se solventó remotamente / Cliente cancela"
+                                              style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                                              value={formCancelar[v.id_visita]?.motivo || ''}
+                                              onChange={e => setFormCancelar(prev => ({ ...prev, [v.id_visita]: { ...prev[v.id_visita], motivo: e.target.value } }))}
+                                            />
+                                          </div>
+                                          <div>
+                                            <label style={{ fontSize: '0.78rem', fontWeight: 'bold', display: 'block', marginBottom: '5px', color: 'var(--text-main)' }}>Estado del Cierre:</label>
+                                            <select 
+                                              style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)' }}
+                                              value={formCancelar[v.id_visita]?.estado || 'CANCELADA'}
+                                              onChange={e => setFormCancelar(prev => ({ ...prev, [v.id_visita]: { ...prev[v.id_visita], estado: e.target.value } }))}
+                                            >
+                                              <option value="CANCELADA">Cliente cancela visita</option>
+                                              <option value="SOLVENTADA_REMOTA">Solventado desde Call Center</option>
+                                              <option value="SOLVENTADA_OTRO_DEP">Solventado por otro departamento</option>
+                                            </select>
+                                          </div>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                          <button 
+                                            type="button" 
+                                            onClick={() => handleCancelar(v.id_visita)}
+                                            style={{ background: '#b91c1c', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+                                          >
+                                            Confirmar Cierre de Visita
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -967,6 +1353,239 @@ function VisitasTab({ token, user }) {
                   style={{ padding: '10px 18px', border: 'none', borderRadius: '8px', background: '#ea580c', color: 'white', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
                   <i className="fa-solid fa-calendar-plus"></i> Agendar Cambio de FO
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Visita */}
+      {modalEditar.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(4px)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '20px', width: '90%', maxWidth: '650px', padding: '25px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', maxHeight: '90vh', overflowY: 'auto' }}>
+            
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '15px' }}>
+              <h3 style={{ margin: 0, color: 'var(--primary)', fontSize: '1.15rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="fa-solid fa-pen-to-square"></i> Editar Datos de Visita #VT-{modalEditar.idVisita}
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setModalEditar(prev => ({ ...prev, isOpen: false }))} 
+                style={{ background: 'none', border: 'none', fontSize: '1.5rem', color: 'var(--sidebar-text)', cursor: 'pointer' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleGuardarEditar} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              
+              {/* Form Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Nombre Cliente:</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={modalEditar.cliente} 
+                    onChange={e => setModalEditar(prev => ({ ...prev, cliente: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Contrato:</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={modalEditar.contrato} 
+                    onChange={e => setModalEditar(prev => ({ ...prev, contrato: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Teléfonos:</label>
+                  <input 
+                    type="text" 
+                    value={modalEditar.telefonos} 
+                    onChange={e => setModalEditar(prev => ({ ...prev, telefonos: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Sector / Barrio:</label>
+                  <input 
+                    type="text" 
+                    value={modalEditar.sector} 
+                    onChange={e => setModalEditar(prev => ({ ...prev, sector: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Dirección Completa:</label>
+                  <input 
+                    type="text" 
+                    value={modalEditar.direccion} 
+                    onChange={e => setModalEditar(prev => ({ ...prev, direccion: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Latitud:</label>
+                  <input 
+                    type="text" 
+                    value={modalEditar.latitud} 
+                    onChange={e => setModalEditar(prev => ({ ...prev, latitud: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Longitud:</label>
+                  <input 
+                    type="text" 
+                    value={modalEditar.longitud} 
+                    onChange={e => setModalEditar(prev => ({ ...prev, longitud: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Fecha Programada:</label>
+                  <input 
+                    type="date" 
+                    required 
+                    value={modalEditar.fechaProgramada} 
+                    onChange={e => setModalEditar(prev => ({ ...prev, fechaProgramada: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Turno / Horario:</label>
+                  <input 
+                    type="text" 
+                    value={modalEditar.preferenciaHoraria} 
+                    onChange={e => setModalEditar(prev => ({ ...prev, preferenciaHoraria: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                  />
+                </div>
+                {activeArea === 'INSTALACIONES' ? (
+                  <>
+                    <div>
+                      <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Servicio:</label>
+                      <input 
+                        type="text" 
+                        value={modalEditar.servicio} 
+                        onChange={e => setModalEditar(prev => ({ ...prev, servicio: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Velocidad (Mbps):</label>
+                      <input 
+                        type="number" 
+                        value={modalEditar.velocidadMbps} 
+                        onChange={e => setModalEditar(prev => ({ ...prev, velocidadMbps: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Problema Reportado:</label>
+                    <input 
+                      type="text" 
+                      value={modalEditar.problema} 
+                      onChange={e => setModalEditar(prev => ({ ...prev, problema: e.target.value }))}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                )}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Observación Callcenter:</label>
+                  <textarea 
+                    rows="2" 
+                    value={modalEditar.observacionCallcenter} 
+                    onChange={e => setModalEditar(prev => ({ ...prev, observacionCallcenter: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  ></textarea>
+                </div>
+              </div>
+
+              {/* Conexión (Poste/Nodo) Grid */}
+              <div style={{ background: 'var(--profile-bg)', border: '1px dashed var(--border-color)', borderRadius: '12px', padding: '15px', marginTop: '5px' }}>
+                <strong style={{ color: 'var(--text-main)', fontSize: '0.82rem', display: 'block', marginBottom: '10px' }}>🔌 Datos de Conexión (Poste / Nodo):</strong>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label style={{ fontWeight: 700, fontSize: '0.75rem', color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Caja/NAP:</label>
+                    <input 
+                      type="text" 
+                      value={modalEditar.infoCaja} 
+                      onChange={e => setModalEditar(prev => ({ ...prev, infoCaja: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box', fontSize: '0.8rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 700, fontSize: '0.75rem', color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Hilo/Puerto:</label>
+                    <input 
+                      type="text" 
+                      value={modalEditar.infoHilo} 
+                      onChange={e => setModalEditar(prev => ({ ...prev, infoHilo: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box', fontSize: '0.8rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 700, fontSize: '0.75rem', color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>IP Fija:</label>
+                    <input 
+                      type="text" 
+                      value={modalEditar.infoIp} 
+                      onChange={e => setModalEditar(prev => ({ ...prev, infoIp: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box', fontSize: '0.8rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 700, fontSize: '0.75rem', color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>VLAN:</label>
+                    <input 
+                      type="text" 
+                      value={modalEditar.infoVlan} 
+                      onChange={e => setModalEditar(prev => ({ ...prev, infoVlan: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box', fontSize: '0.8rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 700, fontSize: '0.75rem', color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>PPPoE Usr:</label>
+                    <input 
+                      type="text" 
+                      value={modalEditar.infoUsr} 
+                      onChange={e => setModalEditar(prev => ({ ...prev, infoUsr: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box', fontSize: '0.8rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 700, fontSize: '0.75rem', color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>PPPoE Pas:</label>
+                    <input 
+                      type="text" 
+                      value={modalEditar.infoPas} 
+                      onChange={e => setModalEditar(prev => ({ ...prev, infoPas: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box', fontSize: '0.8rem' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '15px', marginTop: '10px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setModalEditar(prev => ({ ...prev, isOpen: false }))} 
+                  style={{ padding: '10px 18px', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'transparent', color: 'var(--sidebar-text)', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  style={{ padding: '10px 18px', border: 'none', borderRadius: '8px', background: 'var(--primary)', color: 'white', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <i className="fa-solid fa-save"></i> Guardar Cambios
                 </button>
               </div>
             </form>
