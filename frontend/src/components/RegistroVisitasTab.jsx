@@ -55,6 +55,14 @@ function RegistroVisitasTab({ token, user, activeArea }) {
   const [showRecomendados, setShowRecomendados] = useState(false);
   const [conflictos, setConflictos] = useState([]);
   
+  // Client history modal state
+  const [modalHistorial, setModalHistorial] = useState({
+    isOpen: false,
+    loading: false,
+    cliente: '',
+    lista: []
+  });
+  
   // Map References
   const mapRef = useRef(null);
   const markerRef = useRef(null);
@@ -288,6 +296,30 @@ function RegistroVisitasTab({ token, user, activeArea }) {
       }
     } catch (e) {
       console.error("Conflict verification failed:", e);
+    }
+  };
+
+  const handleVerHistorial = async () => {
+    if (!cliente || !cliente.trim()) {
+      alert("Por favor, ingresa el nombre del cliente primero.");
+      return;
+    }
+    setModalHistorial({ isOpen: true, loading: true, cliente: cliente.trim(), lista: [] });
+    try {
+      const res = await fetch(`/api/cliente/historial/${encodeURIComponent(cliente.trim())}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        setModalHistorial(prev => ({ ...prev, loading: false, lista: data.historial || [] }));
+      } else {
+        alert("Error al cargar el historial.");
+        setModalHistorial(prev => ({ ...prev, loading: false }));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error de conexión.");
+      setModalHistorial(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -581,7 +613,18 @@ function RegistroVisitasTab({ token, user, activeArea }) {
 
             {/* Nombre del Cliente */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>Nombre del Cliente:</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ margin: 0, fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)' }}>Nombre del Cliente:</label>
+                {activeArea !== 'INSTALACIONES' && (
+                  <button
+                    type="button"
+                    onClick={handleVerHistorial}
+                    style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', color: 'var(--primary)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <i className="fa-solid fa-clock-rotate-left"></i> Ver Historial
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={cliente}
@@ -952,6 +995,108 @@ function RegistroVisitasTab({ token, user, activeArea }) {
           </button>
         </form>
       </div>
+
+      {/* Modal Historial de Reportes */}
+      {modalHistorial.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(4px)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '20px', width: '90%', maxWidth: '500px', padding: '25px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '15px' }}>
+              <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="fa-solid fa-clock-rotate-left" style={{ color: 'var(--primary)' }}></i> Historial de Reportes
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setModalHistorial(prev => ({ ...prev, isOpen: false }))} 
+                style={{ background: 'none', border: 'none', fontSize: '1.5rem', color: 'var(--sidebar-text)', cursor: 'pointer' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Body / Scroll area */}
+            <div style={{ flexGrow: 1, overflowY: 'auto', paddingRight: '4px' }}>
+              <div style={{ marginBottom: '15px', fontSize: '0.9rem', color: 'var(--sidebar-text)' }}>
+                Cliente: <strong style={{ color: 'var(--text-main)' }}>{modalHistorial.cliente}</strong>
+              </div>
+
+              {modalHistorial.loading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0', color: 'var(--sidebar-text)' }}>
+                  <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '1.5rem', marginBottom: '10px', color: 'var(--primary)' }}></i>
+                  <span>Buscando reportes de los últimos 3 meses...</span>
+                </div>
+              ) : modalHistorial.lista.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px 10px', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '12px', color: '#16a34a', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                  ✓ Cliente sin reportes en los últimos 3 meses (Excelente).
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  {modalHistorial.lista.map((visita, idx) => {
+                    const fecha = new Date(visita.fecha_programada).toLocaleDateString('es-ES');
+                    const isFinalizada = visita.estado === 'FINALIZADA';
+                    const colorEstado = isFinalizada ? '#10b981' : '#ef4444';
+
+                    return (
+                      <div 
+                        key={idx} 
+                        style={{ 
+                          backgroundColor: 'var(--profile-bg)', 
+                          padding: '14px', 
+                          borderRadius: '12px', 
+                          border: '1px solid var(--border-color)', 
+                          borderLeft: `4px solid ${colorEstado}` 
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.78rem', color: 'var(--sidebar-text)', fontWeight: 'bold' }}>📅 {fecha}</span>
+                          <span style={{ 
+                            backgroundColor: isFinalizada ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)', 
+                            color: colorEstado, 
+                            padding: '2px 8px', 
+                            borderRadius: '4px', 
+                            fontWeight: 800, 
+                            fontSize: '0.68rem',
+                            textTransform: 'uppercase'
+                          }}>
+                            {visita.estado.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                        <h6 style={{ color: 'var(--text-main)', margin: '0 0 6px 0', fontSize: '0.92rem', fontWeight: 800 }}>
+                          Problema: <span style={{ color: '#ef4444', fontWeight: 700 }}>{visita.problema}</span>
+                        </h6>
+                        <p style={{ fontSize: '0.8rem', margin: '0 0 6px 0', color: 'var(--text-main)', lineHeight: '1.4' }}>
+                          <strong>Solución:</strong> {visita.solucion_tecnico || 'Sin registrar'}
+                        </p>
+                        {visita.observacion_tecnico && (
+                          <p style={{ fontSize: '0.8rem', margin: '0 0 6px 0', color: 'var(--sidebar-text)', fontStyle: 'italic', lineHeight: '1.4' }}>
+                            <strong>Obs. Técnico:</strong> "{visita.observacion_tecnico}"
+                          </p>
+                        )}
+                        <div style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', borderTop: '1px solid var(--border-color)', paddingTop: '6px', marginTop: '6px' }}>
+                          Técnico: <strong>{visita.tecnico_principal}</strong>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '15px', marginTop: '15px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button 
+                type="button" 
+                onClick={() => setModalHistorial(prev => ({ ...prev, isOpen: false }))} 
+                style={{ padding: '8px 16px', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                Entendido
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
