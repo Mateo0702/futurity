@@ -787,6 +787,81 @@ function VisitasTab({ token, user }) {
                                     </div>
                                   </div>
                                 )}
+
+                                {/* Evidencias de Cierre (Fotos de Equipos y Firma) */}
+                                {(v.estado === 'FINALIZADA' || v.estado === 'SOLVENTADA_REMOTA') && (
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '12px' }}>
+                                    
+                                    {/* Fotos de Equipos */}
+                                    <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                      <strong style={{ fontSize: '0.8rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '8px' }}>
+                                        <i className="fa-solid fa-camera" style={{ color: 'var(--primary)' }}></i> Evidencia:
+                                      </strong>
+                                      {v.foto_equipos ? (
+                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', width: '100%' }}>
+                                          <div style={{ textAlign: 'center', flex: '1', minWidth: '80px' }}>
+                                            <img 
+                                              src={`/static/uploads/${v.foto_equipos}`} 
+                                              alt="Equipo 1"
+                                              onClick={() => window.open(`/static/uploads/${v.foto_equipos}`)}
+                                              style={{ maxHeight: '90px', maxWidth: '100%', borderRadius: '8px', border: '1px solid var(--border-color)', cursor: 'pointer', objectFit: 'cover', transition: 'transform 0.2s' }}
+                                              onMouseEnter={e => e.target.style.transform = 'scale(1.05)'}
+                                              onMouseLeave={e => e.target.style.transform = 'scale(1)'}
+                                            />
+                                            <div style={{ fontSize: '0.68rem', color: 'var(--sidebar-text)', marginTop: '4px' }}>
+                                              {v.equipos_juntos ? 'ONU / Router' : 'ONU'}
+                                            </div>
+                                          </div>
+                                          {!v.equipos_juntos && v.foto_equipos_2 && (
+                                            <div style={{ textAlign: 'center', flex: '1', minWidth: '80px' }}>
+                                              <img 
+                                                src={`/static/uploads/${v.foto_equipos_2}`} 
+                                                alt="Router"
+                                                onClick={() => window.open(`/static/uploads/${v.foto_equipos_2}`)}
+                                                style={{ maxHeight: '90px', maxWidth: '100%', borderRadius: '8px', border: '1px solid var(--border-color)', cursor: 'pointer', objectFit: 'cover', transition: 'transform 0.2s' }}
+                                                onMouseEnter={e => e.target.style.transform = 'scale(1.05)'}
+                                                onMouseLeave={e => e.target.style.transform = 'scale(1)'}
+                                              />
+                                              <div style={{ fontSize: '0.68rem', color: 'var(--sidebar-text)', marginTop: '4px' }}>Router</div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span style={{ fontSize: '0.8rem', color: 'var(--sidebar-text)', fontStyle: 'italic' }}>Sin foto</span>
+                                      )}
+                                    </div>
+
+                                    {/* Firma Cliente */}
+                                    <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                      <strong style={{ fontSize: '0.8rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '8px' }}>
+                                        <i className="fa-solid fa-signature" style={{ color: 'var(--primary)' }}></i> Firma:
+                                      </strong>
+                                      {v.firma_cliente ? (
+                                        v.firma_cliente.startsWith('SIN_FIRMA') ? (
+                                          <div style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '8px 10px', borderRadius: '8px', color: '#f59e0b', fontSize: '0.75rem', fontWeight: 600, width: '100%', boxSizing: 'border-box' }}>
+                                            <i className="fa-solid fa-circle-info" style={{ marginRight: '5px' }}></i> Sin Firma:<br />
+                                            <span style={{ fontSize: '0.7rem', fontWeight: 'normal', color: 'var(--sidebar-text)' }}>
+                                              {v.firma_cliente.replace('SIN_FIRMA:', '').trim()}
+                                            </span>
+                                          </div>
+                                        ) : (
+                                          <div style={{ textAlign: 'center', width: '100%' }}>
+                                            <img 
+                                              src={`/static/uploads/${v.firma_cliente}`} 
+                                              alt="Firma"
+                                              onClick={() => window.open(`/static/uploads/${v.firma_cliente}`)}
+                                              style={{ maxHeight: '75px', maxWidth: '100%', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'white', padding: '4px', cursor: 'pointer' }}
+                                            />
+                                            <div style={{ fontSize: '0.68rem', color: 'var(--sidebar-text)', marginTop: '4px' }}>Cliente Conforme</div>
+                                          </div>
+                                        )
+                                      ) : (
+                                        <span style={{ fontSize: '0.8rem', color: 'var(--sidebar-text)', fontStyle: 'italic' }}>Sin firma</span>
+                                      )}
+                                    </div>
+
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </td>

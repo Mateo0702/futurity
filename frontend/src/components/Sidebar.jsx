@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react';
 
 function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLogout }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    const saved = localStorage.getItem('sidebar_collapsed');
+    return saved === null ? true : saved === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('sidebar_collapsed', collapsed);
+  }, [collapsed]);
+
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('theme') === 'dark';
   });
