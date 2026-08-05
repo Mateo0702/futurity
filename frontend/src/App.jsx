@@ -69,6 +69,31 @@ function App() {
     setInitialized(true);
   }, []);
 
+  // Sincronizar el estado activeTab con la URL del navegador
+  useEffect(() => {
+    if (!initialized) return;
+    
+    const params = new URLSearchParams(window.location.search);
+    
+    if (activeTab === 'visitas') {
+      // Limpiar parámetros para la pestaña visitas (que es la principal/defecto)
+      params.delete('tab');
+      params.delete('subtab');
+      params.delete('fecha');
+    } else {
+      params.set('tab', activeTab);
+      // Solo mantener subtab y fecha si estamos en la pestaña de reportes
+      if (activeTab !== 'reportes') {
+        params.delete('subtab');
+        params.delete('fecha');
+      }
+    }
+    
+    const newSearch = params.toString();
+    const newPath = newSearch ? `?${newSearch}` : window.location.pathname;
+    window.history.replaceState(null, '', newPath);
+  }, [activeTab, initialized]);
+
   const handleLoginSuccess = (newToken, newUser) => {
     setToken(newToken);
     setUser(newUser);
