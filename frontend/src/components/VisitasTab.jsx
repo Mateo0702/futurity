@@ -19,9 +19,27 @@ function VisitasTab({ token, user }) {
   const [cantPendientesAtrasadas, setCantPendientesAtrasadas] = useState(0);
   const [ayerFecha, setAyerFecha] = useState('');
   const [recordatorios, setRecordatorios] = useState([]);
+  const [tecnicos, setTecnicos] = useState([]);
   
   // Expanded rows state (ID array)
   const [expandedRows, setExpandedRows] = useState({});
+
+  // Modal FO schedule state
+  const [modalFO, setModalFO] = useState({
+    isOpen: false,
+    idVisitaOrigen: '',
+    contrato: '',
+    cliente: '',
+    sector: '',
+    direccion: '',
+    telefonos: '',
+    empresa: 'SERVICABLE',
+    servicio: 'INTERNET_GPON',
+    fechaProgramada: '',
+    preferenciaHoraria: 'COORDINAR',
+    tecnicoPrincipal: 'NO TECNICO',
+    observacionCallcenter: 'Coordinación previa de revisión técnica. Trabajo a realizar: CAMBIO DE FO'
+  });
 
   // Initial load & filter effect + auto-refresh every 30s
   useEffect(() => {
@@ -53,6 +71,82 @@ function VisitasTab({ token, user }) {
       console.error("Error al cargar visitas del día:", e);
     } finally {
       if (!isBackground) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const fetchTecnicos = async () => {
+      try {
+        const res = await fetch('/api/v2/tecnicos', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          setTecnicos(data.tecnicos || []);
+        }
+      } catch (e) {
+        console.error("Error fetching tecnicos:", e);
+      }
+    };
+    if (token) fetchTecnicos();
+  }, [token]);
+
+  const abrirModalCambioFO = (v) => {
+    const manana = new Date();
+    manana.setDate(manana.getDate() + 1);
+    const mananaStr = manana.toISOString().split('T')[0];
+
+    setModalFO({
+      isOpen: true,
+      idVisitaOrigen: v.id_visita,
+      contrato: v.contrato,
+      cliente: v.cliente,
+      sector: v.sector,
+      direccion: v.direccion,
+      telefonos: v.telefonos,
+      empresa: v.empresa || 'SERVICABLE',
+      servicio: v.servicio || 'INTERNET_GPON',
+      fechaProgramada: mananaStr,
+      preferenciaHoraria: 'COORDINAR',
+      tecnicoPrincipal: 'NO TECNICO',
+      observacionCallcenter: 'Coordinación previa de revisión técnica. Trabajo a realizar: CAMBIO DE FO'
+    });
+  };
+
+  const handleGuardarCambioFO = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/visitas/crear_cambio_fo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          id_visita_origen: modalFO.idVisitaOrigen,
+          contrato: modalFO.contrato,
+          cliente: modalFO.cliente,
+          sector: modalFO.sector,
+          direccion: modalFO.direccion,
+          telefonos: modalFO.telefonos,
+          empresa: modalFO.empresa,
+          servicio: modalFO.servicio,
+          fecha_programada: modalFO.fechaProgramada,
+          preferencia_horaria: modalFO.preferenciaHoraria,
+          tecnico_principal: modalFO.tecnicoPrincipal,
+          observacion_callcenter: modalFO.observacionCallcenter
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        alert("¡Visita de Cambio de FO agendada con éxito!");
+        setModalFO(prev => ({ ...prev, isOpen: false }));
+        fetchVisitas();
+      } else {
+        alert("Error al agendar: " + data.message);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error al conectar con el servidor.");
     }
   };
 
@@ -370,9 +464,40 @@ function VisitasTab({ token, user }) {
                   else if (estadoText === 'CANCELADA') estadoBadgeClass = 'pro-contract-pill';
                   else if (estadoText === 'REAGENDADA') estadoBadgeClass = 'pro-badge-office';
 
+                  const getFilaColorClass = (visita) => {
+                    const estado = visita.estado || '';
+                    const solucion = (visita.solucion_tecnico || visita.resolucion_final || '').toUpperCase();
+
+                    if (solucion.includes('NO DESEA VISITA') || solucion.includes('SIN RESPUESTA') || estado === 'CANCELADA') {
+                      return 'fila-roja';
+                    }
+                    if (estado === 'REAGENDADA' || solucion.includes('REAGENDADA')) {
+                      return 'fila-celeste';
+                    }
+                    if (solucion.includes('CAMBIO DE FO')) {
+                      return 'fila-naranja';
+                    }
+                    if (solucion.includes('SOLUCIÓN PARCIAL') || solucion.includes('SOLUCION PARCIAL') || solucion.includes('GESTIONAR ARREGLO')) {
+                      return 'fila-morada';
+                    }
+                    if (solucion.includes('NOC')) {
+                      return 'fila-amarilla';
+                    }
+                    if (solucion.includes('SATURACIÓN')) {
+                      return 'fila-blanca';
+                    }
+                    if (estado === 'FINALIZADA' || estado === 'SOLVENTADA_REMOTA') {
+                      return 'fila-verde';
+                    }
+                    return 'fila-pendiente';
+                  };
+
+                  const colorClass = getFilaColorClass(v);
+                  const isFOSolicitado = (v.solucion_tecnico || '').toUpperCase().includes('CAMBIO DE FO') || (v.observacion_tecnico || '').toUpperCase().includes('CAMBIO DE FO');
+
                   return (
                     <React.Fragment key={v.id_visita}>
-                      <tr style={{ background: isExpanded ? 'rgba(99, 102, 241, 0.05)' : 'transparent', transition: 'background 0.2s' }}>
+                      <tr className={colorClass} style={{ background: isExpanded ? 'rgba(99, 102, 241, 0.05)' : undefined, transition: 'background 0.2s' }}>
                         
                         {/* Parada & ID */}
                         <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
@@ -439,9 +564,25 @@ function VisitasTab({ token, user }) {
 
                         {/* Estado */}
                         <td style={{ verticalAlign: 'middle' }}>
-                          <span className={estadoBadgeClass}>
-                            {estadoText.replace('_', ' ')}
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                            <span className={estadoBadgeClass}>
+                              {estadoText.replace('_', ' ')}
+                            </span>
+                            {isFOSolicitado && (
+                              <span style={{
+                                background: '#ffedd5',
+                                color: '#c2410c',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '0.7rem',
+                                fontWeight: 'bold',
+                                border: '1px solid #fed7aa',
+                                display: 'inline-block'
+                              }}>
+                                🧡 FO Solicitado
+                              </span>
+                            )}
+                          </div>
                           <div style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', marginTop: '4px', lineHeight: '1.4' }}>
                             {(() => {
                               const parseDate = (str) => {
@@ -572,10 +713,60 @@ function VisitasTab({ token, user }) {
 
                                 <div>
                                   <strong>🗣️ Observación Callcenter:</strong>
-                                  <div className="pro-obs-box" style={{ maxWidth: '100%', whiteSpace: 'normal', marginTop: '4px' }}>
+                                  <div className="pro-obs-box" style={{ maxWidth: '100%', whiteSpace: 'normal', marginTop: '4px', background: 'var(--profile-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px' }}>
                                     {v.observacion_callcenter || 'Sin observaciones registradas.'}
                                   </div>
                                 </div>
+
+                                {v.solucion_tecnico && (
+                                  <div>
+                                    <strong>🛠️ Solución Aplicada:</strong> <span style={{ color: 'var(--primary)', fontWeight: 'bold', marginLeft: '6px' }}>{v.solucion_tecnico}</span>
+                                  </div>
+                                )}
+
+                                {v.observacion_tecnico && (
+                                  <div>
+                                    <strong>📝 Observación Técnico:</strong>
+                                    <div className="pro-obs-box" style={{ maxWidth: '100%', whiteSpace: 'normal', marginTop: '4px', background: 'rgba(99, 102, 241, 0.04)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px' }}>
+                                      {v.observacion_tecnico}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {(v.modelo_onu || v.modelo_router) && (
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.8rem', background: 'var(--profile-bg)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '4px' }}>
+                                    <div><strong>ONU Instalada:</strong> <span style={{ color: 'var(--sidebar-text)', marginLeft: '4px' }}>{v.modelo_onu || 'N/A'}</span></div>
+                                    <div><strong>Router Instalado:</strong> <span style={{ color: 'var(--sidebar-text)', marginLeft: '4px' }}>{v.modelo_router || 'N/A'}</span></div>
+                                  </div>
+                                )}
+
+                                {isFOSolicitado && (
+                                  <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', padding: '10px 14px', borderRadius: '8px', marginTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                    <div style={{ fontSize: '0.82rem', color: '#c2410c', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: '0.95rem' }}></i> Requiere Cambio de Acometida / FO
+                                    </div>
+                                    <button 
+                                      type="button" 
+                                      onClick={() => abrirModalCambioFO(v)}
+                                      style={{ 
+                                        backgroundColor: '#ea580c', 
+                                        color: 'white', 
+                                        padding: '6px 14px', 
+                                        fontSize: '0.78rem', 
+                                        fontWeight: 'bold', 
+                                        borderRadius: '6px', 
+                                        cursor: 'pointer', 
+                                        border: 'none', 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: '6px', 
+                                        boxShadow: '0 2px 4px rgba(234, 88, 12, 0.2)' 
+                                      }}
+                                    >
+                                      🧡 Programar Cambio de FO
+                                    </button>
+                                  </div>
+                                )}
 
                                 {/* Datos de Conexión Poste/Nodo */}
                                 {(v.info_caja || v.info_hilo || v.info_ip || v.info_vlan || v.info_usr) && (
@@ -609,6 +800,104 @@ function VisitasTab({ token, user }) {
           </table>
         </div>
       </div>
+
+      {/* Modal Programar Cambio de FO */}
+      {modalFO.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(4px)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '20px', width: '90%', maxWidth: '550px', padding: '25px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', maxHeight: '90vh', overflowY: 'auto' }}>
+            
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '15px' }}>
+              <h3 style={{ margin: 0, color: '#ea580c', fontSize: '1.15rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                🧡 Programar Visita de Cambio de FO
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setModalFO(prev => ({ ...prev, isOpen: false }))} 
+                style={{ background: 'none', border: 'none', fontSize: '1.5rem', color: 'var(--sidebar-text)', cursor: 'pointer' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleGuardarCambioFO} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              
+              {/* Client Details Box */}
+              <div style={{ background: 'rgba(234, 88, 12, 0.05)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(234, 88, 12, 0.1)', fontSize: '0.85rem' }}>
+                <p style={{ margin: '0 0 6px 0', color: 'var(--text-main)' }}><strong>👤 Cliente:</strong> <span style={{ color: '#ea580c', fontWeight: 700 }}>{modalFO.cliente}</span></p>
+                <p style={{ margin: '0 0 6px 0', color: 'var(--sidebar-text)' }}><strong>📄 Contrato:</strong> #{modalFO.contrato} ({modalFO.empresa})</p>
+                <p style={{ margin: 0, color: 'var(--sidebar-text)' }}><strong>📍 Sector / Dir:</strong> {modalFO.sector} - {modalFO.direccion}</p>
+              </div>
+
+              {/* Form Fields */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '6px' }}>📅 Fecha Programada:</label>
+                  <input 
+                    type="date" 
+                    required 
+                    value={modalFO.fechaProgramada} 
+                    onChange={e => setModalFO(prev => ({ ...prev, fechaProgramada: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '6px' }}>⏰ Horario / Turno:</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ej: Mañana (9am - 12pm)" 
+                    value={modalFO.preferenciaHoraria} 
+                    onChange={e => setModalFO(prev => ({ ...prev, preferenciaHoraria: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '6px' }}>👨‍🔧 Técnico Asignado (Opcional):</label>
+                <select 
+                  value={modalFO.tecnicoPrincipal} 
+                  onChange={e => setModalFO(prev => ({ ...prev, tecnicoPrincipal: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                >
+                  <option value="NO TECNICO">-- Sin Asignar / Por Coordinar --</option>
+                  {tecnicos.map(t => (
+                    <option key={t.id_tecnico} value={t.nombre}>{t.nombre}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '6px' }}>🗣️ Observación Callcenter:</label>
+                <textarea 
+                  rows="3" 
+                  value={modalFO.observacionCallcenter} 
+                  onChange={e => setModalFO(prev => ({ ...prev, observacionCallcenter: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                ></textarea>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '15px', marginTop: '10px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setModalFO(prev => ({ ...prev, isOpen: false }))} 
+                  style={{ padding: '10px 18px', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'transparent', color: 'var(--sidebar-text)', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  style={{ padding: '10px 18px', border: 'none', borderRadius: '8px', background: '#ea580c', color: 'white', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <i className="fa-solid fa-calendar-plus"></i> Agendar Cambio de FO
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
