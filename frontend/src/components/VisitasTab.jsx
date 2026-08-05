@@ -23,13 +23,19 @@ function VisitasTab({ token, user }) {
   // Expanded rows state (ID array)
   const [expandedRows, setExpandedRows] = useState({});
 
-  // Initial load & filter effect
+  // Initial load & filter effect + auto-refresh every 30s
   useEffect(() => {
     fetchVisitas();
-  }, [fechaFiltro, activeArea]);
+    
+    const interval = setInterval(() => {
+      fetchVisitas(fechaFiltro, buscarCliente, activeArea, true);
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, [fechaFiltro, activeArea, buscarCliente]);
 
-  const fetchVisitas = async (targetFecha = fechaFiltro, targetSearch = buscarCliente, targetArea = activeArea) => {
-    setLoading(true);
+  const fetchVisitas = async (targetFecha = fechaFiltro, targetSearch = buscarCliente, targetArea = activeArea, isBackground = false) => {
+    if (!isBackground) setLoading(true);
     try {
       const url = `/api/v2/visitas?fecha=${encodeURIComponent(targetFecha)}&buscar=${encodeURIComponent(targetSearch)}&area=${encodeURIComponent(targetArea)}`;
       const res = await fetch(url, {
@@ -46,7 +52,7 @@ function VisitasTab({ token, user }) {
     } catch (e) {
       console.error("Error al cargar visitas del día:", e);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 

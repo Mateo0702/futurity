@@ -49,7 +49,7 @@ function App() {
   }
 
   // Navigation states matching Flask session variables
-  const [activeTab, setActiveTab] = useState(initialTabFromUrl || 'registro-atencion');
+  const [activeTab, setActiveTab] = useState(initialTabFromUrl || 'visitas');
   const [activeArea, setActiveArea] = useState('SOPORTE');
   const [tecnicoNombre, setTecnicoNombre] = useState(initialTecnicoNombre);
 
