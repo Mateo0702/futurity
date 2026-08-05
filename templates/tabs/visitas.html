@@ -226,6 +226,11 @@
                         </td>
                         <td style="vertical-align: middle;">
                             <span class="badge-{{ visita.estado|lower }}">{{ visita.estado|replace('_', ' ') }}</span>
+                            {% if 'CAMBIO DE FO' in (visita.solucion_tecnico or '').upper() or 'CAMBIO DE FO' in (visita.observacion_tecnico or '').upper() %}
+                                <span style="background-color: #ffedd5; color: #c2410c; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-top: 4px; display: inline-block; border: 1px solid #fed7aa;">
+                                    🧡 FO Solicitado
+                                </span>
+                            {% endif %}
                             <div class="visita-timer-container" 
                                  data-id="{{ visita.id_visita }}"
                                  data-estado="{{ visita.estado }}"
@@ -524,6 +529,18 @@
                                         {% if visita.solucion_tecnico %}
                                             <p style="margin: 0 0 6px 0;"><strong>🛠️ Solución Aplicada:</strong> <span style="color: var(--primary); font-weight: bold;">{{ visita.solucion_tecnico }}</span></p>
                                             <p style="margin: 0 0 10px 0;"><strong>📝 Observación Técnico:</strong> <span style="color: #334155;">{{ visita.observacion_tecnico }}</span></p>
+                                            
+                                            {% if 'CAMBIO DE FO' in (visita.solucion_tecnico or '').upper() or 'CAMBIO DE FO' in (visita.observacion_tecnico or '').upper() %}
+                                                <div style="background-color: #fff7ed; border: 1px solid #ffedd5; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                                                    <div style="font-size: 0.85rem; color: #c2410c; font-weight: bold; display: flex; align-items: center; gap: 6px;">
+                                                        <i class="fa-solid fa-triangle-exclamation" style="font-size: 1rem;"></i> Requiere Cambio de Acometida / FO
+                                                    </div>
+                                                    <button type="button" class="btn" style="background-color: #ea580c; color: white; padding: 6px 14px; font-size: 0.82rem; font-weight: bold; border-radius: 6px; cursor: pointer; border: none; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(234, 88, 12, 0.2);"
+                                                            onclick="abrirModalCambioFO('{{ visita.contrato|escape }}', '{{ visita.cliente|escape }}', '{{ visita.sector|escape }}', '{{ visita.direccion|escape }}', '{{ visita.telefonos|escape }}', '{{ visita.empresa|escape }}', '{{ visita.servicio|escape }}', '{{ visita.id_visita }}')">
+                                                        🧡 Programar Cambio de FO
+                                                    </button>
+                                                </div>
+                                            {% endif %}
                                             
                                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; background: #ffffff; padding: 10px; border-radius: 4px; border: 1px solid #e2e8f0;">
                                                 <div><strong>ONU Instalada:</strong> <span style="color: #475569;">{{ visita.modelo_onu or 'N/A' }}</span></div>
@@ -1047,3 +1064,100 @@
         </form>
     </div>
 </div>
+
+<!-- Modal Programar Cambio de FO -->
+<div id="modal-cambio-fo" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 9999; justify-content: center; align-items: center;">
+    <div style="background: white; border-radius: 12px; width: 90%; max-width: 550px; padding: 25px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); border: 1px solid #fed7aa; max-height: 90vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ffedd5; padding-bottom: 12px; margin-bottom: 15px;">
+            <h3 style="margin: 0; color: #c2410c; font-size: 1.15rem; font-weight: bold; display: flex; align-items: center; gap: 8px;">
+                🧡 Programar Visita de Cambio de FO
+            </h3>
+            <button type="button" onclick="cerrarModalCambioFO()" style="background: none; border: none; font-size: 1.4rem; color: #94a3b8; cursor: pointer;">&times;</button>
+        </div>
+
+        <form action="/api/visitas/crear_cambio_fo" method="POST">
+            <input type="hidden" name="id_visita_origen" id="fo-id-origen">
+            <input type="hidden" name="contrato" id="fo-contrato">
+            <input type="hidden" name="cliente" id="fo-cliente">
+            <input type="hidden" name="sector" id="fo-sector">
+            <input type="hidden" name="direccion" id="fo-direccion">
+            <input type="hidden" name="telefonos" id="fo-telefonos">
+            <input type="hidden" name="empresa" id="fo-empresa">
+            <input type="hidden" name="servicio" id="fo-servicio">
+
+            <div style="background: #fff7ed; padding: 12px; border-radius: 8px; border: 1px solid #ffedd5; margin-bottom: 15px; font-size: 0.88rem;">
+                <p style="margin: 0 0 4px 0;"><strong>👤 Cliente:</strong> <span id="fo-lbl-cliente" style="color: #9a3412; font-weight: bold;"></span></p>
+                <p style="margin: 0 0 4px 0;"><strong>📄 Contrato:</strong> <span id="fo-lbl-contrato" style="color: #475569;"></span> (<span id="fo-lbl-empresa"></span>)</p>
+                <p style="margin: 0;"><strong>📍 Sector / Dir:</strong> <span id="fo-lbl-sector" style="color: #475569;"></span> - <span id="fo-lbl-direccion"></span></p>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div>
+                    <label style="font-weight: 700; font-size: 0.82rem; color: #475569; display: block; margin-bottom: 4px;">📅 Fecha Programada:</label>
+                    <input type="date" name="fecha_programada" id="fo-fecha" class="form-control" required style="width: 100%; box-sizing: border-box; padding: 8px;">
+                </div>
+                <div>
+                    <label style="font-weight: 700; font-size: 0.82rem; color: #475569; display: block; margin-bottom: 4px;">⏰ Horario / Turno:</label>
+                    <input type="text" name="preferencia_horaria" id="fo-horario" class="form-control" placeholder="Ej: Mañana (9am - 12pm)" style="width: 100%; box-sizing: border-box; padding: 8px;">
+                </div>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+                <label style="font-weight: 700; font-size: 0.82rem; color: #475569; display: block; margin-bottom: 4px;">👨‍🔧 Técnico Asignado (Opcional):</label>
+                <select name="tecnico_principal" id="fo-tecnico" class="form-control" style="width: 100%; box-sizing: border-box; padding: 8px;">
+                    <option value="NO TECNICO">-- Sin Asignar / Por Coordinar --</option>
+                    {% for tec in tecnicos %}
+                        <option value="{{ tec.nombre }}">{{ tec.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label style="font-weight: 700; font-size: 0.82rem; color: #475569; display: block; margin-bottom: 4px;">🗣️ Observación Callcenter:</label>
+                <textarea name="observacion_callcenter" id="fo-observacion" class="form-control" rows="3" style="width: 100%; box-sizing: border-box; padding: 8px;" placeholder="Coordinado con cliente para cambio de acometida de FO..."></textarea>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+                <button type="button" onclick="cerrarModalCambioFO()" style="padding: 9px 16px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #475569; font-weight: bold; cursor: pointer;">Cancelar</button>
+                <button type="submit" style="padding: 9px 16px; border: none; border-radius: 8px; background: #ea580c; color: white; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-calendar-plus"></i> Agendar Visita Cambio de FO
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function abrirModalCambioFO(contrato, cliente, sector, direccion, telefonos, empresa, servicio, idVisitaOrigen) {
+    document.getElementById('fo-id-origen').value = idVisitaOrigen || '';
+    document.getElementById('fo-contrato').value = contrato || '';
+    document.getElementById('fo-cliente').value = cliente || '';
+    document.getElementById('fo-sector').value = sector || '';
+    document.getElementById('fo-direccion').value = direccion || '';
+    document.getElementById('fo-telefonos').value = telefonos || '';
+    document.getElementById('fo-empresa').value = empresa || 'SERVICABLE';
+    document.getElementById('fo-servicio').value = servicio || 'INTERNET_GPON';
+
+    document.getElementById('fo-lbl-cliente').innerText = cliente || '';
+    document.getElementById('fo-lbl-contrato').innerText = contrato || '';
+    document.getElementById('fo-lbl-empresa').innerText = empresa || 'SERVICABLE';
+    document.getElementById('fo-lbl-sector').innerText = sector || '';
+    document.getElementById('fo-lbl-direccion').innerText = direccion || '';
+
+    const manana = new Date();
+    manana.setDate(manana.getDate() + 1);
+    const mananaStr = manana.toISOString().split('T')[0];
+    document.getElementById('fo-fecha').value = mananaStr;
+
+    document.getElementById('fo-horario').value = 'COORDINAR';
+    document.getElementById('fo-observacion').value = 'Coordinación previa de revisión técnica. Trabajo a realizar: CAMBIO DE FO';
+
+    const modal = document.getElementById('modal-cambio-fo');
+    modal.style.display = 'flex';
+}
+
+function cerrarModalCambioFO() {
+    const modal = document.getElementById('modal-cambio-fo');
+    modal.style.display = 'none';
+}
+</script>

@@ -368,3 +368,76 @@ def reasignar_tecnicos(id_visita):
         conexion.close()
         
     return redirect(url_for('dashboard'))
+
+@visitas_bp.route('/api/visitas/crear_cambio_fo', methods=['POST'])
+def crear_cambio_fo():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    creado_por = session.get('user_name', 'Call Center')
+    contrato = request.form.get('contrato')
+    cliente = request.form.get('cliente')
+    empresa = request.form.get('empresa', 'SERVICABLE')
+    servicio = request.form.get('servicio', 'INTERNET_GPON')
+    velocidad_mbps = request.form.get('velocidad_mbps') or None
+    sector = request.form.get('sector')
+    direccion = request.form.get('direccion')
+    telefonos = request.form.get('telefonos')
+    latitud = request.form.get('latitud') or None
+    longitud = request.form.get('longitud') or None
+    
+    fecha_programada = request.form.get('fecha_programada')
+    preferencia_horaria = request.form.get('preferencia_horaria') or 'COORDINAR'
+    tecnico_principal = request.form.get('tecnico_principal') or 'NO TECNICO'
+    observacion_callcenter = request.form.get('observacion_callcenter') or 'Generado desde revisión técnica previo Cambio de FO'
+    id_visita_origen = request.form.get('id_visita_origen')
+    
+    conexion = get_db_connection()
+    cursor = conexion.cursor()
+    try:
+        query_insert = """
+            INSERT INTO visitas_tecnicas (
+                creado_por, tecnico_principal, fecha_programada, preferencia_horaria,
+                empresa, contrato, cliente, telefonos, sector, direccion, servicio,
+                velocidad_mbps, problema, observacion_callcenter, estado, prioridad,
+                latitud, longitud
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'CAMBIO DE FO', %s, 'PENDIENTE', 'ALTA', %s, %s
+            )
+        """
+        cursor.execute(query_insert, (
+            f"CC. {creado_por}" if not creado_por.startswith("CC.") else creado_por,
+            tecnico_principal,
+            fecha_programada,
+            preferencia_horaria,
+            empresa,
+            contrato,
+            cliente,
+            telefonos,
+            sector,
+            direccion,
+            servicio,
+            velocidad_mbps,
+            f"[CAMBIO DE FO PROGRAMADO] {observacion_callcenter}",
+            latitud,
+            longitud
+        ))
+        
+        if id_visita_origen:
+            query_update_orig = """
+                UPDATE visitas_tecnicas 
+                SET resolucion_final = CONCAT(COALESCE(resolucion_final, ''), ' [Cambio de FO Agendado]')
+                WHERE id_visita = %s
+            """
+            cursor.execute(query_update_orig, (id_visita_origen,))
+            
+        conexion.commit()
+        flash('¡Visita de Cambio de FO programada exitosamente!', 'success')
+    except Exception as e:
+        print(f"Error al crear visita Cambio de FO: {e}")
+        flash(f'Error al crear la visita: {e}', 'danger')
+    finally:
+        cursor.close()
+        conexion.close()
+        
+    return redirect(url_for('dashboard'))
