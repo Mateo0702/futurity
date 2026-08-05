@@ -436,10 +436,60 @@ function VisitasTab({ token, user }) {
                           <span className={estadoBadgeClass}>
                             {estadoText.replace('_', ' ')}
                           </span>
-                          <div style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', marginTop: '4px' }}>
-                            {v.hora_en_ruta && <div>🚚 En ruta: {v.hora_en_ruta.substring(11, 16)}</div>}
-                            {v.hora_inicio_visita && <div>📍 En sitio: {v.hora_inicio_visita.substring(11, 16)}</div>}
-                            {v.hora_fin_visita && <div>🏁 Fin: {v.hora_fin_visita.substring(11, 16)}</div>}
+                          <div style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', marginTop: '4px', lineHeight: '1.4' }}>
+                            {(() => {
+                              const parseDate = (str) => {
+                                if (!str) return null;
+                                return new Date(str.replace(' ', 'T'));
+                              };
+                              
+                              if (v.estado === 'FINALIZADA') {
+                                const enRuta = parseDate(v.hora_en_ruta);
+                                const inicio = parseDate(v.hora_inicio_visita);
+                                const fin = parseDate(v.hora_fin_visita);
+                                
+                                let trasladoMin = 0;
+                                let trabajoMin = 0;
+                                
+                                if (enRuta && inicio) {
+                                  trasladoMin = Math.max(0, Math.round((inicio - enRuta) / 60000));
+                                }
+                                if (inicio && fin) {
+                                  trabajoMin = Math.max(0, Math.round((fin - inicio) / 60000));
+                                }
+                                
+                                return (
+                                  <>
+                                    {v.hora_en_ruta && <div>🚚 Traslado: {trasladoMin} min</div>}
+                                    {v.hora_inicio_visita && <div>📍 Trabajo: {trabajoMin} min</div>}
+                                    {v.hora_fin_visita && <div>🏁 Fin: {v.hora_fin_visita.substring(11, 16)}</div>}
+                                  </>
+                                );
+                              } else if (v.estado === 'EN_RUTA' && v.hora_en_ruta) {
+                                const enRuta = parseDate(v.hora_en_ruta);
+                                const diffMin = Math.max(0, Math.floor((new Date() - enRuta) / 60000));
+                                return <div>🚚 Traslado: {diffMin} min...</div>;
+                              } else if (v.estado === 'EN_PROGRESO' && v.hora_inicio_visita) {
+                                const inicio = parseDate(v.hora_inicio_visita);
+                                const diffMin = Math.max(0, Math.floor((new Date() - inicio) / 60000));
+                                return (
+                                  <>
+                                    {v.hora_en_ruta && <div>🚚 En ruta: {v.hora_en_ruta.substring(11, 16)}</div>}
+                                    <div>📍 Trabajo: {diffMin} min...</div>
+                                  </>
+                                );
+                              } else if (v.estado === 'PENDIENTE') {
+                                return <div style={{ fontStyle: 'italic', color: '#94a3b8' }}>💤 Sin iniciar</div>;
+                              } else {
+                                return (
+                                  <>
+                                    {v.hora_en_ruta && <div>🚚 En ruta: {v.hora_en_ruta.substring(11, 16)}</div>}
+                                    {v.hora_inicio_visita && <div>📍 En sitio: {v.hora_inicio_visita.substring(11, 16)}</div>}
+                                    {v.hora_fin_visita && <div>🏁 Fin: {v.hora_fin_visita.substring(11, 16)}</div>}
+                                  </>
+                                );
+                              }
+                            })()}
                           </div>
                         </td>
 
