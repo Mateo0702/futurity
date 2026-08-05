@@ -241,17 +241,22 @@ def guardar_firma_remota(token):
         conexion.close()
 
 
+@cliente_bp.route('/api/publico/cuadro_mando/<fecha>/<token>', methods=['GET'])
 @cliente_bp.route('/publico/cuadro_mando/<fecha>/<token>')
 def publico_cuadro_mando(fecha, token):
     import hashlib
     from datetime import datetime, timedelta
-    from flask import current_app, render_template, request
+    from flask import current_app, render_template, request, jsonify
     
+    is_json = request.path.startswith('/api/') or request.headers.get('Accept') == 'application/json'
+
     # 1. Validar el token
     secret = current_app.secret_key or "fallback_secret_salt_futurity_2026"
     expected_token = hashlib.sha256(f"{fecha}_{secret}".encode('utf-8')).hexdigest()[:16]
     
     if token != expected_token:
+        if is_json:
+            return jsonify({"status": "error", "message": "El enlace es inválido, ha expirado o ha sido modificado."}), 403
         return render_template('publico_cuadro_mando.html', error="El enlace es inválido, ha expirado o ha sido modificado.", fecha=fecha)
         
     conexion = get_db_connection()
@@ -522,6 +527,32 @@ def publico_cuadro_mando(fecha, token):
         """, (fecha,))
         actividades_tecnicos = cursor.fetchall()
         
+        if is_json:
+            return jsonify({
+                "status": "ok",
+                "fecha": fecha,
+                "agente_a": agente_a,
+                "agente_b": agente_b,
+                "agente_c": agente_c,
+                "soporte_a": soporte_a,
+                "soporte_b": soporte_b,
+                "soporte_c": soporte_c,
+                "rows_atenciones": rows_atenciones,
+                "agente_totals": agente_totals,
+                "total_cc_general": total_cc_general,
+                "kpis": {
+                    "pendientes_anteriores": kpi_pendientes_anteriores,
+                    "generadas_hoy": kpi_generadas_hoy,
+                    "total_carga": kpi_total_carga,
+                    "atendidas_hoy": kpi_atendidas_hoy,
+                    "pendientes_manana": kpi_pendientes_manana
+                },
+                "soluciones": active_soluciones,
+                "problemas": active_problemas,
+                "visitas_manana": visitas_manana,
+                "actividades_tecnicos": actividades_tecnicos
+            })
+
         return render_template('publico_cuadro_mando.html',
                                fecha=fecha,
                                agente_a=agente_a,

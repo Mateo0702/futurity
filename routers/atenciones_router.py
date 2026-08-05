@@ -525,7 +525,15 @@ def registrar_atenciones_masivo():
 
 @atenciones_bp.route('/api/cliente/buscar_completo_json', methods=['GET'])
 def buscar_completo_json():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     q = request.args.get('q', '').strip()
@@ -601,9 +609,18 @@ def buscar_completo_json():
 
 @atenciones_bp.route('/api/admin/smartolt/diagnostico/<sn>', methods=['GET'])
 def diagnostico_smartolt(sn):
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'TECNICO']:
+    user_role = user.get('role') or user.get('rol')
+    if user_role not in ['ADMIN', 'ASESOR', 'TECNICO', 'CALIDAD']:
         return jsonify({"status": "error", "message": "No tienes privilegios para consultar diagnóstico"}), 403
         
     import urllib.request

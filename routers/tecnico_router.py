@@ -11,6 +11,25 @@ tecnico_bp = Blueprint('tecnico', __name__)
 
 NUMERO_GRUA = "0958672088"
 
+def obtener_usuario_autenticado():
+    token = request.headers.get('Authorization')
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+        if user:
+            return {
+                'id_usuario': user.get('sub'),
+                'username': user.get('username'),
+                'role': user.get('role')
+            }
+    elif 'user_id' in session:
+        return {
+            'id_usuario': session['user_id'],
+            'username': session.get('user_name'),
+            'role': session.get('user_role')
+        }
+    return None
+
 def interpretar_preferencia_horaria(texto):
     if not texto:
         return 9999 # Sin hora va al final
@@ -26,6 +45,103 @@ def interpretar_preferencia_horaria(texto):
             hora += 12
         return hora
     return 9999
+
+
+@tecnico_bp.route('/api/tecnico/panel/<nombre_tecnico>', methods=['GET'])
+def api_panel_tecnico(nombre_tecnico):
+    usuario = obtener_usuario_autenticado()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    rol = usuario.get('role')
+    nombre_usuario = usuario.get('username')
+    nombre_real = nombre_tecnico.replace('_', ' ')
+    
+    if rol == 'TECNICO' and nombre_usuario != nombre_real:
+        return jsonify({"status": "error", "message": "No tienes permiso para acceder al panel de otro técnico."}), 403
+        
+    conexion = get_db_connection()
+    cursor = conexion.cursor(dictionary=True)
+    hoy = date.today().isoformat()
+    
+    try:
+        # 1. Obtener estado de actividad, área de trabajo, coordenadas y pánico del técnico
+        cursor.execute("SELECT estado_actividad, area_trabajo, alerta_panico, mensaje_panico, latitud_actual, longitud_actual FROM tecnicos WHERE nombre = %s", (nombre_real,))
+        tec_estado_row = cursor.fetchone()
+        estado_actividad = tec_estado_row['estado_actividad'] if tec_estado_row else 'Disponible'
+        area_trabajo = tec_estado_row['area_trabajo'] if (tec_estado_row and tec_estado_row['area_trabajo']) else 'SOPORTE'
+        alerta_panico = tec_estado_row['alerta_panico'] if tec_estado_row else 0
+        mensaje_panico = tec_estado_row['mensaje_panico'] if tec_estado_row else None
+        lat_act = float(tec_estado_row['latitud_actual']) if tec_estado_row and tec_estado_row['latitud_actual'] is not None else None
+        lon_act = float(tec_estado_row['longitud_actual']) if tec_estado_row and tec_estado_row['longitud_actual'] is not None else None
+        
+        # 2. Traemos TODAS las visitas de hoy para calcular los índices globales
+        query_all = """
+            SELECT * FROM visitas_tecnicas 
+            WHERE fecha_programada = %s
+        """
+        cursor.execute(query_all, (hoy,))
+        todas_las_visitas = cursor.fetchall()
+        
+        todas_las_visitas.sort(key=lambda x: x.get('id_visita', 0) or 0)
+        for idx, v in enumerate(todas_las_visitas, start=1):
+            v['numero_parada'] = idx
+            
+        nombre_real_upper = nombre_real.upper()
+        visitas_del_tecnico = [
+            v for v in todas_las_visitas 
+            if ((v.get('tecnico_principal') or '').upper() == nombre_real_upper or 
+                (v.get('tecnico_apoyo') or '').upper() == nombre_real_upper)
+            and v.get('estado') not in ('CANCELADA', 'SOLVENTADA_REMOTA')
+        ]
+        
+        from optimizador import optimizar_ruta_tecnico
+        visitas_del_tecnico = optimizar_ruta_tecnico(visitas_del_tecnico, lat_act, lon_act)
+        visitas_del_tecnico = parsear_informacion_tecnica(visitas_del_tecnico)
+        
+        soluciones = obtener_soluciones_activas()
+        
+        cursor.execute("SELECT * FROM materiales ORDER BY nombre_material ASC")
+        catalogo_materiales = cursor.fetchall()
+        
+        cursor.execute("SELECT nombre FROM catalogo_modelos_ont WHERE activo = 1 ORDER BY nombre ASC")
+        catalogo_ont = cursor.fetchall()
+        
+        cursor.execute("SELECT nombre FROM catalogo_modelos_router WHERE activo = 1 ORDER BY nombre ASC")
+        catalogo_router = cursor.fetchall()
+        
+        # Formatear fechas y horas para que sean JSON-serializables
+        for v in visitas_del_tecnico:
+            if 'fecha_programada' in v and isinstance(v['fecha_programada'], date):
+                v['fecha_programada'] = v['fecha_programada'].isoformat()
+            if 'fecha_ingreso' in v and hasattr(v['fecha_ingreso'], 'isoformat'):
+                v['fecha_ingreso'] = v['fecha_ingreso'].isoformat()
+            if 'hora_en_ruta' in v and hasattr(v['hora_en_ruta'], 'isoformat'):
+                v['hora_en_ruta'] = v['hora_en_ruta'].isoformat()
+            if 'hora_inicio_visita' in v and hasattr(v['hora_inicio_visita'], 'isoformat'):
+                v['hora_inicio_visita'] = v['hora_inicio_visita'].isoformat()
+            if 'hora_fin_visita' in v and hasattr(v['hora_fin_visita'], 'isoformat'):
+                v['hora_fin_visita'] = v['hora_fin_visita'].isoformat()
+                
+        return jsonify({
+            "status": "ok",
+            "visitas": visitas_del_tecnico,
+            "tecnico": nombre_real,
+            "estado_actividad": estado_actividad,
+            "area_trabajo": area_trabajo,
+            "alerta_panico": alerta_panico,
+            "mensaje_panico": mensaje_panico,
+            "numero_grua": NUMERO_GRUA,
+            "soluciones": soluciones,
+            "catalogo": catalogo_materiales,
+            "catalogo_ont": catalogo_ont,
+            "catalogo_router": catalogo_router
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
 
 
 @tecnico_bp.route('/tecnico/<nombre_tecnico>')
@@ -169,7 +285,14 @@ def en_camino_visita(id_visita):
     
     try:
         # Resetear cualquier otra visita activa de este técnico a PENDIENTE para evitar duplicados en ruta
-        tecnico_nombre = session.get('user_name')
+        usuario = obtener_usuario_autenticado()
+        if not usuario:
+            return jsonify({"status": "error", "message": "No autorizado"}), 401
+            
+        cursor.execute("SELECT tecnico_principal FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        tec_row = cursor.fetchone()
+        tecnico_nombre = tec_row[0] if tec_row else None
+        
         if tecnico_nombre:
             cursor.execute("""
                 UPDATE visitas_tecnicas 
@@ -203,7 +326,6 @@ def en_camino_visita(id_visita):
         cliente_row = cursor.fetchone()
         cliente = cliente_row[0] if cliente_row else "Cliente"
         
-        tecnico_nombre = session.get('user_name')
         if tecnico_nombre:
             cursor.execute("""
                 UPDATE tecnicos 
@@ -218,6 +340,8 @@ def en_camino_visita(id_visita):
             cursor.close()
             conexion.close()
             
+    if request.is_json or request.headers.get('Accept') == 'application/json':
+        return jsonify({"status": "ok", "message": "Puesto en camino con éxito"})
     return redirect(request.referrer)
 
 
@@ -248,7 +372,14 @@ def iniciar_visita(id_visita):
 
     try:
         # Resetear cualquier otra visita activa de este técnico a PENDIENTE para evitar duplicados
-        tecnico_nombre = session.get('user_name')
+        usuario = obtener_usuario_autenticado()
+        if not usuario:
+            return jsonify({"status": "error", "message": "No autorizado"}), 401
+            
+        cursor.execute("SELECT tecnico_principal FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        tec_row = cursor.fetchone()
+        tecnico_nombre = tec_row[0] if tec_row else None
+        
         if tecnico_nombre:
             cursor.execute("""
                 UPDATE visitas_tecnicas 
@@ -292,7 +423,6 @@ def iniciar_visita(id_visita):
         cliente_row = cursor.fetchone()
         cliente = cliente_row[0] if cliente_row else "Cliente"
         
-        tecnico_nombre = session.get('user_name')
         if tecnico_nombre:
             cursor.execute("""
                 UPDATE tecnicos 
@@ -307,35 +437,41 @@ def iniciar_visita(id_visita):
             cursor.close()
             conexion.close()
             
+    if request.is_json or request.headers.get('Accept') == 'application/json':
+        return jsonify({"status": "ok", "message": "Visita iniciada con éxito"})
     return redirect(request.referrer)
 
 
-# --- 4. BOTÓN "FINALIZAR VISITA" (Cierre Total) ---
 @tecnico_bp.route('/api/tecnico/finalizar/<int:id_visita>', methods=['POST'])
 def finalizar_visita(id_visita):
     """Recibe el formulario del celular y cierra la visita."""
-    solucion = request.form.get('solucion_tecnico')
-    observacion = request.form.get('observacion_tecnico')
-    onu = request.form.get('modelo_onu')
-    router = request.form.get('modelo_router')
-    coordenadas = request.form.get('coordenadas_tecnico')
+    if request.is_json:
+        datos = request.get_json() or {}
+    else:
+        datos = request.form
+        
+    solucion = datos.get('solucion_tecnico')
+    observacion = datos.get('observacion_tecnico')
+    onu = datos.get('modelo_onu')
+    router = datos.get('modelo_router')
+    coordenadas = datos.get('coordenadas_tecnico')
     
-    metodo_firma = request.form.get('metodo_firma', 'REMOTA')
-    motivo_sin_firma = request.form.get('motivo_sin_firma', '')
+    metodo_firma = datos.get('metodo_firma', 'REMOTA')
+    motivo_sin_firma = datos.get('motivo_sin_firma', '')
     
     # Captura de fotos y firma
-    equipos_juntos = request.form.get('equipos_juntos')  # '1' o '0'
-    equipos_juntos_val = 1 if equipos_juntos == '1' else 0
+    equipos_juntos = datos.get('equipos_juntos')  # '1' o '0'
+    equipos_juntos_val = 1 if (equipos_juntos == '1' or equipos_juntos == 1 or equipos_juntos is True) else 0
     
-    foto_equipos_b64 = request.form.get('foto_equipos_base64')
-    foto_equipos_2_b64 = request.form.get('foto_equipos_2_base64')
-    firma_cliente_b64 = request.form.get('firma_cliente_base64')
+    foto_equipos_b64 = datos.get('foto_equipos_base64')
+    foto_equipos_2_b64 = datos.get('foto_equipos_2_base64')
+    firma_cliente_b64 = datos.get('firma_cliente_base64')
     
     # Fotos adicionales opcionales
-    foto_extra_1_b64 = request.form.get('foto_extra_1_base64')
-    foto_extra_2_b64 = request.form.get('foto_extra_2_base64')
-    foto_extra_3_b64 = request.form.get('foto_extra_3_base64')
-    foto_extra_4_b64 = request.form.get('foto_extra_4_base64')
+    foto_extra_1_b64 = datos.get('foto_extra_1_base64')
+    foto_extra_2_b64 = datos.get('foto_extra_2_base64')
+    foto_extra_3_b64 = datos.get('foto_extra_3_base64')
+    foto_extra_4_b64 = datos.get('foto_extra_4_base64')
     
     # Procesar archivos físicos
     uploads_dir = os.path.join('static', 'uploads')
@@ -370,9 +506,14 @@ def finalizar_visita(id_visita):
     foto_extra_3_filename = guardar_imagen_base64(foto_extra_3_b64, f"extra_{id_visita}_3.jpg")
     foto_extra_4_filename = guardar_imagen_base64(foto_extra_4_b64, f"extra_{id_visita}_4.jpg")
 
-    # Capturamos las listas dinámicas de materiales enviados desde el HTML
-    materiales_ids = request.form.getlist('materiales_seleccionados[]')
-    cantidades = request.form.getlist('cantidades_materiales[]')
+    # Capturamos las listas dinámicas de materiales enviados desde el HTML o JSON
+    if request.is_json:
+        materiales_utilizados = datos.get('materiales', [])
+        materiales_ids = [str(x.get('id_material')) for x in materiales_utilizados]
+        cantidades = [str(x.get('cantidad')) for x in materiales_utilizados]
+    else:
+        materiales_ids = request.form.getlist('materiales_seleccionados[]')
+        cantidades = request.form.getlist('cantidades_materiales[]')
     
     conexion = get_db_connection()
     cursor = conexion.cursor(dictionary=True)
@@ -468,7 +609,8 @@ def finalizar_visita(id_visita):
                         cursor.execute(query_update_custodia, (int(cant), placa_vehiculo, int(id_mat)))
                         
         # Actualizar estado global del técnico
-        tecnico_nombre = session.get('user_name')
+        usuario = obtener_usuario_autenticado()
+        # tecnico_nombre ya se obtuvo arriba de la visita
         if tecnico_nombre:
             cursor.execute("""
                 UPDATE tecnicos 
@@ -481,11 +623,15 @@ def finalizar_visita(id_visita):
     except Exception as e:
         conexion.rollback()
         print(f"[Cierre] Error al finalizar visita con materiales: {e}")
+        if request.is_json or request.headers.get('Accept') == 'application/json':
+            return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         if 'conexion' in locals() and conexion.is_connected():
             cursor.close()
             conexion.close()
             
+    if request.is_json or request.headers.get('Accept') == 'application/json':
+        return jsonify({"status": "ok", "message": "Visita finalizada con éxito"})
     return redirect(request.referrer)
 
 # --- 5. RASTREO SILENCIOSO DEL GPS EN VIVO ---
@@ -654,7 +800,8 @@ def obtener_historial_cliente(nombre_cliente):
 
 @tecnico_bp.route('/api/tecnico/ping_global', methods=['POST'])
 def ping_global():
-    if 'user_id' not in session or session.get('user_role') != 'TECNICO':
+    usuario = obtener_usuario_autenticado()
+    if not usuario or usuario.get('role') not in ['TECNICO', 'ADMIN', 'ASESOR']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     if request.is_json:
@@ -664,7 +811,9 @@ def ping_global():
         
     lat = datos.get('latitud')
     lon = datos.get('longitud')
-    tecnico_nombre = session.get('user_name')
+    tecnico_nombre = datos.get('tecnico_nombre')
+    if usuario.get('role') == 'TECNICO' or not tecnico_nombre:
+        tecnico_nombre = usuario.get('username')
 
     if lat and lon and tecnico_nombre:
         conexion = get_db_connection()
@@ -689,7 +838,8 @@ def ping_global():
 
 @tecnico_bp.route('/api/tecnico/descanso', methods=['POST'])
 def descanso_tecnico():
-    if 'user_id' not in session or session.get('user_role') != 'TECNICO':
+    usuario = obtener_usuario_autenticado()
+    if not usuario or usuario.get('role') not in ['TECNICO', 'ADMIN', 'ASESOR']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     if request.is_json:
@@ -698,7 +848,9 @@ def descanso_tecnico():
         datos = request.form
         
     accion = datos.get('accion')
-    tecnico_nombre = session.get('user_name')
+    tecnico_nombre = datos.get('tecnico_nombre')
+    if usuario.get('role') == 'TECNICO' or not tecnico_nombre:
+        tecnico_nombre = usuario.get('username')
 
     if not accion and not request.is_json:
         accion = request.form.get('accion')
@@ -727,7 +879,8 @@ def descanso_tecnico():
 
 @tecnico_bp.route('/api/tecnico/area_trabajo', methods=['POST'])
 def cambiar_area_trabajo():
-    if 'user_id' not in session or session.get('user_role') != 'TECNICO':
+    usuario = obtener_usuario_autenticado()
+    if not usuario or usuario.get('role') not in ['TECNICO', 'ADMIN', 'ASESOR']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     if request.is_json:
@@ -736,7 +889,9 @@ def cambiar_area_trabajo():
         datos = request.form
         
     area = datos.get('area_trabajo')
-    tecnico_nombre = session.get('user_name')
+    tecnico_nombre = datos.get('tecnico_nombre')
+    if usuario.get('role') == 'TECNICO' or not tecnico_nombre:
+        tecnico_nombre = usuario.get('username')
 
     if not area and not request.is_json:
         area = request.form.get('area_trabajo')
@@ -768,7 +923,8 @@ def cambiar_area_trabajo():
 
 @tecnico_bp.route('/api/tecnico/panico/activar', methods=['POST'])
 def activar_panico():
-    if 'user_id' not in session or session.get('user_role') != 'TECNICO':
+    usuario = obtener_usuario_autenticado()
+    if not usuario or usuario.get('role') not in ['TECNICO', 'ADMIN', 'ASESOR']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     if request.is_json:
@@ -777,7 +933,9 @@ def activar_panico():
         datos = request.form
         
     mensaje = datos.get('mensaje')
-    tecnico_nombre = session.get('user_name')
+    tecnico_nombre = datos.get('tecnico_nombre')
+    if usuario.get('role') == 'TECNICO' or not tecnico_nombre:
+        tecnico_nombre = usuario.get('username')
 
     if not mensaje and not request.is_json:
         mensaje = request.form.get('mensaje')
@@ -811,10 +969,18 @@ def activar_panico():
 
 @tecnico_bp.route('/api/tecnico/panico/desactivar', methods=['POST'])
 def desactivar_panico():
-    if 'user_id' not in session or session.get('user_role') != 'TECNICO':
+    usuario = obtener_usuario_autenticado()
+    if not usuario or usuario.get('role') not in ['TECNICO', 'ADMIN', 'ASESOR']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
-    tecnico_nombre = session.get('user_name')
+    if request.is_json:
+        datos = request.get_json() or {}
+    else:
+        datos = request.form
+        
+    tecnico_nombre = datos.get('tecnico_nombre')
+    if usuario.get('role') == 'TECNICO' or not tecnico_nombre:
+        tecnico_nombre = usuario.get('username')
 
     if tecnico_nombre:
         conexion = get_db_connection()
@@ -870,7 +1036,8 @@ def verificar_firma(id_visita):
 
 @tecnico_bp.route('/api/tecnico/posponer/<int:id_visita>', methods=['POST'])
 def posponer_visita(id_visita):
-    if 'user_id' not in session or session.get('user_role') != 'TECNICO':
+    usuario = obtener_usuario_autenticado()
+    if not usuario or usuario.get('role') not in ['TECNICO', 'ADMIN', 'ASESOR']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     if request.is_json:
@@ -885,7 +1052,9 @@ def posponer_visita(id_visita):
     if motivo == 'Otro motivo' and motivo_otro:
         motivo_final = motivo_otro
         
-    tecnico_nombre = session.get('user_name')
+    tecnico_nombre = datos.get('tecnico_nombre')
+    if usuario.get('role') == 'TECNICO' or not tecnico_nombre:
+        tecnico_nombre = usuario.get('username')
     
     conexion = get_db_connection()
     cursor = conexion.cursor(dictionary=True)

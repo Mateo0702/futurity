@@ -15,9 +15,19 @@ def allowed_file(filename):
 
 def check_admin_privileges():
     """Valida si el usuario actual es administrador."""
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
+
+    if not user:
         return False, jsonify({"status": "error", "message": "No autorizado. Inicie sesión."}), 401
-    if session.get('user_role') != 'ADMIN':
+    
+    user_role = user.get('role') or user.get('rol')
+    if user_role != 'ADMIN':
         return False, jsonify({"status": "error", "message": "No tienes privilegios de administrador."}), 403
     return True, None, None
 
@@ -250,7 +260,16 @@ def toggle_usuario(id_usuario):
 
 @usuarios_bp.route('/api/admin/tecnicos', methods=['GET'])
 def list_tecnicos():
-    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR']:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role')}
+
+    user_role = user.get('role') or user.get('rol')
+    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver la lista de técnicos."}), 403
 
     conn = get_db_connection()

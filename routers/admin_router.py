@@ -33,9 +33,19 @@ def dashboard_calidad():
 
 @admin_bp.route('/api/admin/control_calidad/datos')
 def api_dashboard_calidad():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+    
+    user_role = user.get('role') or user.get('rol')
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver datos de control de calidad."}), 403
         
     conexion = get_db_connection()
@@ -290,12 +300,22 @@ def auditoria_cliente():
 
 @admin_bp.route('/api/admin/tecnicos/ubicaciones', methods=['GET'])
 def api_tecnicos_ubicaciones():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+    
+    user_role = user.get('role') or user.get('rol')
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver la ubicación de los técnicos."}), 403
         
-    active_area = session.get('active_area', 'SOPORTE')
+    active_area = request.args.get('area') or session.get('active_area', 'SOPORTE')
     conexion = get_db_connection()
     if not conexion:
         return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
@@ -1170,7 +1190,15 @@ def generar_excel_calidad(visitas, fecha_str):
 
 @admin_bp.route('/api/admin/reporte_calidad/preview', methods=['GET'])
 def preview_reporte_calidad():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha', date.today().isoformat())
@@ -1486,7 +1514,15 @@ def generar_excel_actividades(grouped, fecha_str):
 
 @admin_bp.route('/api/admin/reporte_actividades/preview', methods=['GET'])
 def preview_reporte_actividades():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha', date.today().isoformat())
@@ -1769,7 +1805,15 @@ def generar_excel_dia_siguiente(visitas, grupo_reagendadas_len, grupo_hoy_len, f
 
 @admin_bp.route('/api/admin/reporte_dia_siguiente/preview', methods=['GET'])
 def preview_reporte_dia_siguiente():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha', date.today().isoformat())
@@ -2014,7 +2058,15 @@ def map_problema(prob):
 
 @admin_bp.route('/api/admin/cuadro_mando/preview', methods=['GET'])
 def preview_cuadro_mando():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha', date.today().isoformat())
@@ -2237,7 +2289,15 @@ def preview_cuadro_mando():
 
 @admin_bp.route('/api/admin/cuadro_mando/share_link', methods=['GET'])
 def get_cuadro_mando_share_link():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id']}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha')
@@ -2254,11 +2314,12 @@ def get_cuadro_mando_share_link():
     token = hashlib.sha256(f"{fecha}_{secret}".encode('utf-8')).hexdigest()[:16]
     
     # Determinar el dominio base del enlace público
-    if "trycloudflare.com" in request.host:
+    if "localhost" in request.host or "127.0.0.1" in request.host:
+        base_url = "http://localhost:5173/"
+    elif "trycloudflare.com" in request.host:
         base_url = request.host_url
     else:
-        # Forzar el dominio oficial de producción en cualquier otro caso
-        base_url = "http://atlas.futurity.com.ec:7565/"
+        base_url = request.host_url
         
     if not base_url.endswith("/"):
         base_url += "/"
@@ -2827,9 +2888,21 @@ def download_excel_cuadro_mando():
 
 @admin_bp.route('/api/admin/inventario', methods=['GET'])
 def api_obtener_inventario():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    role = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+        if user:
+            role = user.get('role')
+    elif 'user_id' in session:
+        user = {'sub': session['user_id']}
+        role = session.get('user_role')
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'BODEGA']:
+    if role not in ['ADMIN', 'BODEGA']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver inventario."}), 403
         
     conexion = get_db_connection()
@@ -2900,9 +2973,21 @@ def api_obtener_inventario():
 
 @admin_bp.route('/api/admin/inventario/bodega/ingreso', methods=['POST'])
 def api_bodega_ingreso():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    role = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+        if user:
+            role = user.get('role')
+    elif 'user_id' in session:
+        user = {'sub': session['user_id']}
+        role = session.get('user_role')
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'BODEGA']:
+    if role not in ['ADMIN', 'BODEGA']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ingresar insumos a bodega."}), 403
         
     datos = request.get_json() or {}
@@ -2934,9 +3019,21 @@ def api_bodega_ingreso():
 
 @admin_bp.route('/api/admin/inventario/tecnico/entrega', methods=['POST'])
 def api_tecnico_entrega():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    role = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+        if user:
+            role = user.get('role')
+    elif 'user_id' in session:
+        user = {'sub': session['user_id']}
+        role = session.get('user_role')
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'BODEGA']:
+    if role not in ['ADMIN', 'BODEGA']:
         return jsonify({"status": "error", "message": "No tienes privilegios para entregar insumos a técnicos."}), 403
         
     datos = request.get_json() or {}
@@ -2986,9 +3083,21 @@ def api_tecnico_entrega():
 
 @admin_bp.route('/api/admin/inventario/tecnico/devolucion', methods=['POST'])
 def api_tecnico_devolucion():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    role = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+        if user:
+            role = user.get('role')
+    elif 'user_id' in session:
+        user = {'sub': session['user_id']}
+        role = session.get('user_role')
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'BODEGA']:
+    if role not in ['ADMIN', 'BODEGA']:
         return jsonify({"status": "error", "message": "No tienes privilegios para registrar devoluciones."}), 403
         
     datos = request.get_json() or {}
@@ -3342,7 +3451,15 @@ def metricas_tiempos():
 
 @admin_bp.route('/api/admin/recordatorios', methods=['GET'])
 def obtener_recordatorios():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha_filtro = request.args.get('fecha')
@@ -3395,7 +3512,16 @@ def obtener_recordatorios():
 
 @admin_bp.route('/api/admin/recordatorios', methods=['POST'])
 def crear_recordatorio():
-    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'nombre': session.get('user_name')}
+
+    user_role = user.get('role') or user.get('rol') if user else None
+    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     datos = request.get_json() or {}
@@ -3408,17 +3534,9 @@ def crear_recordatorio():
     tecnico_id = datos.get('tecnico_id') or None
     
     if not titulo or not tipo or not fecha:
-        return jsonify({"status": "error", "message": "Título, tipo y fecha son obligatorios."}), 400
+        return jsonify({"status": "error", "message": "Título, Tipo y Fecha son obligatorios."}), 400
         
-    if tecnico_id == "" or tecnico_id == "null" or tecnico_id is None:
-        tecnico_id = None
-    else:
-        try:
-            tecnico_id = int(tecnico_id)
-        except ValueError:
-            tecnico_id = None
-        
-    creado_por = session.get('user_name', 'Admin')
+    creado_por = user.get('nombre') or user.get('username') or 'Sistema'
     
     conexion = get_db_connection()
     if not conexion:
@@ -3428,12 +3546,12 @@ def crear_recordatorio():
         cursor = conexion.cursor()
         query = """
             INSERT INTO recordatorios_bloqueos 
-            (titulo, descripcion, tipo, fecha, hora_inicio, hora_fin, tecnico_id, creado_por)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            (titulo, descripcion, tipo, fecha, hora_inicio, hora_fin, tecnico_id, creado_por, activo)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1)
         """
         cursor.execute(query, (titulo, descripcion, tipo, fecha, hora_inicio, hora_fin, tecnico_id, creado_por))
         conexion.commit()
-        return jsonify({"status": "ok", "message": "Recordatorio/Bloqueo registrado con éxito."})
+        return jsonify({"status": "ok", "message": "Recordatorio/Bloqueo creado con éxito."})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
@@ -3443,7 +3561,16 @@ def crear_recordatorio():
 @admin_bp.route('/api/admin/recordatorios/<int:id_recordatorio>', methods=['DELETE'])
 @admin_bp.route('/api/admin/recordatorios/<int:id_recordatorio>/atender', methods=['POST'])
 def eliminar_recordatorio(id_recordatorio):
-    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role')}
+
+    user_role = user.get('role') or user.get('rol') if user else None
+    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     conexion = get_db_connection()

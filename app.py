@@ -18,7 +18,11 @@ from routers.cliente_router import cliente_bp
 from routers.admin_router import admin_bp
 from routers.atenciones_router import atenciones_bp
 from routers.usuarios_router import usuarios_bp
+from routers.api_v2_router import api_v2_bp
+from flask_cors import CORS
+from utils_jwt import verify_token
 # Tus módulos internos
+
 from optimizador import interpretar_preferencia_horaria, optimizar_todas_las_visitas
 from db_config import get_db_connection
 from utils import normalizar_horario_texto, parsear_informacion_tecnica
@@ -28,6 +32,9 @@ OFICINA_LAT = -2.896829
 OFICINA_LON = -78.975419
 
 app = Flask(__name__)
+# Configurar CORS para permitir peticiones desde React local
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173"]}})
+
 # Pega aquí el código que generaste en la terminal:
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', '8b093e226bd1155f8527a13430d48a4048023c69e7cde5dcc37224407f0ac1c2') 
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)
@@ -39,6 +46,18 @@ app.register_blueprint(cliente_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(atenciones_bp)
 app.register_blueprint(usuarios_bp)
+app.register_blueprint(api_v2_bp)
+
+@app.before_request
+def auto_login_from_jwt():
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        payload = verify_token(token)
+        if payload:
+            session['user_id'] = payload.get('sub')
+            session['user_name'] = payload.get('username')
+            session['user_role'] = payload.get('role')
 
 def get_app_version():
     version_code = 1

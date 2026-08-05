@@ -1,0 +1,226 @@
+import React, { useState } from 'react';
+
+function Login({ onLoginSuccess }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/v2/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'success') {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.usuario));
+        onLoginSuccess(data.token, data.usuario);
+      } else {
+        const errorMsg = data.errors ? data.errors.join(', ') : (data.message || 'Credenciales incorrectas');
+        setError(errorMsg);
+      }
+    } catch (err) {
+      setError('Error de conexión con el servidor backend ().');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="login-page">
+      <div className="login-split-card">
+        {/* Panel Izquierdo: Visual & Características */}
+        <div className="login-split-left">
+          <div className="login-left-content">
+            <div className="login-shield-container">
+              <div className="login-shield-glow"></div>
+              <svg className="login-shield-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M50 12 L82 22 C82 52 68 76 50 88 C32 76 18 52 18 22 Z" fill="url(#shield-grad)" stroke="url(#stroke-grad)" strokeWidth="2.5" />
+                <rect x="38" y="48" width="24" height="18" rx="4" fill="#ffffff" />
+                <path d="M43 48 V41 C43 37.1 46.1 34 50 34 C53.9 34 57 37.1 57 41 V48" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" />
+                <circle cx="50" cy="56" r="2.5" fill="#e11d48" />
+                <path d="M50 58.5 V62" stroke="#e11d48" strokeWidth="2" strokeLinecap="round" />
+                <defs>
+                  <linearGradient id="shield-grad" x1="50" y1="12" x2="50" y2="88" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#fb7185" stopOpacity="0.6"/>
+                    <stop offset="100%" stopColor="#e11d48" stopOpacity="0.15"/>
+                  </linearGradient>
+                  <linearGradient id="stroke-grad" x1="50" y1="12" x2="50" y2="88" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#fda4af" stopOpacity="0.9"/>
+                    <stop offset="100%" stopColor="#be123c" stopOpacity="0.3"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <h1 className="login-left-title" style={{ fontWeight: 800, color: 'white' }}>
+              Futurity <span style={{ background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 900 }}>Atlas</span>
+            </h1>
+            <p className="login-left-desc">Optimización inteligente de rutas, monitoreo en vivo y control de calidad.</p>
+          </div>
+
+          {/* Características del sistema al pie */}
+          <div className="login-features-grid">
+            <div className="login-feature-item">
+              <div className="login-feature-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
+              </div>
+              <div className="login-feature-title">Seguro</div>
+              <div className="login-feature-desc">Datos protegidos</div>
+            </div>
+            <div className="login-feature-item">
+              <div className="login-feature-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+              </div>
+              <div className="login-feature-title">Rápido</div>
+              <div className="login-feature-desc">Acceso en segundos</div>
+            </div>
+            <div className="login-feature-item">
+              <div className="login-feature-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+              </div>
+              <div className="login-feature-title">Confiable</div>
+              <div className="login-feature-desc">Portal de ruteo</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Panel Derecho: Formulario de Login */}
+        <div className="login-split-right">
+          <div className="login-right-header">
+            <div className="login-logo-wrapper" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
+              <img src="/img/logo_futurity.png" alt="Futurity Logo" style={{ height: '48px', objectFit: 'contain' }} />
+              <span style={{ fontSize: '1.5rem', fontWeight: 800 }}>
+                Futurity <span style={{ background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 900 }}>Atlas</span>
+              </span>
+            </div>
+            <h2>Portal Administrativo</h2>
+            <p>Inicia sesión para acceder al centro de control</p>
+          </div>
+
+          <div>
+            {error && (
+              <div className="login-alert login-alert-error" style={{ marginBottom: '20px', padding: '12px 16px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', color: '#dc2626', fontSize: '0.85rem', fontWeight: 600 }}>
+                <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: '8px' }}></i> {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit}>
+              <div className="login-form-group">
+                <label htmlFor="email">Correo Corporativo</label>
+                <div className="input-with-icon-wrapper">
+                  <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="ejemplo@futurity.com"
+                    className="login-input"
+                  />
+                  <div className="input-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                      <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="login-form-group">
+                <label htmlFor="password">Contraseña</label>
+                <div className="input-with-icon-wrapper password-wrapper">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    id="password"
+                    name="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="login-input"
+                  />
+                  <div className="input-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="toggle-password-btn"
+                    aria-label="Mostrar u ocultar contraseña"
+                  >
+                    {showPassword ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                      </svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="login-btn"
+                style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'var(--primary)', color: 'white', border: 'none', fontWeight: 800, fontSize: '0.95rem', cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(225, 29, 72, 0.3)' }}
+              >
+                <span>{loading ? 'Autenticando...' : 'Ingresar al Sistema'}</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+              </button>
+            </form>
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: '25px', fontSize: '0.8rem' }}>
+            <a href="/descargar_app" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                <line x1="12" y1="18" x2="12.01" y2="18"></line>
+              </svg>
+              Descargar App Futurity Atlas
+            </a>
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: '35px', paddingTop: '15px', borderTop: '1px solid var(--border-color)', fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
+            <span><i className="fa-solid fa-bolt" style={{ color: '#2563eb', marginRight: '4px' }}></i> Powered by Atlas Enterprise</span>
+            <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>Futurity Portal • React SPA v2.0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default Login;
