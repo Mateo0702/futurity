@@ -2,12 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 
 function MetricasTab({ token }) {
   // Date helpers
-  const getTodayIso = () => new Date().toISOString().split('T')[0];
+  const formatLocalIso = (d = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const getTodayIso = () => formatLocalIso(new Date());
   const getThreeMonthsAgoIso = () => {
-    const hoy = new Date();
     const ago = new Date();
-    ago.setMonth(hoy.getMonth() - 3);
-    return ago.toISOString().split('T')[0];
+    ago.setMonth(ago.getMonth() - 3);
+    return formatLocalIso(ago);
   };
 
   // State filters

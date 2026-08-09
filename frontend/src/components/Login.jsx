@@ -25,7 +25,14 @@ function Login({ onLoginSuccess }) {
 
       if (response.ok && data.status === 'success') {
         localStorage.setItem('token', data.token);
+        localStorage.setItem('session_token', data.token);
         localStorage.setItem('user', JSON.stringify(data.usuario));
+        if (data.usuario && data.usuario.nombre) {
+          localStorage.setItem('user_name', data.usuario.nombre);
+        }
+        if (data.usuario && data.usuario.rol) {
+          localStorage.setItem('user_role', data.usuario.rol);
+        }
         onLoginSuccess(data.token, data.usuario);
       } else {
         const errorMsg = data.errors ? data.errors.join(', ') : (data.message || 'Credenciales incorrectas');
@@ -99,23 +106,24 @@ function Login({ onLoginSuccess }) {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                 </svg>
               </div>
-              <div className="login-feature-title">Confiable</div>
-              <div className="login-feature-desc">Portal de ruteo</div>
+              <div className="login-feature-title">Móvil</div>
+              <div className="login-feature-desc">Panel de Técnicos</div>
             </div>
           </div>
         </div>
 
         {/* Panel Derecho: Formulario de Login */}
         <div className="login-split-right">
+          <div className="login-logo-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '20px' }}>
+            <img src="/img/logo_futurity.png" alt="Futurity Logo" style={{ height: '42px', objectFit: 'contain' }} />
+            <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-main)' }}>
+              Futurity <span style={{ background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 900 }}>Atlas</span>
+            </span>
+          </div>
+
           <div className="login-right-header">
-            <div className="login-logo-wrapper" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
-              <img src="/img/logo_futurity.png" alt="Futurity Logo" style={{ height: '48px', objectFit: 'contain' }} />
-              <span style={{ fontSize: '1.5rem', fontWeight: 800 }}>
-                Futurity <span style={{ background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 900 }}>Atlas</span>
-              </span>
-            </div>
-            <h2>Portal Administrativo</h2>
-            <p>Inicia sesión para acceder al centro de control</p>
+            <h2>Portal de Acceso</h2>
+            <p>Inicia sesión para acceder al centro de control o panel técnico</p>
           </div>
 
           <div>

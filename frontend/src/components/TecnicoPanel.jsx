@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-function TecnicoPanel({ token, user, tecnicoNombreParam }) {
-  const tecnicoName = tecnicoNombreParam || user?.username || '';
+function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
+  const tecnicoName = tecnicoNombreParam || user?.nombre || '';
   const tecnicoUrlName = tecnicoName.replace(/ /g, '_');
   
   const [loading, setLoading] = useState(true);
@@ -10,6 +10,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
   // Panel Data
   const [visitas, setVisitas] = useState([]);
   const [tecnicoRealName, setTecnicoRealName] = useState(tecnicoName);
+  const [fotoPerfil, setFotoPerfil] = useState('');
   const [estadoActividad, setEstadoActividad] = useState('Disponible');
   const [areaTrabajo, setAreaTrabajo] = useState('SOPORTE');
   const [alertaPanico, setAlertaPanico] = useState(false);
@@ -23,6 +24,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
   const [catalogoRouter, setCatalogoRouter] = useState([]);
   
   // Active Visit Details Overlay
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [activeVisita, setActiveVisita] = useState(null); // Visita object
   const [activeSubTab, setActiveSubTab] = useState('tab-cliente'); // 'tab-cliente' | 'tab-nodo' | 'tab-acciones'
 
@@ -52,6 +54,50 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
   const [qrToken, setQrToken] = useState('');
   const [qrClienteName, setQrClienteName] = useState('');
 
+  // Traspaso Modal State
+  const [showTraspasoModal, setShowTraspasoModal] = useState(false);
+  const [tecnicosLista, setTecnicosLista] = useState([]);
+  const [traspasoForm, setTraspasoForm] = useState({ tecnico_destino_nombre: '', id_material: '', cantidad: '' });
+  const [traspasoLoading, setTraspasoLoading] = useState(false);
+
+  const handleTraspasoSubmit = async (e) => {
+    if (e) e.preventDefault();
+    const { tecnico_destino_nombre, id_material, cantidad } = traspasoForm;
+    if (!tecnico_destino_nombre || !id_material || !cantidad || parseInt(cantidad) <= 0) {
+      alert("Por favor completa los datos requeridos para el traspaso.");
+      return;
+    }
+    setTraspasoLoading(true);
+    try {
+      const res = await fetch('/api/tecnico/traspaso_material', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          tecnico_destino_nombre,
+          id_material: parseInt(id_material),
+          cantidad: parseInt(cantidad)
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        alert(data.message || "Traspaso registrado exitosamente.");
+        setShowTraspasoModal(false);
+        setTraspasoForm({ tecnico_destino_nombre: '', id_material: '', cantidad: '' });
+        await cargarDatosPanel();
+      } else {
+        alert("Error al traspasar: " + (data.message || "No se pudo realizar la transacción"));
+      }
+    } catch (err) {
+      console.error("Error en traspaso:", err);
+      alert("Error de conexión al realizar traspaso.");
+    } finally {
+      setTraspasoLoading(false);
+    }
+  };
+
   // Work Tab Forms State (indexed by visit ID)
   const [formCierre, setFormCierre] = useState({}); // { [visitaId]: { solucion_tecnico, observacion_tecnico, modelo_onu, modelo_router, metodo_firma, motivo_sin_firma, coordenadas_tecnico, equipos_juntos: true, foto_equipos_base64, foto_equipos_2_base64, foto_extra_1_base64, foto_extra_2_base64, foto_extra_3_base64, foto_extra_4_base64, firma_cliente_base64, materiales: [] } }
 
@@ -70,6 +116,14 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
     
     return () => clearInterval(pingInterval);
   }, [tecnicoName]);
+
+  // Manage body class for responsive mobile styling
+  useEffect(() => {
+    document.body.classList.add('body-tecnico');
+    return () => {
+      document.body.classList.remove('body-tecnico');
+    };
+  }, []);
 
   // Handle signature verification interval when waiting for Remote Signature
   useEffect(() => {
@@ -98,6 +152,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
       if (res.ok && data.status === 'ok') {
         setVisitas(data.visitas || []);
         setTecnicoRealName(data.tecnico);
+        setFotoPerfil(data.foto_perfil || '');
         setEstadoActividad(data.estado_actividad);
         setAreaTrabajo(data.area_trabajo);
         setAlertaPanico(data.alerta_panico === 1 || data.alerta_panico === true);
@@ -108,31 +163,36 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
         setCatalogoMateriales(data.catalogo || []);
         setCatalogoOnt(data.catalogo_ont || []);
         setCatalogoRouter(data.catalogo_router || []);
+        setTecnicosLista(data.tecnicos_lista || []);
         
-        // Initialize form closures state
-        const initialForm = {};
-        (data.visitas || []).forEach(v => {
-          initialForm[v.id_visita] = {
-            solucion_tecnico: v.solucion_tecnico || '',
-            observacion_tecnico: v.observacion_tecnico || '',
-            modelo_onu: v.modelo_onu || '',
-            modelo_router: v.modelo_router || '',
-            metodo_firma: 'REMOTA',
-            motivo_sin_firma: 'TRABAJO_EXTERNO',
-            coordenadas_tecnico: v.coordenadas_tecnico || '',
-            equipos_juntos: true,
-            foto_equipos_base64: '',
-            foto_equipos_2_base64: '',
-            firma_cliente_base64: '',
-            firma_recibida: '0',
-            foto_extra_1_base64: '',
-            foto_extra_2_base64: '',
-            foto_extra_3_base64: '',
-            foto_extra_4_base64: '',
-            materiales: []
-          };
+        // Initialize form closures state, preserving any user input in progress
+        setFormCierre(prev => {
+          const nextForm = { ...prev };
+          (data.visitas || []).forEach(v => {
+            if (!nextForm[v.id_visita]) {
+              nextForm[v.id_visita] = {
+                solucion_tecnico: v.solucion_tecnico || '',
+                observacion_tecnico: v.observacion_tecnico || '',
+                modelo_onu: v.modelo_onu || '',
+                modelo_router: v.modelo_router || '',
+                metodo_firma: 'REMOTA',
+                motivo_sin_firma: 'TRABAJO_EXTERNO',
+                coordenadas_tecnico: v.coordenadas_tecnico || '',
+                equipos_juntos: true,
+                foto_equipos_base64: '',
+                foto_equipos_2_base64: '',
+                firma_cliente_base64: '',
+                firma_recibida: '0',
+                foto_extra_1_base64: '',
+                foto_extra_2_base64: '',
+                foto_extra_3_base64: '',
+                foto_extra_4_base64: '',
+                materiales: []
+              };
+            }
+          });
+          return nextForm;
         });
-        setFormCierre(initialForm);
       } else {
         setError(data.message || 'Error al obtener información de visitas.');
       }
@@ -144,40 +204,64 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
     }
   };
 
+  const defaultFormState = {
+    solucion_tecnico: '',
+    observacion_tecnico: '',
+    modelo_onu: '',
+    modelo_router: '',
+    metodo_firma: 'REMOTA',
+    motivo_sin_firma: 'TRABAJO_EXTERNO',
+    coordenadas_tecnico: '',
+    equipos_juntos: true,
+    foto_equipos_base64: '',
+    foto_equipos_2_base64: '',
+    firma_cliente_base64: '',
+    firma_recibida: '0',
+    foto_extra_1_base64: '',
+    foto_extra_2_base64: '',
+    foto_extra_3_base64: '',
+    foto_extra_4_base64: '',
+    materiales: []
+  };
+
   const getFormState = (id) => {
-    return formCierre[id] || {
-      solucion_tecnico: '',
-      observacion_tecnico: '',
-      modelo_onu: '',
-      modelo_router: '',
-      metodo_firma: 'REMOTA',
-      motivo_sin_firma: 'TRABAJO_EXTERNO',
-      coordenadas_tecnico: '',
-      equipos_juntos: true,
-      foto_equipos_base64: '',
-      foto_equipos_2_base64: '',
-      firma_cliente_base64: '',
-      firma_recibida: '0',
-      foto_extra_1_base64: '',
-      foto_extra_2_base64: '',
-      foto_extra_3_base64: '',
-      foto_extra_4_base64: '',
-      materiales: []
-    };
+    return formCierre[id] || defaultFormState;
   };
 
   const updateFormState = (id, fields) => {
-    setFormCierre(prev => ({
-      ...prev,
-      [id]: {
-        ...getFormState(id),
-        ...fields
-      }
-    }));
+    setFormCierre(prev => {
+      const current = prev[id] || defaultFormState;
+      return {
+        ...prev,
+        [id]: {
+          ...current,
+          ...fields
+        }
+      };
+    });
   };
 
   // GPS Auto-Ping
   const enviarPingGeolocalizacion = () => {
+    if (estadoActividad === 'En Descanso') {
+      console.log("El técnico está en descanso. Saltando ping.");
+      return;
+    }
+
+    if (window.AndroidBridge) {
+      console.log("Solicitando ping global nativo Android...");
+      try {
+        window.AndroidBridge.requestSingleLocation("global");
+      } catch (e) {
+        console.error("Error al llamar requestSingleLocation nativo:", e);
+        solicitarPingHTML5();
+      }
+    } else {
+      solicitarPingHTML5();
+    }
+  };
+
+  const solicitarPingHTML5 = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
@@ -195,13 +279,58 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
               })
             });
           } catch (err) {
-            console.error('Error enviando ping de geolocalización:', err);
+            console.error('Error enviando ping global HTML5:', err);
           }
         },
-        (err) => console.log('Ubicación denegada o no disponible para ping.')
+        (err) => console.log('Ubicación HTML5 denegada o no disponible para ping: ' + err.message),
+        { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
       );
     }
   };
+
+  // Register native callback hook on window object for Android app interaction
+  useEffect(() => {
+    window.recibirUbicacionNativa = async (tipo, lat, lon) => {
+      console.log("Recibida ubicación nativa desde Android:", tipo, lat, lon);
+      if (tipo === 'global') {
+        if (estadoActividad === 'En Descanso') {
+          console.log("El técnico está en descanso. Saltando ping nativo.");
+          return;
+        }
+        try {
+          await fetch('/api/tecnico/ping_global', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              latitud: lat,
+              longitud: lon,
+              tecnico_nombre: tecnicoRealName
+            })
+          });
+        } catch (err) {
+          console.error("Error al enviar ping nativo:", err);
+        }
+      } else if (tipo && tipo.toString().startsWith('inicio_')) {
+        if (window.recibirUbicacionNativaInicio) {
+          window.recibirUbicacionNativaInicio(lat, lon);
+        }
+      } else {
+        const visitaId = parseInt(tipo);
+        if (!isNaN(visitaId)) {
+          const c = `${lat}, ${lon}`;
+          updateFormState(visitaId, { coordenadas_tecnico: c });
+          alert(`Ubicación nativa capturada por GPS: ${c}`);
+        }
+      }
+    };
+
+    return () => {
+      delete window.recibirUbicacionNativa;
+    };
+  }, [token, tecnicoRealName, estadoActividad]);
 
   // --- OLT SmartOLT Live Diagnosis ---
   const ejecutarMedicionOLT = async (sn) => {
@@ -394,17 +523,24 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
     }
   };
 
-  const abrirNavegadorGPS = (direccion, sector) => {
-    const cleanDir = `${direccion}, ${sector || ''}, Cuenca, Ecuador`;
-    const wazeUrl = `https://waze.com/ul?q=${encodeURIComponent(cleanDir)}`;
-    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanDir)}`;
-    
-    const choice = window.confirm("¿Deseas abrir la ubicación en Waze?\n(Aceptar para Waze, Cancelar para Google Maps)");
-    if (choice) {
-      window.open(wazeUrl, '_blank');
+  const abrirNavegadorGPS = (direccion = '', sector = '', coordenadas = '') => {
+    const combinedStr = `${coordenadas || ''} ${direccion || ''}`;
+    // Extract pure latitude and longitude numbers if present
+    const regex = /(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/;
+    const match = combinedStr.match(regex);
+
+    let query = '';
+    if (match) {
+      // Send ONLY pure lat,lon coordinates to Google Maps
+      query = `${match[1]},${match[2]}`;
     } else {
-      window.open(mapsUrl, '_blank');
+      // Strip any parentheses text from address if present and search address
+      const cleanAddress = (direccion || '').replace(/\([^)]*\)/g, '').trim();
+      query = `${cleanAddress}, ${sector || ''}, Cuenca, Ecuador`;
     }
+
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+    window.open(mapsUrl, '_blank');
   };
 
   // --- Actions and state changes ---
@@ -419,6 +555,13 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
       });
       const data = await res.json();
       if (res.ok && data.status === 'ok') {
+        if (window.AndroidBridge) {
+          try {
+            window.AndroidBridge.startTracking(idVisita.toString(), window.location.origin);
+          } catch (e) {
+            console.error("Error al iniciar tracking AndroidBridge:", e);
+          }
+        }
         await cargarDatosPanel();
         // Refresh active visit
         const resV = await fetch(`/api/tecnico/panel/${tecnicoUrlName}`, {
@@ -439,6 +582,14 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
   };
 
   const registrarLlegueTrabajo = async (idVisita) => {
+    if (window.AndroidBridge) {
+      try {
+        window.AndroidBridge.stopTracking();
+      } catch (e) {
+        console.error("Error al detener tracking en registrarLlegueTrabajo:", e);
+      }
+    }
+
     // Get GPS coords first
     let lat = null, lon = null;
     if (navigator.geolocation) {
@@ -485,6 +636,15 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
   };
 
   const captureGPSCoordinates = (visitaId) => {
+    if (window.AndroidBridge) {
+      try {
+        window.AndroidBridge.requestSingleLocation(visitaId.toString());
+        return;
+      } catch (e) {
+        console.error("Error al solicitar ubicación única AndroidBridge:", e);
+      }
+    }
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -521,6 +681,13 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
       });
       const data = await res.json();
       if (res.ok && data.status === 'ok') {
+        if (window.AndroidBridge) {
+          try {
+            window.AndroidBridge.stopTracking();
+          } catch (e) {
+            console.error("Error al detener tracking en posponerVisitaSubmit:", e);
+          }
+        }
         setShowPosponerModal(false);
         setActiveVisita(null);
         await cargarDatosPanel();
@@ -681,7 +848,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
   const enviarLinkFirmaWhatsApp = (telefonos, tecnico, tokenRastreo) => {
     if (!telefonos) return;
     const cleanTel = telefonos.split('/')[0].trim().replace(/[^\d+]/g, '');
-    const msg = `Hola! Soy ${tecnico}, tu técnico asignado. Por favor, ingresa a este enlace para firmar tu conformidad del trabajo: http://localhost:5173/firma-remota/${tokenRastreo}`;
+    const msg = `Hola! Soy ${tecnico}, tu técnico asignado. Por favor, ingresa a este enlace para firmar tu conformidad del trabajo: ${window.location.origin}/firma-remota/${tokenRastreo}`;
     window.open(`https://wa.me/${cleanTel}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -720,7 +887,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
   const abrirWhatsApp = (telefonos, tecnico, tokenRastreo) => {
     if (!telefonos) return;
     const cleanTel = telefonos.split('/')[0].trim().replace(/[^\d+]/g, '');
-    const msg = `Estimado cliente, le saluda ${tecnico}. Le informo que ya voy en camino a su domicilio para realizar el trabajo. Puede seguir mi trayecto en tiempo real ingresando aquí: http://localhost:5173/seguimiento/${tokenRastreo}`;
+    const msg = `Estimado cliente, le saluda ${tecnico}. Le informo que ya voy en camino a su domicilio para realizar el trabajo. Puede seguir mi trayecto en tiempo real ingresando aquí: ${window.location.origin}/seguimiento/${tokenRastreo}`;
     window.open(`https://wa.me/${cleanTel}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -791,6 +958,13 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
       const data = await res.json();
       if (res.ok && data.status === 'ok') {
         alert('Visita finalizada y registrada con éxito.');
+        if (window.AndroidBridge) {
+          try {
+            window.AndroidBridge.stopTracking();
+          } catch (e) {
+            console.error("Error al detener tracking en handleFinalizeSubmit:", e);
+          }
+        }
         setActiveVisita(null);
         await cargarDatosPanel();
       } else {
@@ -805,115 +979,131 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
   const activeFormState = activeVisita ? getFormState(activeVisita.id_visita) : {};
 
   return (
-    <div className="panel-container" style={{ display: 'flex', flexGrow: 1, height: '100vh', background: 'var(--profile-bg)', color: 'var(--text-main)', overflow: 'hidden' }}>
+    <div className="panel-container" style={{ padding: '16px', maxWidth: '800px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
       
-      {/* Mobile / Left sidebar */}
-      <div className="sidebar-tecnico" style={{ width: '280px', flexShrink: 0, padding: '25px', display: 'flex', flexDirection: 'column', background: '#0f172a', borderRight: '1px solid rgba(255,255,255,0.06)', overflowY: 'auto' }}>
-        
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '25px', background: 'rgba(255,255,255,0.04)', padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <img src="/img/logo_futurity.png" alt="Logo" style={{ width: '22px', height: '22px', objectFit: 'contain' }} />
-          <span style={{ fontWeight: 800, fontSize: '0.92rem', color: '#fff', letterSpacing: '0.01em' }}>
-            Futurity <span style={{ background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 900 }}>Atlas</span>
+      {/* Clean Top Header (100% Mobile Responsive) */}
+      <div style={{
+        background: 'var(--card-bg)',
+        border: '1px solid var(--border-color)',
+        borderRadius: '20px',
+        padding: '14px 16px',
+        marginBottom: '16px',
+        boxShadow: 'var(--shadow-sm)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px'
+      }}>
+        {/* Top Bar: Avatar + Name + Menu Button */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+            <div 
+              onClick={() => setShowProfileModal(true)}
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontWeight: 900,
+                fontSize: '1.2rem',
+                boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+                position: 'relative',
+                flexShrink: 0,
+                cursor: 'pointer'
+              }}
+            >
+              {fotoPerfil && fotoPerfil !== 'default_avatar.png' ? (
+                <img 
+                  src={`/static/uploads/${fotoPerfil}`} 
+                  alt={tecnicoRealName} 
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              ) : (
+                tecnicoRealName ? tecnicoRealName.charAt(0).toUpperCase() : 'T'
+              )}
+              <span style={{
+                position: 'absolute',
+                bottom: '1px',
+                right: '1px',
+                width: '12px',
+                height: '12px',
+                borderRadius: '50%',
+                background: estadoActividad === 'En Descanso' ? '#f59e0b' : '#10b981',
+                border: '2px solid #0f172a'
+              }}></span>
+            </div>
+            
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <h2 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-main)', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Hola, {tecnicoRealName}
+              </h2>
+              <span style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)', fontWeight: 600, display: 'block', marginTop: '1px' }}>
+                {areaTrabajo === 'INSTALACIONES' ? '🔌 Instalaciones' : '🛠️ Soporte Técnico'}
+              </span>
+            </div>
+          </div>
+
+          {/* Menu Button (Top Right Icon/Badge) */}
+          <button
+            type="button"
+            onClick={() => setShowProfileModal(true)}
+            title="Perfil y Menú"
+            style={{
+              padding: '8px 12px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              color: '#ffffff',
+              fontWeight: 800,
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+              flexShrink: 0
+            }}
+          >
+            <i className="fa-solid fa-bars" style={{ color: '#38bdf8' }}></i>
+            <span>Menú</span>
+          </button>
+        </div>
+
+        {/* Sub-bar: Visitas Count + Refresh Button */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+          <span style={{ fontSize: '0.78rem', color: 'var(--sidebar-text)', fontWeight: 700 }}>
+            📅 Visitas de hoy: <strong style={{ color: 'var(--text-main)', fontSize: '0.88rem' }}>{visitas.length}</strong>
           </span>
-        </div>
 
-        <h2 style={{ fontSize: '1.25rem', color: 'white', fontWeight: 800, margin: '0 0 5px 0' }}>Hola, {tecnicoRealName}</h2>
-        <p style={{ margin: 0, fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500, marginBottom: '25px' }}>Visitas programadas de hoy</p>
-        
-        {/* Work Area Select */}
-        <div style={{ background: 'rgba(255, 255, 255, 0.04)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '15px' }}>
-          <label style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            <i className="fa-solid fa-briefcase" style={{ marginRight: '4px' }}></i> Área de Trabajo:
-          </label>
-          <select 
-            value={areaTrabajo} 
-            onChange={(e) => cambiarAreaTrabajo(e.target.value)} 
-            style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.15)', backgroundColor: '#1e293b', color: '#fff', fontSize: '0.82rem', fontWeight: 700, outline: 'none', cursor: 'pointer' }}
+          <button
+            type="button"
+            onClick={cargarDatosPanel}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '10px',
+              background: 'rgba(59, 130, 246, 0.12)',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
+              color: '#60a5fa',
+              fontWeight: 800,
+              fontSize: '0.78rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
           >
-            <option value="SOPORTE">🛠️ Soporte Técnico</option>
-            <option value="INSTALACIONES">🔌 Instalaciones</option>
-          </select>
-        </div>
-
-        {/* Sync list button */}
-        <button 
-          type="button" 
-          onClick={cargarDatosPanel} 
-          className="theme-btn-tecnico theme-refresh" 
-          style={{ width: '100%', padding: '11px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', marginBottom: '10px', fontSize: '0.82rem' }}
-        >
-          <i className="fa-solid fa-arrows-rotate"></i> Actualizar Visitas
-        </button>
-
-        {/* Panic Button Trigger */}
-        {!alertaPanico ? (
-          <button 
-            type="button" 
-            onClick={() => setShowPanicModal(true)} 
-            className="theme-btn-tecnico theme-logout" 
-            style={{ width: '100%', padding: '11px', borderRadius: '8px', background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)', border: 'none', color: 'white', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', marginBottom: '10px', fontSize: '0.82rem' }}
-          >
-            <i className="fa-solid fa-triangle-exclamation"></i> 🚨 Botón de Pánico
+            <i className="fa-solid fa-arrows-rotate"></i>
+            <span>Actualizar</span>
           </button>
-        ) : (
-          <button 
-            type="button" 
-            onClick={desactivarPanicAlerta} 
-            className="theme-btn-tecnico theme-refresh" 
-            style={{ width: '100%', padding: '11px', borderRadius: '8px', background: '#475569', border: 'none', color: 'white', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', marginBottom: '10px', fontSize: '0.82rem' }}
-          >
-            Apagar Alerta de Pánico
-          </button>
-        )}
-
-        <div style={{ flexGrow: 1 }}></div>
-
-        {/* Footer info */}
-        <div style={{ marginTop: '20px', padding: '10px 0 0 0', borderTop: '1px solid rgba(255, 255, 255, 0.1)', textAlignment: 'center', fontSize: '0.72rem', color: '#94a3b8', opacity: 0.7, fontWeight: 600, display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
-          <span><i className="fa-solid fa-bolt" style={{ color: '#60a5fa' }}></i> Powered by Atlas</span>
-          <span style={{ fontSize: '0.65rem' }}><i className="fa-solid fa-code-branch"></i> React SPA Mobile v2.0</span>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="main-content" style={{ flexGrow: 1, padding: '25px', display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto' }}>
-        
-        {/* Shift break status card */}
-        <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', boxShadow: 'var(--shadow-sm)' }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 850, color: 'var(--text-main)' }}>Jornada del Técnico</h3>
-            <p style={{ margin: '3px 0 0 0', fontSize: '0.82rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
-              Estado: <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 8px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800, background: estadoActividad === 'En Descanso' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)', color: estadoActividad === 'En Descanso' ? '#f59e0b' : '#10b981', textTransform: 'uppercase', marginLeft: '5px' }}>
-                <i className={estadoActividad === 'En Descanso' ? "fa-solid fa-mug-hot" : "fa-solid fa-circle-play"}></i> {estadoActividad}
-              </span>
-            </p>
-          </div>
-          <button 
-            type="button" 
-            onClick={toggleDescanso} 
-            style={{ padding: '8px 16px', borderRadius: '10px', fontSize: '0.82rem', border: 'none', background: estadoActividad === 'En Descanso' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: 'white', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            {estadoActividad === 'En Descanso' ? <><i className="fa-solid fa-play"></i> Terminar Descanso</> : <><i className="fa-solid fa-mug-hot"></i> Iniciar Descanso</>}
-          </button>
-        </div>
-
-        {/* Panic alert card if active */}
-        {alertaPanico && (
-          <div style={{ background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', border: 'none', borderRadius: '16px', padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white', boxShadow: '0 8px 20px rgba(239, 68, 68, 0.3)' }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <i className="fa-solid fa-triangle-exclamation fa-fade"></i> ALERTA DE ASISTENCIA ACTIVA
-              </h3>
-              <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', fontWeight: 600 }}>{mensajePanico || 'Emergencia de auxilio en ruta declarada.'}</p>
-            </div>
-            <a 
-              href={`tel:${numeroGrua}`} 
-              style={{ textDecoration: 'none', padding: '10px 18px', background: 'white', color: '#dc2626', borderRadius: '10px', fontWeight: 900, fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <i className="fa-solid fa-phone"></i> Llamar Grúa ({numeroGrua})
-            </a>
-          </div>
-        )}
+      <div className="main-content" style={{ width: '100%', padding: 0 }}>
 
         {/* List of visits */}
         {loading ? (
@@ -1069,8 +1259,8 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
                     </span>
                   </div>
 
-                  {/* Commercial summary columns */}
-                  <div style={{ marginTop: '12px', background: 'rgba(15, 23, 42, 0.6)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(56, 189, 248, 0.2)', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', textAlignment: 'center' }}>
+                  {/* Commercial & Technical Summary Grid */}
+                  <div style={{ marginTop: '12px', background: 'rgba(15, 23, 42, 0.6)', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.2)', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
                     <div>
                       <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>💵 Pago Mensual</span>
                       <strong style={{ color: '#10b981', fontSize: '0.9rem', fontWeight: 800 }}>
@@ -1078,9 +1268,15 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
                       </strong>
                     </div>
                     <div>
-                      <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>⏳ Antigüedad</span>
-                      <strong style={{ color: '#38bdf8', fontSize: '0.82rem', fontWeight: 700 }}>
-                        {activeVisita.antiguedad_fmt || 'N/D'}
+                      <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>⚡ Velocidad Plan</span>
+                      <strong style={{ color: '#38bdf8', fontSize: '0.9rem', fontWeight: 900 }}>
+                        {activeVisita.velocidad_mbps ? `${activeVisita.velocidad_mbps} Mbps` : (activeVisita.velocidad || 'N/D')}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>👤 Generado / Coordinado</span>
+                      <strong style={{ color: '#cbd5e1', fontSize: '0.82rem', fontWeight: 800 }}>
+                        {activeVisita.creado_por || activeVisita.agente || 'Call Center'}
                       </strong>
                     </div>
                     <div>
@@ -1117,26 +1313,64 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
                   </div>
                   <button 
                     type="button" 
-                    onClick={() => abrirNavegadorGPS(activeVisita.direccion, activeVisita.sector)} 
+                    onClick={() => abrirNavegadorGPS(activeVisita.direccion, activeVisita.sector, activeVisita.coordenadas)} 
                     style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', padding: '8px 14px', fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}
                   >
                     <i className="fa-solid fa-map-location-dot"></i> Ir al Mapa
                   </button>
                 </div>
 
-                {/* Observation / Motif Card */}
-                <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '16px' }}>
-                  <strong style={{ color: '#64748b', fontSize: '0.75rem', display: 'block' }}>Motivo de la Visita</strong>
-                  <span style={{ color: activeVisita.es_instalacion === 1 ? '#38bdf8' : '#f43f5e', fontWeight: 800, fontSize: '1.05rem', display: 'block', marginTop: '4px' }}>
-                    {activeVisita.es_instalacion === 1 ? `🔌 ${activeVisita.servicio}` : `🛠️ ${activeVisita.problema}`}
+                {/* Motivo Principal Card (Psicología del Color - Alto Impacto Visual) */}
+                <div style={{
+                  background: activeVisita.es_instalacion === 1 
+                    ? 'linear-gradient(135deg, rgba(14, 165, 233, 0.22) 0%, rgba(3, 105, 161, 0.35) 100%)' 
+                    : 'linear-gradient(135deg, rgba(244, 63, 94, 0.22) 0%, rgba(190, 18, 60, 0.35) 100%)',
+                  border: `1px solid ${activeVisita.es_instalacion === 1 ? '#0284c7' : '#f43f5e'}`,
+                  borderRadius: '16px',
+                  padding: '18px 20px',
+                  boxShadow: activeVisita.es_instalacion === 1 
+                    ? '0 6px 20px rgba(2, 132, 199, 0.25)' 
+                    : '0 6px 20px rgba(244, 63, 94, 0.25)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em', color: activeVisita.es_instalacion === 1 ? '#7dd3fc' : '#fda4af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <i className={activeVisita.es_instalacion === 1 ? "fa-solid fa-plug" : "fa-solid fa-triangle-exclamation"}></i>
+                      MOTIVO PRINCIPAL DE LA VISITA
+                    </span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 900, padding: '3px 10px', borderRadius: '20px', background: activeVisita.es_instalacion === 1 ? '#0284c7' : '#e11d48', color: '#ffffff' }}>
+                      {activeVisita.es_instalacion === 1 ? 'INSTALACIÓN' : 'SOPORTE TÉCNICO'}
+                    </span>
+                  </div>
+                  <span style={{ color: '#ffffff', fontWeight: 900, fontSize: '1.2rem', lineHeight: '1.3', marginTop: '4px' }}>
+                    {activeVisita.es_instalacion === 1 ? activeVisita.servicio : activeVisita.problema}
                   </span>
-                  
-                  {activeVisita.observacion_callcenter && (
-                    <p style={{ margin: '12px 0 0 0', fontSize: '0.88rem', color: '#cbd5e1', fontStyle: 'italic', lineHeight: 1.4, background: 'rgba(56, 189, 248, 0.05)', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #38bdf8' }}>
+                </div>
+
+                {/* Comentario del Call Center (Psicología del Color - Alerta Ámbar Calibrado) */}
+                {activeVisita.observacion_callcenter && (
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.18) 0%, rgba(180, 83, 9, 0.28) 100%)',
+                    border: '1px solid rgba(245, 158, 11, 0.5)',
+                    borderLeft: '6px solid #f59e0b',
+                    borderRadius: '16px',
+                    padding: '16px 20px',
+                    boxShadow: '0 6px 20px rgba(245, 158, 11, 0.2)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 900, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <i className="fa-solid fa-comment-dots" style={{ fontSize: '1rem', color: '#f59e0b' }}></i>
+                      COMENTARIO DE CALL CENTER / ASESOR
+                    </span>
+                    <p style={{ margin: 0, fontSize: '0.96rem', color: '#fef3c7', fontWeight: 700, lineHeight: 1.5, fontStyle: 'normal' }}>
                       "{activeVisita.observacion_callcenter}"
                     </p>
-                  )}
-                </div>
+                  </div>
+                )}
 
               </div>
             )}
@@ -1441,7 +1675,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
                             type="file" 
                             accept="image/*" 
                             capture="environment" 
-                            onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equip', 'preview-foto-conjunta')} 
+                            onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos', 'preview-foto-conjunta')} 
                             style={{ width: '100%', padding: '6px', fontSize: '0.8rem', background: '#1e293b', border: '1px solid #475569', color: '#f8fafc', borderRadius: '6px' }} 
                           />
                           <div style={{ marginTop: '8px', textAlign: 'center' }}>
@@ -1456,7 +1690,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
                               type="file" 
                               accept="image/*" 
                               capture="environment" 
-                              onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equip', 'preview-foto-onu')} 
+                              onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos', 'preview-foto-onu')} 
                               style={{ width: '100%', padding: '6px', fontSize: '0.8rem', background: '#1e293b', border: '1px solid #475569', color: '#f8fafc', borderRadius: '6px' }} 
                             />
                             <div style={{ marginTop: '6px', textAlign: 'center' }}>
@@ -1469,7 +1703,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
                               type="file" 
                               accept="image/*" 
                               capture="environment" 
-                              onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equip_2', 'preview-foto-router')} 
+                              onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos_2', 'preview-foto-router')} 
                               style={{ width: '100%', padding: '6px', fontSize: '0.8rem', background: '#1e293b', border: '1px solid #475569', color: '#f8fafc', borderRadius: '6px' }} 
                             />
                             <div style={{ marginTop: '6px', textAlign: 'center' }}>
@@ -1827,7 +2061,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
               
               <div style={{ background: 'white', padding: '15px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.2)' }}>
                 <img 
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`http://localhost:5173/firma-remota/${qrToken}`)}`} 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`${window.location.origin}/firma-remota/${qrToken}`)}`} 
                   style={{ width: '180px', height: '180px', display: 'block' }} 
                   alt="QR Code" 
                 />
@@ -1835,6 +2069,245 @@ function TecnicoPanel({ token, user, tecnicoNombreParam }) {
 
               <button type="button" onClick={() => setShowQRModal(false)} style={{ width: '100%', padding: '11px', borderRadius: '8px', border: '1px solid #475569', background: '#2d3748', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem', marginTop: '5px' }}>Cerrar QR</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PERFIL Y CONFIGURACIÓN DEL TÉCNICO */}
+      {showProfileModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          zIndex: 200000,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '20px',
+          boxSizing: 'border-box'
+        }}>
+          <div style={{
+            backgroundColor: '#1e293b',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: '24px',
+            width: '100%',
+            maxWidth: '400px',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+            overflow: 'hidden',
+            animation: 'futurityToastSlideIn 0.3s ease-out'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '20px 24px',
+              background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+              borderBottom: '1px solid rgba(255,255,255,0.08)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontWeight: 900,
+                  fontSize: '1.1rem'
+                }}>
+                  {fotoPerfil && fotoPerfil !== 'default_avatar.png' ? (
+                    <img 
+                      src={`/static/uploads/${fotoPerfil}`} 
+                      alt={tecnicoRealName} 
+                      style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  ) : (
+                    tecnicoRealName ? tecnicoRealName.charAt(0).toUpperCase() : 'T'
+                  )}
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, color: 'white', fontSize: '1.05rem', fontWeight: 900 }}>{tecnicoRealName}</h4>
+                  <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>Técnico de Campo</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowProfileModal(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.4rem', cursor: 'pointer', padding: '4px' }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Modal Options */}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* Descanso Status */}
+              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '16px' }}>
+                <label style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <i className="fa-solid fa-mug-hot" style={{ marginRight: '6px', color: '#f59e0b' }}></i> Estado de Jornada
+                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '0.88rem', color: '#cbd5e1', fontWeight: 600 }}>Estado actual:</span>
+                  <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 800, background: estadoActividad === 'En Descanso' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)', color: estadoActividad === 'En Descanso' ? '#f59e0b' : '#34d399', textTransform: 'uppercase' }}>
+                    {estadoActividad}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { toggleDescanso(); setShowProfileModal(false); }}
+                  style={{ width: '100%', padding: '12px', borderRadius: '12px', border: 'none', background: estadoActividad === 'En Descanso' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: 'white', fontWeight: 800, cursor: 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                >
+                  {estadoActividad === 'En Descanso' ? <><i className="fa-solid fa-play"></i> Reanudar Trabajo</> : <><i className="fa-solid fa-mug-hot"></i> Tomar Descanso / Almuerzo</>}
+                </button>
+              </div>
+
+              {/* Work Area Change */}
+              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '16px' }}>
+                <label style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <i className="fa-solid fa-briefcase" style={{ marginRight: '6px', color: '#38bdf8' }}></i> Departamento / Área de Trabajo
+                </label>
+                <select
+                  value={areaTrabajo}
+                  onChange={(e) => cambiarAreaTrabajo(e.target.value)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.15)', backgroundColor: '#0f172a', color: '#fff', fontSize: '0.88rem', fontWeight: 700, outline: 'none', cursor: 'pointer' }}
+                >
+                  <option value="SOPORTE">🛠️ Soporte Técnico</option>
+                  <option value="INSTALACIONES">🔌 Instalaciones</option>
+                </select>
+              </div>
+
+              {/* Asistencia / Panic Button */}
+              <div style={{ background: alertaPanico ? 'rgba(239, 68, 68, 0.15)' : 'rgba(15, 23, 42, 0.5)', border: alertaPanico ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '16px' }}>
+                <label style={{ fontSize: '0.72rem', color: alertaPanico ? '#ef4444' : '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: '6px', color: '#ef4444' }}></i> Asistencia en Ruta
+                </label>
+                {alertaPanico ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#fca5a5', fontWeight: 700 }}>🚨 Alerta activa: {mensajePanico}</p>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <a href={`tel:${numeroGrua}`} style={{ flex: 1, textDecoration: 'none', textAlign: 'center', padding: '10px', background: '#ffffff', color: '#dc2626', borderRadius: '10px', fontWeight: 800, fontSize: '0.82rem' }}>
+                        <i className="fa-solid fa-phone"></i> Grúa
+                      </a>
+                      <button type="button" onClick={desactivarPanicAlerta} style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '10px', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer' }}>
+                        Apagar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setShowProfileModal(false); setShowPanicModal(true); }}
+                    style={{ width: '100%', padding: '12px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)', color: 'white', fontWeight: 800, cursor: 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                  >
+                    <i className="fa-solid fa-triangle-exclamation"></i> 🚨 Botón de Pánico
+                  </button>
+                )}
+              </div>
+
+              {/* Traspaso de Material entre Técnicos */}
+              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '16px' }}>
+                <label style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <i className="fa-solid fa-arrow-right-arrow-left" style={{ marginRight: '6px', color: '#10b981' }}></i> Transferencia de Insumos
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProfileModal(false);
+                    setShowTraspasoModal(true);
+                  }}
+                  style={{ width: '100%', padding: '12px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', fontWeight: 800, cursor: 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                >
+                  <i className="fa-solid fa-people-arrows"></i> 🔄 Traspaso de Material a Técnico
+                </button>
+              </div>
+
+              {/* Logout Button */}
+              <button
+                type="button"
+                onClick={() => { setShowProfileModal(false); onLogout(); }}
+                style={{ width: '100%', padding: '12px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.88rem', marginTop: '4px' }}
+              >
+                <i className="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
+              </button>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TRASPASO DE MATERIAL ENTRE TÉCNICOS */}
+      {showTraspasoModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: 200000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
+          <div style={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '24px', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 40px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
+            <div style={{ padding: '20px 24px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ margin: 0, color: 'white', fontSize: '1.05rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="fa-solid fa-arrow-right-arrow-left" style={{ color: '#10b981' }}></i> Traspaso de Material
+              </h4>
+              <button onClick={() => setShowTraspasoModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.4rem', cursor: 'pointer', padding: '4px' }}>&times;</button>
+            </div>
+
+            <form onSubmit={handleTraspasoSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Técnico Destino (Quien recibe):</label>
+                <select
+                  value={traspasoForm.tecnico_destino_nombre}
+                  onChange={(e) => setTraspasoForm({ ...traspasoForm, tecnico_destino_nombre: e.target.value })}
+                  style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.15)', backgroundColor: '#0f172a', color: '#fff', fontSize: '0.88rem', fontWeight: 700 }}
+                  required
+                >
+                  <option value="">-- Seleccione Técnico --</option>
+                  {tecnicosLista.map((t, i) => (
+                    <option key={i} value={t.nombre}>{t.nombre} ({t.placa})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Material a Transferir:</label>
+                <select
+                  value={traspasoForm.id_material}
+                  onChange={(e) => setTraspasoForm({ ...traspasoForm, id_material: e.target.value })}
+                  style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.15)', backgroundColor: '#0f172a', color: '#fff', fontSize: '0.88rem', fontWeight: 700 }}
+                  required
+                >
+                  <option value="">-- Seleccione Material --</option>
+                  {catalogoMateriales.map((m, i) => (
+                    <option key={i} value={m.id_material}>{m.nombre_material} ({m.unidad_medida})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Cantidad:</label>
+                <input
+                  type="number"
+                  value={traspasoForm.cantidad}
+                  onChange={(e) => setTraspasoForm({ ...traspasoForm, cantidad: e.target.value })}
+                  placeholder="Ej. 1"
+                  min="1"
+                  style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.15)', backgroundColor: '#0f172a', color: '#fff', fontSize: '0.88rem', fontWeight: 800, boxSizing: 'border-box' }}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button type="button" onClick={() => setShowTraspasoModal(false)} style={{ flex: 1, padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', color: 'white', fontWeight: 800, cursor: 'pointer' }}>Cancelar</button>
+                <button type="submit" disabled={traspasoLoading} style={{ flex: 1, padding: '12px', borderRadius: '12px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', border: 'none', color: 'white', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  {traspasoLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-paper-plane"></i>} Transferir Material
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

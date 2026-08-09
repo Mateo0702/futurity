@@ -7,7 +7,17 @@ function InventarioTab({ token }) {
   // Data from API
   const [materiales, setMateriales] = useState([]);
   const [tecnicos, setTecnicos] = useState([]); // List of vehicle plates
+  const [tecnicosVehiculos, setTecnicosVehiculos] = useState([]); // Detailed technicians with assigned plates
   const [inventarioTecnicos, setInventarioTecnicos] = useState({}); // { plate: { id_material: { cantidad_disponible, total_usado } } }
+  const [traspasosHistorial, setTraspasosHistorial] = useState([]);
+  
+  // Navigation Subtabs
+  const [invSubTab, setInvSubTab] = useState('matriz'); // 'matriz' | 'vehiculos' | 'traspasos'
+
+  // Reassignment Form Modal
+  const [showReasignarModal, setShowReasignarModal] = useState(false);
+  const [selectedTecnico, setSelectedTecnico] = useState(null);
+  const [nuevaPlacaInput, setNuevaPlacaInput] = useState('');
   
   // KPIs
   const [kpiBodega, setKpiBodega] = useState(0);
@@ -29,7 +39,54 @@ function InventarioTab({ token }) {
 
   useEffect(() => {
     cargarInventario();
+    cargarTraspasosHistorial();
   }, []);
+
+  const cargarTraspasosHistorial = async () => {
+    try {
+      const res = await fetch('/api/admin/traspasos_historial', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        setTraspasosHistorial(data.traspasos || []);
+      }
+    } catch (e) {
+      console.error("Error al cargar historial de traspasos:", e);
+    }
+  };
+
+  const handleReasignarSubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (!selectedTecnico) return;
+
+    try {
+      const res = await fetch('/api/admin/tecnicos/reasignar_vehiculo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          id_tecnico: selectedTecnico.id_tecnico,
+          placa_asignada_hoy: nuevaPlacaInput
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        alert(data.message || "Asignación de buseta actualizada con éxito.");
+        setShowReasignarModal(false);
+        setSelectedTecnico(null);
+        setNuevaPlacaInput('');
+        await cargarInventario();
+      } else {
+        alert(data.message || "Error al actualizar asignación.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error de conexión al reasignar vehículo.");
+    }
+  };
 
   const cargarInventario = async () => {
     setLoading(true);
@@ -42,6 +99,7 @@ function InventarioTab({ token }) {
       if (res.ok && data.status === 'ok') {
         setMateriales(data.materiales || []);
         setTecnicos(data.tecnicos || []);
+        setTecnicosVehiculos(data.tecnicos_vehiculos || []);
         setInventarioTecnicos(data.inventario_tecnicos || {});
 
         // Set default filter if plates exist
@@ -250,7 +308,6 @@ function InventarioTab({ token }) {
               </div>
             </div>
           </div>
-
           {/* Columns Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '25px' }}>
             

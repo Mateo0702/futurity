@@ -5,6 +5,25 @@ from datetime import date
 
 visitas_bp = Blueprint('visitas', __name__)
 
+def obtener_usuario_visitas():
+    token = request.headers.get('Authorization')
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+        if user:
+            return {
+                'id_usuario': user.get('sub') or user.get('id_usuario'),
+                'user_name': user.get('username') or user.get('nombre'),
+                'user_role': user.get('role') or user.get('rol')
+            }
+    if 'user_id' in session:
+        return {
+            'id_usuario': session['user_id'],
+            'user_name': session.get('user_name'),
+            'user_role': session.get('user_role')
+        }
+    return None
+
 @visitas_bp.route('/api/visitas', methods=['POST'])
 def registrar_visita():
     # Protección de sesión y rol
@@ -230,15 +249,14 @@ def buscar_cliente(contrato):
     finally:
         if 'conexion' in locals() and conexion.is_connected():
             cursor.close()
-            conexion.close()
 
 @visitas_bp.route('/api/visitas/reagendar/<int:id_visita>', methods=['POST'])
 def reagendar_visita(id_visita):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
-        flash('No tienes permiso para reagendar visitas.', 'danger')
-        return redirect(url_for('dashboard'))
+    usuario = obtener_usuario_visitas()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+        return jsonify({"status": "error", "message": "No tienes permiso para reagendar visitas."}), 403
 
     nueva_fecha = request.form.get('nueva_fecha', '').strip()
     
@@ -247,8 +265,7 @@ def reagendar_visita(id_visita):
         from datetime import datetime
         datetime.strptime(nueva_fecha, '%Y-%m-%d')
     except (ValueError, TypeError):
-        flash(f'La fecha de reagendamiento "{nueva_fecha}" no es válida.', 'danger')
-        return redirect(url_for('dashboard'))
+        return jsonify({"status": "error", "message": f'La fecha de reagendamiento "{nueva_fecha}" no es válida.'}), 400
 
     nueva_prioridad = request.form.get('nueva_prioridad') # Por si ahora urge más
     observacion_adicional = request.form.get('observacion_reagendado', '').strip()
@@ -260,8 +277,7 @@ def reagendar_visita(id_visita):
         cursor.execute("SELECT * FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
         original = cursor.fetchone()
         if not original:
-            flash('La visita a reagendar no fue encontrada.', 'danger')
-            return redirect(url_for('dashboard'))
+            return jsonify({"status": "error", "message": "La visita a reagendar no fue encontrada."}), 404
             
         # 2. Actualizar la visita original (se queda en el día actual pero con estado REAGENDADA)
         nota_reagenda = f" | REAGENDADO: {observacion_adicional}" if observacion_adicional else " | REAGENDADO"
@@ -299,24 +315,22 @@ def reagendar_visita(id_visita):
         ))
         
         conexion.commit()
-        flash('Visita reagendada con éxito: se conservó el registro anterior y se creó uno nuevo en estado pendiente.', 'success')
+        return jsonify({"status": "success", "message": "Visita reagendada con éxito."})
     except Exception as e:
         conexion.rollback()
         print(f"Error al reagendar: {e}")
-        flash(f"Error al reagendar visita: {e}", 'danger')
+        return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()
         conexion.close()
-        
-    return redirect(url_for('dashboard'))
 
 @visitas_bp.route('/api/visitas/<int:id_visita>/cancelar', methods=['POST'])
 def cancelar_visita(id_visita):
-    if 'user_id' not in session: 
-        return redirect(url_for('login'))
-    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
-        flash('No tienes permiso para cancelar visitas.', 'danger')
-        return redirect(url_for('dashboard'))
+    usuario = obtener_usuario_visitas()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+        return jsonify({"status": "error", "message": "No tienes permiso para cancelar visitas."}), 403
     
     estado_cancelacion = request.form.get('estado_cancelacion')
     motivo = request.form.get('motivo')
@@ -336,21 +350,21 @@ def cancelar_visita(id_visita):
         """
         cursor.execute(query, (estado_cancelacion, motivo, id_visita))
         conexion.commit()
+        return jsonify({"status": "success", "message": "Visita cerrada/cancelada exitosamente."})
     except Exception as e:
         print(f"Error al cancelar: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()
         conexion.close()
-        
-    return redirect(url_for('dashboard'))
 
 @visitas_bp.route('/api/visitas/<int:id_visita>/reasignar', methods=['POST'])
 def reasignar_tecnicos(id_visita):
-    if 'user_id' not in session: 
-        return redirect(url_for('login'))
-    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
-        flash('No tienes permiso para reasignar técnicos.', 'danger')
-        return redirect(url_for('dashboard'))
+    usuario = obtener_usuario_visitas()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+        return jsonify({"status": "error", "message": "No tienes permiso para reasignar técnicos."}), 403
     
     nuevo_principal = request.form.get('tecnico_principal')
     nuevo_apoyo = request.form.get('tecnico_apoyo') or None # Puede ir vacío
@@ -361,20 +375,21 @@ def reasignar_tecnicos(id_visita):
         query = "UPDATE visitas_tecnicas SET tecnico_principal = %s, tecnico_apoyo = %s WHERE id_visita = %s"
         cursor.execute(query, (nuevo_principal, nuevo_apoyo, id_visita))
         conexion.commit()
+        return jsonify({"status": "success", "message": "Técnicos actualizados exitosamente."})
     except Exception as e:
         print(f"Error al reasignar: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()
         conexion.close()
-        
-    return redirect(url_for('dashboard'))
 
 @visitas_bp.route('/api/visitas/crear_cambio_fo', methods=['POST'])
 def crear_cambio_fo():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
+    usuario = obtener_usuario_visitas()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
         
-    creado_por = session.get('user_name', 'Call Center')
+    creado_por = usuario.get('user_name') or 'Call Center'
     contrato = request.form.get('contrato')
     cliente = request.form.get('cliente')
     empresa = request.form.get('empresa', 'SERVICABLE')
@@ -432,12 +447,11 @@ def crear_cambio_fo():
             cursor.execute(query_update_orig, (id_visita_origen,))
             
         conexion.commit()
-        flash('¡Visita de Cambio de FO programada exitosamente!', 'success')
+        return jsonify({"status": "ok", "message": "Visita de Cambio de FO programada exitosamente."})
     except Exception as e:
         print(f"Error al crear visita Cambio de FO: {e}")
-        flash(f'Error al crear la visita: {e}', 'danger')
+        return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()
         conexion.close()
-        
     return redirect(url_for('dashboard'))

@@ -2,6 +2,55 @@ import React, { useState, useEffect, useRef } from 'react';
 
 const L = window.L;
 
+function TechnicianAvatar({ fotoPerfil, nombre, isOnline, size = 44 }) {
+  const [imgError, setImgError] = useState(false);
+  const initial = nombre ? nombre.trim().charAt(0).toUpperCase() : 'T';
+  const hasCustomPhoto = fotoPerfil && fotoPerfil !== 'default_avatar.png';
+
+  if (hasCustomPhoto && !imgError) {
+    return (
+      <img
+        src={`/static/uploads/${fotoPerfil}`}
+        alt={nombre}
+        onError={() => setImgError(true)}
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+          borderRadius: '50%',
+          objectFit: 'cover',
+          border: '1.5px solid var(--border-color)',
+          flexShrink: 0,
+          filter: isOnline ? 'none' : 'grayscale(1)'
+        }}
+      />
+    );
+  }
+
+  return (
+    <div
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        borderRadius: '50%',
+        background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#ffffff',
+        fontWeight: 900,
+        fontSize: `${size * 0.42}px`,
+        flexShrink: 0,
+        boxShadow: '0 2px 8px rgba(59, 130, 246, 0.25)',
+        border: '1.5px solid var(--border-color)',
+        filter: isOnline ? 'none' : 'grayscale(0.7)',
+        opacity: isOnline ? 1 : 0.7
+      }}
+    >
+      {initial}
+    </div>
+  );
+}
+
 function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
   const [ubicaciones, setUbicaciones] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -344,8 +393,37 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
                 const perfilUrl = `/static/uploads/${u.foto_perfil || 'default_avatar.png'}`;
                 const isPanic = u.alerta_panico === 1;
 
-                let estadoColor = isPanic ? '#ef4444' : isOnline ? '#10b981' : '#94a3b8';
-                let estadoTexto = u.estado || 'DESCONECTADO';
+                let estadoBadge = 'OFFLINE';
+                let estadoColor = '#94a3b8';
+                let detalleTexto = '';
+
+                if (isPanic) {
+                  estadoBadge = '🚨 AUXILIO';
+                  estadoColor = '#ef4444';
+                  detalleTexto = u.mensaje_panico || 'Alerta de emergencia activa';
+                } else if (!isOnline) {
+                  estadoBadge = 'OFFLINE';
+                  estadoColor = '#94a3b8';
+                  detalleTexto = 'Sin conexión de red';
+                } else if (u.estado?.includes('En camino') || u.estado?.includes('EN_RUTA')) {
+                  estadoBadge = 'EN CAMINO';
+                  estadoColor = '#f59e0b';
+                  detalleTexto = u.estado.replace(/^En camino a /i, '').replace(/^EN_RUTA /i, '');
+                  if (!detalleTexto || detalleTexto === 'EN_RUTA') detalleTexto = 'En traslado a cliente';
+                } else if (u.estado?.includes('Trabajando') || u.estado?.includes('EN_PROGRESO')) {
+                  estadoBadge = 'TRABAJANDO';
+                  estadoColor = '#ef4444';
+                  detalleTexto = u.estado.replace(/^Trabajando en /i, '').replace(/^EN_PROGRESO /i, '');
+                  if (!detalleTexto || detalleTexto === 'EN_PROGRESO') detalleTexto = 'Atendiendo visita';
+                } else if (u.estado?.includes('Descanso')) {
+                  estadoBadge = 'EN DESCANSO';
+                  estadoColor = '#f59e0b';
+                  detalleTexto = 'Pausa / Almuerzo';
+                } else {
+                  estadoBadge = 'DISPONIBLE';
+                  estadoColor = '#10b981';
+                  detalleTexto = 'Disponible para visitas';
+                }
 
                 return (
                   <div
@@ -355,38 +433,42 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
                       background: isPanic ? 'rgba(239, 68, 68, 0.12)' : 'var(--profile-bg)',
                       border: `1px solid ${isPanic ? '#ef4444' : 'var(--border-color)'}`,
                       borderRadius: '14px',
-                      padding: '12px',
+                      padding: '12px 14px',
                       cursor: isOnline ? 'pointer' : 'not-allowed',
-                      opacity: isOnline ? 1 : 0.6,
+                      opacity: isOnline ? 1 : 0.65,
                       transition: 'all 0.2s ease',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '12px'
                     }}
                   >
-                    <img
-                      src={perfilUrl}
-                      alt={u.tecnico}
-                      style={{ width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid var(--border-color)', flexShrink: 0, filter: isOnline ? 'none' : 'grayscale(1)' }}
-                    />
+                    <TechnicianAvatar fotoPerfil={u.foto_perfil} nombre={u.tecnico} isOnline={isOnline} />
                     <div style={{ flexGrow: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
-                        <strong style={{ color: 'var(--text-main)', fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <strong style={{ color: 'var(--text-main)', fontSize: '0.88rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
                           {u.tecnico}
                         </strong>
-                        <span style={{ background: estadoColor, color: 'white', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', fontWeight: 800, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-                          {estadoTexto}
+                        <span style={{ background: estadoColor, color: 'white', fontSize: '0.62rem', padding: '2px 7px', borderRadius: '6px', fontWeight: 900, textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                          {estadoBadge}
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                        <span>🚘 {u.placa_vehiculo || 'S/P'}</span>
-                        {isOnline ? (
-                          <span style={{ color: '#0284c7', fontWeight: 800, fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <i className="fa-solid fa-location-crosshairs"></i> Centrar
+
+                      <div style={{ fontSize: '0.74rem', color: 'var(--sidebar-text)', display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px' }}>
+                        {detalleTexto && (
+                          <span style={{ color: isPanic ? '#fca5a5' : 'var(--text-main)', fontWeight: 600, fontSize: '0.74rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            📍 {detalleTexto}
                           </span>
-                        ) : (
-                          <span style={{ color: 'var(--sidebar-text)', fontWeight: 700, fontSize: '0.72rem' }}>Offline</span>
                         )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)' }}>🚘 {u.placa_vehiculo || 'S/P'}</span>
+                          {isOnline ? (
+                            <span style={{ color: '#0284c7', fontWeight: 800, fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <i className="fa-solid fa-location-crosshairs"></i> Centrar
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--sidebar-text)', fontWeight: 700, fontSize: '0.72rem' }}>Offline</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

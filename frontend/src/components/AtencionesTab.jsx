@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-function AtencionesTab({ token, user }) {
+function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
   // Today's Local Date helper
-  const getTodayLocal = () => {
-    const hoy = new Date();
-    const offset = hoy.getTimezoneOffset();
-    const hoyLocal = new Date(hoy.getTime() - (offset * 60 * 1000));
-    return hoyLocal.toISOString().split('T')[0];
+  const getTodayLocal = (d = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   // Form states
@@ -21,7 +21,8 @@ function AtencionesTab({ token, user }) {
   const [tipoSolicitud, setTipoSolicitud] = useState('SOPORTE TÉCNICO');
   const [medioContacto, setMedioContacto] = useState('WHATSAPP');
   const [accion, setAccion] = useState('SOPORTE MEDIANTE MENSAJES');
-  const [motivo, setMotivo] = useState('VALIDACIÓN DE SERVICIO');
+  const [motivo, setMotivo] = useState('');
+  const [olt, setOlt] = useState('');
   const [observacion, setObservacion] = useState('');
 
   // UI state
@@ -47,8 +48,9 @@ function AtencionesTab({ token, user }) {
   const [masivoTipoSolicitud, setMasivoTipoSolicitud] = useState('SOPORTE TÉCNICO');
   const [masivoMedioContacto, setMasivoMedioContacto] = useState('WHATSAPP');
   const [masivoAccion, setMasivoAccion] = useState('SOPORTE MEDIANTE MENSAJES');
-  const [masivoMotivo, setMasivoMotivo] = useState('VALIDACIÓN DE SC');
-  const [masivoObservacion, setMasivoObservacion] = useState('auditoría: se verifica cliente cortado');
+  const [masivoMotivo, setMasivoMotivo] = useState('');
+  const [masivoOlt, setMasivoOlt] = useState('');
+  const [masivoObservacion, setMasivoObservacion] = useState('');
   const [masivoResult, setMasivoResult] = useState(null);
   const [masivoLoading, setMasivoLoading] = useState(false);
 
@@ -155,8 +157,8 @@ function AtencionesTab({ token, user }) {
   };
 
   // Submit standard single attention registration
-  const handleSingleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSingleSubmit = async (e, shouldGenerateVisit = false) => {
+    if (e) e.preventDefault();
     if (!contrato.trim() || !cliente.trim() || !observacion.trim()) {
       alert("Por favor completa los campos obligatorios (Contrato, Cliente, Observación).");
       return;
@@ -181,6 +183,7 @@ function AtencionesTab({ token, user }) {
           medio_contacto: medioContacto,
           accion,
           motivo,
+          olt,
           observacion
         })
       });
@@ -188,6 +191,16 @@ function AtencionesTab({ token, user }) {
       const data = await res.json();
       if (data.status === 'success') {
         alert("¡Atención registrada con éxito!");
+
+        const visitData = {
+          contrato: contrato.trim(),
+          cliente: cliente.trim(),
+          sector: sector.trim(),
+          telefonos: [telefono1, telefono2].filter(Boolean).join(' / '),
+          problema: motivo || 'VISITA TÉCNICA',
+          observacionCallcenter: observacion
+        };
+
         // Reset form
         setContrato('');
         setCliente('');
@@ -196,10 +209,16 @@ function AtencionesTab({ token, user }) {
         setSector('');
         setFechaInstalacion('');
         setAccion('SOPORTE MEDIANTE MENSAJES');
+        setMotivo('');
         setObservacion('');
+        setOlt('');
         setContratoOk(false);
-        // Refresh bottom table
         fetchMisAtenciones(fechaBusqueda);
+
+        // Auto-navigate to RegistroVisitasTab ONLY if explicitly requested via "Agendar Visita" button
+        if (shouldGenerateVisit && onNavigateToRegistroVisitas) {
+          onNavigateToRegistroVisitas(visitData);
+        }
       } else {
         alert("Error al registrar: " + data.message);
       }
@@ -240,6 +259,7 @@ function AtencionesTab({ token, user }) {
           medio_contacto: masivoMedioContacto,
           accion: masivoAccion,
           motivo: masivoMotivo,
+          olt: masivoOlt,
           observacion: masivoObservacion
         })
       });
@@ -253,7 +273,11 @@ function AtencionesTab({ token, user }) {
           noEncontrados: data.no_encontrados || []
         });
         setMasivoContratos('');
-        fetchMisAtenciones(fechaBusqueda);
+        const dateToFetch = masivoFecha || fechaBusqueda;
+        if (masivoFecha && masivoFecha !== fechaBusqueda) {
+          setFechaBusqueda(masivoFecha);
+        }
+        fetchMisAtenciones(dateToFetch);
       } else {
         setMasivoResult({
           type: 'error',
@@ -461,13 +485,26 @@ function AtencionesTab({ token, user }) {
                   <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
                   <option value="ENTREGA DE EQUIPOS">ENTREGA DE EQUIPOS</option>
                   <option value="INCREMENTO MEGAS">INCREMENTO MEGAS</option>
+                  <option value="TRANSFERENCIA">TRANSFERENCIA</option>
                   <option value="MIGRACIÓN">MIGRACIÓN</option>
+                  <option value="RETIRAR EQUIPOS">RETIRAR EQUIPOS</option>
                   <option value="CONSULTA">CONSULTA</option>
+                  <option value="ENTREGAR EQUIPOS">ENTREGAR EQUIPOS</option>
                   <option value="ACUERDO DE PAGOS">ACUERDO DE PAGOS</option>
+                  <option value="DEBITO DE CTA O T/C">DEBITO DE CTA O T/C</option>
                   <option value="PAGO FACTURA">PAGO FACTURA</option>
                   <option value="RECONEXION">RECONEXION</option>
+                  <option value="RETIRO DE FACTURA">RETIRO DE FACTURA</option>
+                  <option value="FACTURACION">FACTURACION</option>
+                  <option value="INSTALACION ADICIONAL">INSTALACION ADICIONAL</option>
+                  <option value="INSTALACION NUEVA">INSTALACION NUEVA</option>
+                  <option value="VENTA DE ROUTER">VENTA DE ROUTER</option>
+                  <option value="CONTRATA ZAPPING">CONTRATA ZAPPING</option>
+                  <option value="CONTRATA DGO">CONTRATA DGO</option>
                   <option value="RECLAMO">RECLAMO</option>
                   <option value="RETENCIÓN">RETENCIÓN</option>
+                  <option value="CANCELACIÓN DEFINITIVA">CANCELACIÓN DEFINITIVA</option>
+                  <option value="CORTE VOLUNTARIO">CORTE VOLUNTARIO</option>
                 </select>
               </div>
             </div>
@@ -481,12 +518,14 @@ function AtencionesTab({ token, user }) {
                   className="form-control"
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
                 >
-                  <option value="WHATSAPP">💬 WHATSAPP</option>
-                  <option value="TELEFONO">📞 TELÉFONO</option>
                   <option value="OFICINA">🏢 OFICINA</option>
+                  <option value="TELEFONO">📞 TELÉFONO</option>
+                  <option value="WHATSAPP">💬 WHATSAPP</option>
                   <option value="WHATSAPP + TELEFONO">💬📞 WHATSAPP + TELEFONO</option>
                   <option value="REDES SOCIALES">🌐 REDES SOCIALES</option>
+                  <option value="CHAT INTERNO">💬 CHAT INTERNO</option>
                   <option value="CONTROL CALIDAD">🛡️ CONTROL CALIDAD</option>
+                  <option value="WHATSAPP TECNICOS">📲 WHATSAPP TECNICOS</option>
                 </select>
               </div>
 
@@ -498,37 +537,137 @@ function AtencionesTab({ token, user }) {
                   className="form-control"
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
                 >
-                  <option value="SOPORTE MEDIANTE MENSAJES">SOPORTE MEDIANTE MENSAJES</option>
+                  <option value="VISITA TECNICA">VISITA TECNICA</option>
+                  <option value="VISITA TECNICA COBRADA">VISITA TECNICA COBRADA</option>
                   <option value="SOPORTE MEDIANTE LLAMADA">SOPORTE MEDIANTE LLAMADA</option>
                   <option value="LLAMADA SALIENTE">LLAMADA SALIENTE</option>
-                  <option value="VISITA TECNICA">VISITA TÉCNICA</option>
+                  <option value="SMART OLT">SMART OLT</option>
+                  <option value="SOPORTE MEDIANTE MENSAJES">SOPORTE MEDIANTE MENSAJES</option>
                   <option value="CORTE INTERNO DE SERVICIO">CORTE INTERNO DE SERVICIO</option>
-                  <option value="SE DA INFORMACION">SE DA INFORMACIÓN</option>
+                  <option value="SOPORTE EN OFICINAS">SOPORTE EN OFICINAS</option>
+                  <option value="SOPORTE A TECNICO DE CAMPO">SOPORTE A TECNICO DE CAMPO</option>
+                  <option value="TRANSFERIR / EXTENSIONES">TRANSFERIR / EXTENSIONES</option>
+                  <option value="SE DA INFORMACION">SE DA INFORMACION</option>
+                  <option value="ESCALAR A TECNOLOGIA">ESCALAR A TECNOLOGIA</option>
+                  <option value="RETENCION">RETENCION</option>
                 </select>
               </div>
             </div>
 
-            {/* Motivo & Observación */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>Motivo de Consulta:</label>
-              <input
-                type="text"
-                value={motivo}
-                onChange={(e) => setMotivo(e.target.value)}
-                placeholder="Ej: VALIDACIÓN DE SERVICIO..."
-                className="form-control"
-                list="react-motivos-list"
-                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)' }}
-                required
-              />
-              <datalist id="react-motivos-list">
-                <option value="INFORMACIÓN / PAGOS"></option>
-                <option value="Visita Revisión de Servicio"></option>
-                <option value="Desconfiguración de Equipos"></option>
-                <option value="Validación de Servicio"></option>
-                <option value="Configuración de Equipos ONU / Router"></option>
-              </datalist>
+            {/* Motivo de Consulta & OLT */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '16px', marginBottom: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>Motivo de Consulta:</label>
+                <input
+                  type="text"
+                  value={motivo}
+                  onChange={(e) => setMotivo(e.target.value)}
+                  placeholder="Escribe para buscar motivo..."
+                  className="form-control"
+                  list="react-motivos-list"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)' }}
+                  required
+                />
+                <datalist id="react-motivos-list">
+                  <option value="INFORMACION / PAGOS"></option>
+                  <option value="Visita Radio Enlace"></option>
+                  <option value="Visita Potencia Degradada"></option>
+                  <option value="Visita Revisión de Servicio"></option>
+                  <option value="Visita Equipo Alarmado"></option>
+                  <option value="Visita Cambio de Router"></option>
+                  <option value="Visita Colocación de Router"></option>
+                  <option value="Visita Configuración de Equipos"></option>
+                  <option value="Visita HFC"></option>
+                  <option value="Visita Canales Borrosos"></option>
+                  <option value="Visita Paso de Cable UTP"></option>
+                  <option value="Visita Reubicación de equipos (Retención)"></option>
+                  <option value="VISITA TECNICA Equipos no Encienden"></option>
+                  <option value="VISITA TECNICA No Marca Velocidad Contratada"></option>
+                  <option value="Visita Paso de Cable Fibra O. (Cobrado)"></option>
+                  <option value="Visita Paso de Cable RG6 (Cobrado)"></option>
+                  <option value="Visita Paso de Cable UTP (Cobrado)"></option>
+                  <option value="Visita Configuración de Equipos (Cobrado)"></option>
+                  <option value="Visita Reubicación de equipos (Cobrado)"></option>
+                  <option value="Visita Cambio de ONU"></option>
+                  <option value="Visita sin servicio de cable"></option>
+                  <option value="Desconfiguración de Equipos"></option>
+                  <option value="Equipos apagados"></option>
+                  <option value="Equipos Inhibidos"></option>
+                  <option value="Validación de Servicio"></option>
+                  <option value="Problema con dispositivos del cliente"></option>
+                  <option value="Configuración de Equipos ONU / Router"></option>
+                  <option value="Migración / Potencia degradada"></option>
+                  <option value="Configuración mediante ANY DESK"></option>
+                  <option value="CUENTAS ZAPPING"></option>
+                  <option value="Activación de Servicio"></option>
+                  <option value="Cambio de Domicilio"></option>
+                  <option value="Migración de Servicio"></option>
+                  <option value="Actualización de Velocidad"></option>
+                  <option value="Configuración de Equipos en instalación"></option>
+                  <option value="Paso a Cartera"></option>
+                  <option value="Paso a Ventas"></option>
+                  <option value="Paso a soporte técnico"></option>
+                  <option value="Corte de servicio - Reconexión Autorizada"></option>
+                  <option value="Corte de servicio - Corte Autorizado"></option>
+                  <option value="Valores a Pagar"></option>
+                  <option value="Dirección y Horarios de Atención"></option>
+                  <option value="Acuerdo de Pagos"></option>
+                  <option value="Actualización de Pagos"></option>
+                  <option value="Recepción de Equipos"></option>
+                  <option value="Información"></option>
+                  <option value="TICKET AL NOC / DAÑO HFC"></option>
+                  <option value="TICKET AL NOC / DAÑO GPON"></option>
+                  <option value="TICKET AL NOC / DAÑO RADIAL"></option>
+                  <option value="TICKET AL NOC / SIN CANAL"></option>
+                  <option value="TICKET AL NOC / PAGINAS BLOQUEADAS"></option>
+                  <option value="TICKET AL NOC / NAT TIPO 3"></option>
+                  <option value="TICKET AL NOC / CAIDA GENERAL"></option>
+                  <option value="CAÍDA GENERAL / OLT"></option>
+                  <option value="COBRO CON TARJETA"></option>
+                  <option value="PASO A RETENCION"></option>
+                </datalist>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>Nodo / OLT:</label>
+                <select
+                  value={olt}
+                  onChange={(e) => setOlt(e.target.value)}
+                  className="form-control"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
+                >
+                  <option value="">-- Sin Especificar / Ninguno --</option>
+                  <option value="1.18">1.18</option>
+                  <option value="1.50">1.50</option>
+                  <option value="99.1">99.1</option>
+                  <option value="BAÑOS">BAÑOS</option>
+                  <option value="AZOGUES">AZOGUES</option>
+                  <option value="ESTADIO">ESTADIO</option>
+                  <option value="BASES">BASES</option>
+                  <option value="RB">RB</option>
+                  <option value="HFC">HFC</option>
+                  <option value="FIBRACOM VALLE">FIBRACOM VALLE</option>
+                  <option value="FIBRACOM SANTA ANA">FIBRACOM SANTA ANA</option>
+                </select>
+              </div>
             </div>
+
+            {/* Banner Dinámico Alerta Visita Técnica */}
+            {(accion.toUpperCase().includes('VISITA') || motivo.toLowerCase().includes('visita')) && (
+              <div style={{ background: 'rgba(99, 102, 241, 0.08)', border: '1px solid #c7d2fe', borderLeft: '5px solid #6366f1', padding: '16px', borderRadius: '14px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '15px' }}>
+                <div>
+                  <strong style={{ color: '#4f46e5', display: 'block', fontSize: '0.88rem' }}><i className="fa-solid fa-circle-exclamation"></i> Visita Técnica Requerida</strong>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--sidebar-text)' }}>Esta atención está catalogada como Visita. Puedes agendarla de inmediato.</span>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => handleSingleSubmit(null, true)}
+                  style={{ background: '#6366f1', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '10px', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                >
+                  <i className="fa-solid fa-calendar-plus"></i> Agendar Visita
+                </button>
+              </div>
+            )}
 
             <div style={{ marginBottom: '22px' }}>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>
@@ -637,6 +776,9 @@ function AtencionesTab({ token, user }) {
                       </div>
                       <div style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.85rem', marginBottom: '4px' }}>
                         {at.motivo || 'Atención general'}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)', fontWeight: 700, marginBottom: '4px' }}>
+                        <i className="fa-solid fa-user-headset" style={{ marginRight: '4px', color: 'var(--primary)' }}></i> Atendido por: <span style={{ color: 'var(--text-main)', fontWeight: 800 }}>{at.agente || 'Call Center'}</span>
                       </div>
                       <div style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 700, marginBottom: '6px' }}>
                         Acción: {at.accion || 'Soporte brindado'}
@@ -828,6 +970,9 @@ function AtencionesTab({ token, user }) {
                       <option value="SERVICIO TÉCNICO">SERVICIO TÉCNICO</option>
                       <option value="ATENCIÓN AL CLIENTE">ATENCIÓN AL CLIENTE</option>
                       <option value="COBRANZAS">COBRANZAS</option>
+                      <option value="VENTAS">VENTAS</option>
+                      <option value="CANCELACIÓN">CANCELACIÓN</option>
+                      <option value="OTROS">OTROS</option>
                     </select>
                   </div>
 
@@ -842,6 +987,29 @@ function AtencionesTab({ token, user }) {
                       <option value="SOPORTE TÉCNICO">SOPORTE TÉCNICO</option>
                       <option value="ACTUALIZACION DE DATOS">ACTUALIZACION DE DATOS</option>
                       <option value="ACTUALIZACION DE DEBITO">ACTUALIZACION DE DEBITO</option>
+                      <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
+                      <option value="ENTREGA DE EQUIPOS">ENTREGA DE EQUIPOS</option>
+                      <option value="INCREMENTO MEGAS">INCREMENTO MEGAS</option>
+                      <option value="TRANSFERENCIA">TRANSFERENCIA</option>
+                      <option value="MIGRACIÓN">MIGRACIÓN</option>
+                      <option value="RETIRAR EQUIPOS">RETIRAR EQUIPOS</option>
+                      <option value="CONSULTA">CONSULTA</option>
+                      <option value="ENTREGAR EQUIPOS">ENTREGAR EQUIPOS</option>
+                      <option value="ACUERDO DE PAGOS">ACUERDO DE PAGOS</option>
+                      <option value="DEBITO DE CTA O T/C">DEBITO DE CTA O T/C</option>
+                      <option value="PAGO FACTURA">PAGO FACTURA</option>
+                      <option value="RECONEXION">RECONEXION</option>
+                      <option value="RETIRO DE FACTURA">RETIRO DE FACTURA</option>
+                      <option value="FACTURACION">FACTURACION</option>
+                      <option value="INSTALACION ADICIONAL">INSTALACION ADICIONAL</option>
+                      <option value="INSTALACION NUEVA">INSTALACION NUEVA</option>
+                      <option value="VENTA DE ROUTER">VENTA DE ROUTER</option>
+                      <option value="CONTRATA ZAPPING">CONTRATA ZAPPING</option>
+                      <option value="CONTRATA DGO">CONTRATA DGO</option>
+                      <option value="RECLAMO">RECLAMO</option>
+                      <option value="RETENCIÓN">RETENCIÓN</option>
+                      <option value="CANCELACIÓN DEFINITIVA">CANCELACIÓN DEFINITIVA</option>
+                      <option value="CORTE VOLUNTARIO">CORTE VOLUNTARIO</option>
                     </select>
                   </div>
 
@@ -853,8 +1021,14 @@ function AtencionesTab({ token, user }) {
                       className="form-control"
                       style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '0.85rem', fontWeight: 600 }}
                     >
-                      <option value="WHATSAPP">WHATSAPP</option>
-                      <option value="TELEFONO">TELÉFONO</option>
+                      <option value="WHATSAPP">💬 WHATSAPP</option>
+                      <option value="TELEFONO">📞 TELÉFONO</option>
+                      <option value="OFICINA">🏢 OFICINA</option>
+                      <option value="WHATSAPP + TELEFONO">💬📞 WHATSAPP + TELEFONO</option>
+                      <option value="REDES SOCIALES">🌐 REDES SOCIALES</option>
+                      <option value="CHAT INTERNO">💬 CHAT INTERNO</option>
+                      <option value="CONTROL CALIDAD">🛡️ CONTROL CALIDAD</option>
+                      <option value="WHATSAPP TECNICOS">📲 WHATSAPP TECNICOS</option>
                     </select>
                   </div>
 
@@ -868,21 +1042,60 @@ function AtencionesTab({ token, user }) {
                     >
                       <option value="SOPORTE MEDIANTE MENSAJES">SOPORTE MEDIANTE MENSAJES</option>
                       <option value="SOPORTE MEDIANTE LLAMADA">SOPORTE MEDIANTE LLAMADA</option>
+                      <option value="VISITA TECNICA">VISITA TECNICA</option>
+                      <option value="VISITA TECNICA COBRADA">VISITA TECNICA COBRADA</option>
+                      <option value="LLAMADA SALIENTE">LLAMADA SALIENTE</option>
+                      <option value="SMART OLT">SMART OLT</option>
+                      <option value="CORTE INTERNO DE SERVICIO">CORTE INTERNO DE SERVICIO</option>
+                      <option value="SOPORTE EN OFICINAS">SOPORTE EN OFICINAS</option>
+                      <option value="SOPORTE A TECNICO DE CAMPO">SOPORTE A TECNICO DE CAMPO</option>
+                      <option value="TRANSFERIR / EXTENSIONES">TRANSFERIR / EXTENSIONES</option>
+                      <option value="SE DA INFORMACION">SE DA INFORMACION</option>
+                      <option value="ESCALAR A TECNOLOGIA">ESCALAR A TECNOLOGIA</option>
+                      <option value="RETENCION">RETENCION</option>
                     </select>
                   </div>
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                 <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.82rem', color: 'var(--sidebar-text)', marginBottom: '4px' }}>Motivo / Solución:</label>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.82rem', color: 'var(--sidebar-text)', marginBottom: '4px' }}>Motivo de Consulta:</label>
                   <input
                     type="text"
                     value={masivoMotivo}
                     onChange={(e) => setMasivoMotivo(e.target.value)}
+                    placeholder="Escribe para buscar motivo..."
                     className="form-control"
+                    list="react-motivos-list"
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                   />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.82rem', color: 'var(--sidebar-text)', marginBottom: '4px' }}>Nodo / OLT:</label>
+                  <select
+                    value={masivoOlt}
+                    onChange={(e) => setMasivoOlt(e.target.value)}
+                    className="form-control"
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '0.85rem', fontWeight: 600 }}
+                  >
+                    <option value="">-- Sin Especificar / Ninguno --</option>
+                    <option value="1.18">1.18</option>
+                    <option value="1.50">1.50</option>
+                    <option value="99.1">99.1</option>
+                    <option value="BAÑOS">BAÑOS</option>
+                    <option value="AZOGUES">AZOGUES</option>
+                    <option value="ESTADIO">ESTADIO</option>
+                    <option value="BASES">BASES</option>
+                    <option value="TOTORACOCHA">TOTORACOCHA</option>
+                    <option value="RICAURTE">RICAURTE</option>
+                    <option value="SAYAUSÍ">SAYAUSÍ</option>
+                    <option value="QUINGEO">QUINGEO</option>
+                    <option value="GUALACEO">GUALACEO</option>
+                    <option value="PAUTE">PAUTE</option>
+                    <option value="SAN JOAQUÍN">SAN JOAQUÍN</option>
+                    <option value="CUENCA CENTRO">CUENCA CENTRO</option>
+                  </select>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontWeight: 700, fontSize: '0.82rem', color: 'var(--sidebar-text)', marginBottom: '4px' }}>Observación / Acción común:</label>
@@ -890,6 +1103,7 @@ function AtencionesTab({ token, user }) {
                     type="text"
                     value={masivoObservacion}
                     onChange={(e) => setMasivoObservacion(e.target.value)}
+                    placeholder="Opcional..."
                     className="form-control"
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                   />

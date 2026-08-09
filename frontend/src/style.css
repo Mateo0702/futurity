@@ -918,40 +918,28 @@ tr:hover {
   border-radius: 10px;
 }
 
-@media (max-width: 840px) {
+@media (max-width: 1200px), (pointer: coarse) {
   .login-split-card {
-    max-width: 720px;
+    flex-direction: column !important;
+    max-width: 440px !important;
+    width: 95% !important;
+    min-height: auto !important;
+    border-radius: 24px !important;
+    margin: 16px auto !important;
   }
   .login-split-left {
-    width: 45%;
-    padding: 36px 24px;
+    display: none !important;
   }
   .login-split-right {
-    width: 55%;
-    padding: 40px;
-  }
-}
-
-@media (max-width: 768px) {
-  .login-split-card {
-    flex-direction: column;
-    max-width: 420px;
-    min-height: auto;
-    border-radius: 24px;
-    margin: 16px auto;
-  }
-  .login-split-left {
-    display: none;
-  }
-  .login-split-right {
-    width: 100%;
-    padding: 48px 32px;
+    width: 100% !important;
+    padding: 28px 18px !important;
+    box-sizing: border-box !important;
   }
   .login-logo-wrapper {
-    justify-content: center;
+    justify-content: center !important;
   }
   .login-right-header {
-    text-align: center;
+    text-align: center !important;
   }
 }
 
@@ -969,39 +957,49 @@ tr:hover {
   height: auto;
 }
 
-.body-tecnico .panel-container {
+.body-tecnico .panel-container,
+.panel-container {
   display: flex;
   flex-direction: row;
   min-height: 100vh;
+  width: 100vw;
+  background-color: var(--bg-color, #f1f5f9);
+  overflow-x: hidden;
 }
 
-.body-tecnico .sidebar-tecnico {
+.body-tecnico .sidebar-tecnico,
+.sidebar-tecnico {
   background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
   color: white;
-  padding: 30px 24px;
-  width: 300px;
+  padding: 24px 20px;
+  width: 280px;
+  min-width: 280px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
   border-right: 1px solid #1e293b;
+  box-sizing: border-box;
 }
 
+.sidebar-tecnico h2,
 .body-tecnico .sidebar-tecnico h2 {
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 800;
   color: #ffffff;
   margin: 0 0 4px 0;
   letter-spacing: -0.025em;
 }
 
+.sidebar-tecnico p,
 .body-tecnico .sidebar-tecnico p {
   color: #94a3b8;
-  font-size: 0.875rem;
+  font-size: 0.825rem;
   margin: 0 0 20px 0;
   font-weight: 500;
 }
 
+.theme-btn-tecnico,
 .body-tecnico .theme-btn-tecnico {
   border: none;
   font-weight: 600;
@@ -1017,16 +1015,19 @@ tr:hover {
   justify-content: center;
 }
 
+.theme-btn-tecnico.theme-dark,
 .body-tecnico .theme-btn-tecnico.theme-dark {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #f1f5f9;
 }
 
+.theme-btn-tecnico.theme-dark:hover,
 .body-tecnico .theme-btn-tecnico.theme-dark:hover {
   background: rgba(255, 255, 255, 0.15);
 }
 
+.theme-btn-tecnico.theme-logout,
 .body-tecnico .theme-btn-tecnico.theme-logout {
   text-decoration: none;
   background: rgba(239, 68, 68, 0.15);
@@ -1034,12 +1035,14 @@ tr:hover {
   color: #fca5a5;
 }
 
+.theme-btn-tecnico.theme-logout:hover,
 .body-tecnico .theme-btn-tecnico.theme-logout:hover {
   background: rgba(239, 68, 68, 0.25);
   color: #ffffff;
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
 }
 
+.theme-btn-tecnico.theme-refresh,
 .body-tecnico .theme-btn-tecnico.theme-refresh {
   text-decoration: none;
   background: rgba(59, 130, 246, 0.15);
@@ -1048,17 +1051,50 @@ tr:hover {
   margin-bottom: 12px;
 }
 
+.theme-btn-tecnico.theme-refresh:hover,
 .body-tecnico .theme-btn-tecnico.theme-refresh:hover {
   background: rgba(59, 130, 246, 0.25);
   color: #ffffff;
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
 }
 
+.panel-container .main-content,
 .body-tecnico .main-content {
   flex-grow: 1;
   padding: 24px;
   max-height: 100vh;
   overflow-y: auto !important;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+@media (max-width: 1200px), (pointer: coarse) {
+  .panel-container,
+  .body-tecnico .panel-container {
+    flex-direction: column !important;
+    width: 100% !important;
+    min-height: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  .sidebar-tecnico,
+  .body-tecnico .sidebar-tecnico {
+    width: 100% !important;
+    min-width: 100% !important;
+    padding: 16px 16px !important;
+    box-sizing: border-box !important;
+    border-right: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .panel-container .main-content,
+  .body-tecnico .main-content {
+    width: 100% !important;
+    padding: 16px 12px !important;
+    box-sizing: border-box !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+  }
 }
 
 /* Break management card styles */
@@ -3579,6 +3615,17 @@ body.dark-mode .pro-obs-box {
     background: rgba(255, 255, 255, 0.04);
     border-color: rgba(255, 255, 255, 0.08);
     color: #cbd5e1;
+}
+
+@keyframes futurityToastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 

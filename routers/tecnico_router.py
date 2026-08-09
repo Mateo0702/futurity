@@ -65,10 +65,23 @@ def api_panel_tecnico(nombre_tecnico):
     hoy = date.today().isoformat()
     
     try:
-        # 1. Obtener estado de actividad, área de trabajo, coordenadas y pánico del técnico
-        cursor.execute("SELECT estado_actividad, area_trabajo, alerta_panico, mensaje_panico, latitud_actual, longitud_actual FROM tecnicos WHERE nombre = %s", (nombre_real,))
+        # 1. Obtener foto_perfil, estado de actividad, área de trabajo, coordenadas y pánico del técnico
+        cursor.execute("SELECT foto_perfil, estado_actividad, area_trabajo, alerta_panico, mensaje_panico, latitud_actual, longitud_actual FROM tecnicos WHERE nombre = %s OR UPPER(nombre) = %s", (nombre_real, nombre_real.upper()))
         tec_estado_row = cursor.fetchone()
+        foto_perfil = tec_estado_row['foto_perfil'] if (tec_estado_row and tec_estado_row['foto_perfil']) else 'default_avatar.png'
         estado_actividad = tec_estado_row['estado_actividad'] if tec_estado_row else 'Disponible'
+        if not estado_actividad or estado_actividad in ['Desconectado', 'Sesión Iniciada', 'DESCONECTADO']:
+            estado_actividad = 'Disponible'
+            try:
+                cursor.execute("""
+                    UPDATE tecnicos 
+                    SET estado_actividad = 'Disponible', 
+                        ultima_conexion = NOW()
+                    WHERE nombre = %s OR UPPER(nombre) = %s
+                """, (nombre_real, nombre_real.upper()))
+                conexion.commit()
+            except Exception as ex_u:
+                print(f"Error auto-activando técnico: {ex_u}")
         area_trabajo = tec_estado_row['area_trabajo'] if (tec_estado_row and tec_estado_row['area_trabajo']) else 'SOPORTE'
         alerta_panico = tec_estado_row['alerta_panico'] if tec_estado_row else 0
         mensaje_panico = tec_estado_row['mensaje_panico'] if tec_estado_row else None
@@ -110,6 +123,10 @@ def api_panel_tecnico(nombre_tecnico):
         cursor.execute("SELECT nombre FROM catalogo_modelos_router WHERE activo = 1 ORDER BY nombre ASC")
         catalogo_router = cursor.fetchall()
         
+        # Obtener lista de otros técnicos activos para traspaso de insumos
+        cursor.execute("SELECT nombre, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa FROM tecnicos WHERE activo = 1 AND nombre != %s ORDER BY nombre ASC", (nombre_real,))
+        tecnicos_list = cursor.fetchall()
+        
         # Formatear fechas y horas para que sean JSON-serializables
         for v in visitas_del_tecnico:
             if 'fecha_programada' in v and isinstance(v['fecha_programada'], date):
@@ -127,6 +144,7 @@ def api_panel_tecnico(nombre_tecnico):
             "status": "ok",
             "visitas": visitas_del_tecnico,
             "tecnico": nombre_real,
+            "foto_perfil": foto_perfil,
             "estado_actividad": estado_actividad,
             "area_trabajo": area_trabajo,
             "alerta_panico": alerta_panico,
@@ -135,7 +153,8 @@ def api_panel_tecnico(nombre_tecnico):
             "soluciones": soluciones,
             "catalogo": catalogo_materiales,
             "catalogo_ont": catalogo_ont,
-            "catalogo_router": catalogo_router
+            "catalogo_router": catalogo_router,
+            "tecnicos_lista": tecnicos_list
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -566,18 +585,18 @@ def finalizar_visita(id_visita):
             id_visita
         ))
         
+        # Obtener el nombre del técnico principal de esta visita
+        cursor.execute("SELECT tecnico_principal FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        tec_row = cursor.fetchone()
+        tecnico_nombre = tec_row['tecnico_principal'] if tec_row else None
+
         # 2. Registrar materiales e inventario si existen
         if materiales_ids and cantidades:
-            # Obtener el nombre del técnico principal de esta visita
-            cursor.execute("SELECT tecnico_principal FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
-            tec_row = cursor.fetchone()
-            tecnico_nombre = tec_row['tecnico_principal'] if tec_row else None
-            
             placa_vehiculo = 'S/P'
             if tecnico_nombre:
-                cursor.execute("SELECT placa_vehiculo FROM tecnicos WHERE nombre = %s", (tecnico_nombre,))
+                cursor.execute("SELECT COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa FROM tecnicos WHERE nombre = %s", (tecnico_nombre,))
                 placa_row = cursor.fetchone()
-                placa_vehiculo = placa_row['placa_vehiculo'] if (placa_row and placa_row['placa_vehiculo']) else 'S/P'
+                placa_vehiculo = placa_row['placa'] if (placa_row and placa_row['placa']) else 'S/P'
             
             query_materiales = """
                 INSERT INTO visitas_materiales (id_visita, id_material, cantidad_usada)
@@ -823,9 +842,10 @@ def ping_global():
                 UPDATE tecnicos 
                 SET latitud_actual = %s, 
                     longitud_actual = %s, 
-                    ultima_conexion = NOW()
-                WHERE nombre = %s
-            """, (lat, lon, tecnico_nombre))
+                    ultima_conexion = NOW(),
+                    estado_actividad = IF(estado_actividad = 'Desconectado', 'Disponible', estado_actividad)
+                WHERE nombre = %s OR UPPER(nombre) = %s
+            """, (lat, lon, tecnico_nombre, tecnico_nombre.upper()))
             conexion.commit()
         except Exception as e:
             print(f"Error in ping_global: {e}")
@@ -1096,6 +1116,260 @@ def posponer_visita(id_visita):
     except Exception as e:
         conexion.rollback()
         print(f"[Posponer] Error al posponer visita #{id_visita}: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+@tecnico_bp.route('/api/tecnico/traspaso_material', methods=['POST'])
+def traspaso_material_tecnico():
+    usuario = obtener_usuario_autenticado()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    data = request.json or {}
+    destino_nombre = data.get('tecnico_destino_nombre', '').strip()
+    id_material = data.get('id_material')
+    cantidad = int(data.get('cantidad', 0))
+    
+    if not destino_nombre or not id_material or cantidad <= 0:
+        return jsonify({"status": "error", "message": "Faltan datos requeridos (técnico destino, material, cantidad > 0)."}), 400
+        
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        origen_nombre = usuario.get('username') or session.get('user_name')
+        cursor.execute("SELECT nombre, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa FROM tecnicos WHERE id_usuario = %s OR nombre = %s OR nombre LIKE %s", (usuario.get('id_usuario'), origen_nombre, f"%{origen_nombre}%"))
+        row_origen = cursor.fetchone()
+        if not row_origen:
+            return jsonify({"status": "error", "message": "Técnico de origen no encontrado"}), 404
+            
+        tecnico_origen_nombre = row_origen['nombre']
+        placa_origen = row_origen['placa']
+        
+        cursor.execute("SELECT nombre, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa FROM tecnicos WHERE nombre = %s", (destino_nombre,))
+        row_destino = cursor.fetchone()
+        if not row_destino:
+            return jsonify({"status": "error", "message": "Técnico destino no encontrado"}), 404
+            
+        tecnico_destino_nombre = row_destino['nombre']
+        placa_destino = row_destino['placa']
+        
+        if placa_origen == 'S/P' or placa_destino == 'S/P':
+            return jsonify({"status": "error", "message": "Ambos técnicos deben tener una buseta/placa asignada para transferir inventario."}), 400
+            
+        # Descontar del origen
+        cursor.execute("""
+            INSERT IGNORE INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible)
+            VALUES (%s, %s, 0)
+        """, (placa_origen, int(id_material)))
+        
+        cursor.execute("""
+            UPDATE inventario_tecnicos 
+            SET cantidad_disponible = cantidad_disponible - %s 
+            WHERE placa_vehiculo = %s AND id_material = %s
+        """, (cantidad, placa_origen, int(id_material)))
+        
+        # Sumar al destino
+        cursor.execute("""
+            INSERT IGNORE INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible)
+            VALUES (%s, %s, 0)
+        """, (placa_destino, int(id_material)))
+        
+        cursor.execute("""
+            UPDATE inventario_tecnicos 
+            SET cantidad_disponible = cantidad_disponible + %s 
+            WHERE placa_vehiculo = %s AND id_material = %s
+        """, (cantidad, placa_destino, int(id_material)))
+        
+        # Registrar log de traspaso
+        cursor.execute("""
+            INSERT INTO traspasos_tecnicos (tecnico_origen, placa_origen, tecnico_destino, placa_destino, id_material, cantidad, agente_registro, fecha_hora)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+        """, (tecnico_origen_nombre, placa_origen, tecnico_destino_nombre, placa_destino, int(id_material), cantidad, tecnico_origen_nombre))
+        
+        conexion.commit()
+        return jsonify({"status": "ok", "message": f"Se transfirieron {cantidad} unidad(es) a {tecnico_destino_nombre}."})
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+@tecnico_bp.route('/api/admin/tecnicos/reasignar_vehiculo', methods=['POST'])
+def reasignar_vehiculo_tecnico():
+    data = request.json or {}
+    id_tecnico = data.get('id_tecnico')
+    placa_asignada_hoy = data.get('placa_asignada_hoy', '').strip().upper()
+    transferir_inventario = data.get('transferir_inventario', False)
+    
+    if not id_tecnico:
+        return jsonify({"status": "error", "message": "ID de técnico es requerido."}), 400
+        
+    es_reset = placa_asignada_hoy in ['', 'RESET', 'TITULAR']
+    if es_reset:
+        nueva_placa_db = None
+    else:
+        nueva_placa_db = placa_asignada_hoy
+        
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        # Obtener datos del técnico y su placa activa actual antes del cambio
+        cursor.execute("SELECT nombre, placa_vehiculo, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa_actual FROM tecnicos WHERE id_tecnico = %s", (id_tecnico,))
+        tec_row = cursor.fetchone()
+        if not tec_row:
+            return jsonify({"status": "error", "message": "Técnico no encontrado."}), 404
+            
+        nombre_tecnico = tec_row['nombre']
+        placa_anterior = tec_row['placa_actual']
+        placa_titular = tec_row['placa_vehiculo']
+        
+        # Placa final a asignar
+        placa_final = placa_titular if es_reset else nueva_placa_db
+        
+        # Si solicitó transferir el inventario físico entre las busetas
+        if transferir_inventario and placa_anterior and placa_final and placa_anterior != placa_final and placa_anterior != 'S/P':
+            # Buscar todos los insumos disponibles en la buseta anterior
+            cursor.execute("SELECT id_material, cantidad_disponible FROM inventario_tecnicos WHERE placa_vehiculo = %s AND cantidad_disponible > 0", (placa_anterior,))
+            insumos_anteriores = cursor.fetchall()
+            
+            for item in insumos_anteriores:
+                id_mat = item['id_material']
+                cant = item['cantidad_disponible']
+                
+                # Descontar de la buseta anterior
+                cursor.execute("UPDATE inventario_tecnicos SET cantidad_disponible = 0 WHERE placa_vehiculo = %s AND id_material = %s", (placa_anterior, id_mat))
+                
+                # Sumar a la nueva buseta
+                cursor.execute("""
+                    INSERT IGNORE INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible)
+                    VALUES (%s, %s, 0)
+                """, (placa_final, id_mat))
+                
+                cursor.execute("""
+                    UPDATE inventario_tecnicos SET cantidad_disponible = cantidad_disponible + %s WHERE placa_vehiculo = %s AND id_material = %s
+                """, (cant, placa_final, id_mat))
+                
+                # Registrar en log auditables de traspasos
+                cursor.execute("""
+                    INSERT INTO traspasos_tecnicos (tecnico_origen, placa_origen, tecnico_destino, placa_destino, id_material, cantidad, agente_registro, fecha_hora)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                """, (nombre_tecnico, placa_anterior, nombre_tecnico, placa_final, id_mat, cant, f"CallCenter ({nombre_tecnico})"))
+                
+        # Actualizar la asignación del técnico
+        cursor.execute("UPDATE tecnicos SET placa_asignada_hoy = %s WHERE id_tecnico = %s", (nueva_placa_db, id_tecnico))
+        conexion.commit()
+        
+        msg = f"Buseta reasignada a {placa_final} correctamente."
+        if transferir_inventario:
+            msg += " Se trasladó la custodia física de insumos a la nueva buseta."
+        return jsonify({"status": "ok", "message": msg})
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+@tecnico_bp.route('/api/admin/traspasos_historial', methods=['GET'])
+def historial_traspasos():
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        query = """
+            SELECT t.id_traspaso, t.tecnico_origen, t.placa_origen, t.tecnico_destino, t.placa_destino,
+                   t.id_material, m.nombre_material, t.cantidad, t.agente_registro, t.fecha_hora
+            FROM traspasos_tecnicos t
+            LEFT JOIN materiales m ON t.id_material = m.id_material
+            ORDER BY t.id_traspaso DESC
+            LIMIT 100
+        """
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        for r in rows:
+            if r.get('fecha_hora'):
+                r['fecha_hora'] = r['fecha_hora'].strftime('%Y-%m-%d %H:%M:%S')
+        return jsonify({"status": "ok", "traspasos": rows})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+@tecnico_bp.route('/api/admin/vehiculos', methods=['GET'])
+def listar_vehiculos():
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id_vehiculo, placa, descripcion, activo, fecha_registro FROM vehiculos ORDER BY placa ASC")
+        rows = cursor.fetchall()
+        for r in rows:
+            if r.get('fecha_registro'):
+                r['fecha_registro'] = r['fecha_registro'].strftime('%Y-%m-%d %H:%M:%S')
+        return jsonify({"status": "ok", "vehiculos": rows})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+@tecnico_bp.route('/api/admin/vehiculos', methods=['POST'])
+def crear_vehiculo():
+    data = request.json or {}
+    placa = data.get('placa', '').strip().upper()
+    descripcion = data.get('descripcion', '').strip()
+    
+    if not placa:
+        return jsonify({"status": "error", "message": "La placa del vehículo es requerida."}), 400
+        
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            INSERT INTO vehiculos (placa, descripcion, activo)
+            VALUES (%s, %s, 1)
+            ON DUPLICATE KEY UPDATE descripcion = VALUES(descripcion), activo = 1
+        """, (placa, descripcion or f"Vehículo / Buseta {placa}"))
+        
+        conexion.commit()
+        return jsonify({"status": "ok", "message": f"Vehículo con placa '{placa}' registrado correctamente."})
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+@tecnico_bp.route('/api/admin/vehiculos/<int:id_vehiculo>/toggle', methods=['POST'])
+def toggle_vehiculo(id_vehiculo):
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        cursor.execute("UPDATE vehiculos SET activo = CASE WHEN activo = 1 THEN 0 ELSE 1 END WHERE id_vehiculo = %s", (id_vehiculo,))
+        conexion.commit()
+        return jsonify({"status": "ok", "message": "Estado del vehículo actualizado."})
+    except Exception as e:
+        conexion.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()

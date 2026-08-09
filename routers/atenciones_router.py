@@ -64,11 +64,46 @@ def buscar_contrato_json():
         cursor.close()
         conn.close()
 
+def obtener_usuario_actual(req):
+    auth_header = req.headers.get('Authorization')
+    if auth_header and auth_header.startswith("Bearer "):
+        from utils_jwt import verify_token
+        u = verify_token(auth_header)
+        if u:
+            agente_nombre = u.get('nombre') or u.get('name') or u.get('username')
+            conn = get_db_connection()
+            if conn:
+                try:
+                    cursor = conn.cursor(dictionary=True)
+                    cursor.execute("SELECT nombre FROM usuarios_callcenter WHERE id_usuario = %s OR email = %s", (u.get('sub'), u.get('username')))
+                    row = cursor.fetchone()
+                    if row and row.get('nombre'):
+                        agente_nombre = row['nombre']
+                except Exception as ex_u:
+                    print("Error resolving agent name:", ex_u)
+                finally:
+                    conn.close()
+            return {
+                'id_usuario': u.get('sub'),
+                'username': u.get('username'),
+                'nombre': agente_nombre or session.get('user_name', 'Call Center'),
+                'rol': u.get('role') or session.get('user_role', 'ASESOR')
+            }
+    if 'user_id' in session:
+        return {
+            'id_usuario': session['user_id'],
+            'username': session.get('username'),
+            'nombre': session.get('user_name', 'Call Center'),
+            'rol': session.get('user_role', 'ASESOR')
+        }
+    return None
+
 @atenciones_bp.route('/api/admin/atenciones', methods=['POST'])
 def registrar_atencion():
-    if 'user_id' not in session:
+    user = obtener_usuario_actual(request)
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+    if user.get('rol') not in ['ADMIN', 'ASESOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para registrar atenciones."}), 403
         
     # Obtener parámetros del JSON o del formulario
@@ -112,7 +147,7 @@ def registrar_atencion():
     motivo = data.get('motivo', '').strip().upper() or None
     
     # El agente responsable es el Call Center logueado
-    agente = session.get('user_name', 'Call Center').strip()
+    agente = str(user.get('nombre') or 'Call Center').strip()
     
     observacion = data.get('observacion', '').strip() or None
     olt = data.get('olt', '').strip().upper() or None
@@ -158,9 +193,10 @@ def registrar_atencion():
 
 @atenciones_bp.route('/api/admin/atenciones/recientes', methods=['GET'])
 def atenciones_recientes():
-    if 'user_id' not in session:
+    user = obtener_usuario_actual(request)
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+    if user.get('rol') not in ['ADMIN', 'ASESOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver atenciones."}), 403
     
     conn = get_db_connection()
@@ -169,7 +205,7 @@ def atenciones_recientes():
         
     cursor = conn.cursor(dictionary=True)
     try:
-        agente = session.get('user_name', 'Call Center').strip()
+        agente = str(user.get('nombre') or 'Call Center').strip()
         fecha_req = request.args.get('fecha', '').strip()
         
         if fecha_req:
@@ -393,10 +429,9 @@ def atenciones_recientes_contrato():
 
 @atenciones_bp.route('/api/admin/atenciones/masivo', methods=['POST'])
 def registrar_atenciones_masivo():
-    if 'user_id' not in session:
+    user = obtener_usuario_actual(request)
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
-        return jsonify({"status": "error", "message": "No tienes privilegios para registrar atenciones."}), 403
 
     data = request.get_json() if request.is_json else request.form
     
@@ -441,7 +476,7 @@ def registrar_atenciones_masivo():
     motivo = (data.get('motivo') or '').strip().upper() or "VALIDACIÓN DE SC"
     observacion = (data.get('observacion') or '').strip() or None
     olt = (data.get('olt') or '').strip().upper() or None
-    agente = session.get('user_name', 'Call Center').strip()
+    agente = str(user.get('nombre') or 'Call Center').strip()
 
     conn = get_db_connection()
     if not conn:

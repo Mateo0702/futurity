@@ -27,8 +27,8 @@ def check_admin_privileges():
         return False, jsonify({"status": "error", "message": "No autorizado. Inicie sesión."}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role != 'ADMIN':
-        return False, jsonify({"status": "error", "message": "No tienes privilegios de administrador."}), 403
+    if user_role not in ['ADMIN', 'ASESOR']:
+        return False, jsonify({"status": "error", "message": "Acceso denegado. Se requieren privilegios de Administrador o Asesor."}), 403
     return True, None, None
 
 def save_uploaded_file(file_key, folder):

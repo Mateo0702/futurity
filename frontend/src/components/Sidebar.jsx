@@ -40,6 +40,9 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
     if (tab === 'inventario') {
       return ['ADMIN', 'BODEGA'].includes(role);
     }
+    if (tab === 'asignacion-busetas') {
+      return ['ADMIN', 'ASESOR', 'BODEGA'].includes(role);
+    }
     if (tab === 'usuarios') {
       return ['ADMIN', 'ASESOR'].includes(role);
     }
@@ -79,7 +82,7 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
             <i className="fa-solid fa-network-wired"></i> Área Operativa
           </div>
         )}
-        
+
         {['ADMIN', 'ASESOR'].includes(role) ? (
           <div className="segmented-control" id="area-switcher" style={{ height: collapsed ? '0px' : 'auto', overflow: 'hidden', opacity: collapsed ? 0 : 1, transition: 'all 0.2s ease' }}>
             <div
@@ -196,6 +199,16 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
           >
             <i className="fa-solid fa-star" style={{ fontSize: '1.1rem', width: '20px' }}></i>
             <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>Control de Calidad</span>
+          </div>
+        )}
+
+        {isVisible('asignacion-busetas') && (
+          <div
+            className={`nav-item ${activeTab === 'asignacion-busetas' ? 'active' : ''}`}
+            onClick={() => onTabChange('asignacion-busetas')}
+          >
+            <i className="fa-solid fa-truck-front" style={{ fontSize: '1.1rem', width: '20px' }}></i>
+            <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>Asignación de Furgonetas</span>
           </div>
         )}
 

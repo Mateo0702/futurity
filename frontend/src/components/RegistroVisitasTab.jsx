@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-function RegistroVisitasTab({ token, user, activeArea }) {
-  const getTodayLocal = () => {
-    const hoy = new Date();
-    const offset = hoy.getTimezoneOffset();
-    const hoyLocal = new Date(hoy.getTime() - (offset * 60 * 1000));
-    return hoyLocal.toISOString().split('T')[0];
+function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClearInitialData }) {
+  const getTodayLocal = (d = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   // Form Fields
@@ -72,6 +72,22 @@ function RegistroVisitasTab({ token, user, activeArea }) {
   useEffect(() => {
     fetchCatalogs();
   }, []);
+
+  // Populate initialVisitData transferred from AtencionesTab
+  useEffect(() => {
+    if (initialVisitData) {
+      if (initialVisitData.contrato) {
+        setContrato(initialVisitData.contrato);
+      }
+      if (initialVisitData.cliente) setCliente(initialVisitData.cliente);
+      if (initialVisitData.sector) setSector(initialVisitData.sector);
+      if (initialVisitData.telefonos) setTelefonos(initialVisitData.telefonos);
+      if (initialVisitData.problema) setProblema(initialVisitData.problema);
+      if (initialVisitData.observacionCallcenter) setObservacionCallcenter(initialVisitData.observacionCallcenter);
+
+      if (onClearInitialData) onClearInitialData();
+    }
+  }, [initialVisitData]);
 
   // Update default states when area changes
   useEffect(() => {
@@ -426,153 +442,8 @@ function RegistroVisitasTab({ token, user, activeArea }) {
       <div className="card" style={{ padding: '28px', background: 'var(--card-bg)', borderRadius: '20px', border: '1px solid var(--border-color)' }}>
         <form onSubmit={handleSubmit} autoComplete="off">
 
-          {/* SECCIÓN 1: Datos de Asignación */}
+          {/* SECCIÓN 1: Datos del Cliente */}
           <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '20px' }}>
-            <h3 style={{ margin: 0, color: 'var(--primary)', fontSize: '1.1rem', fontWeight: 800 }}>
-              <i className="fa-solid fa-user-gear" style={{ marginRight: '6px' }}></i> Datos de Asignación de Ruta
-            </h3>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '25px' }}>
-            
-            {/* Fecha Programada */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>
-                Fecha Programada (Día de la Visita):
-              </label>
-              <input
-                type="date"
-                min={getTodayLocal()}
-                value={fechaProgramada}
-                onChange={(e) => setFechaProgramada(e.target.value)}
-                required
-                className="form-control"
-                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
-              />
-            </div>
-
-            {/* Prioridad (Solo Soporte) */}
-            {activeArea !== 'INSTALACIONES' && (
-              <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>
-                  Prioridad de Atención:
-                </label>
-                <select
-                  value={prioridad}
-                  onChange={(e) => setPrioridad(e.target.value)}
-                  className="form-control"
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
-                >
-                  <option value="ALTA">🔴 ALTA</option>
-                  <option value="MEDIA">🟡 MEDIA</option>
-                  <option value="BAJA">⚪ BAJA</option>
-                </select>
-              </div>
-            )}
-
-            {/* Técnico Principal */}
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <label style={{ margin: 0, fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)' }}>
-                  Técnico Principal:
-                </label>
-                <button
-                  type="button"
-                  onClick={recomendarTecnicoCercano}
-                  style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', color: 'var(--primary)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                >
-                  <i className="fa-solid fa-location-crosshairs"></i> Recomendar Cercano
-                </button>
-              </div>
-              <select
-                value={tecnicoAsignado}
-                onChange={(e) => setTecnicoAsignado(e.target.value)}
-                required
-                className="form-control"
-                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
-              >
-                <option value="">-- Seleccione Técnico Responsable --</option>
-                {tecnicos.map((tec) => (
-                  <option key={tec.id_tecnico} value={tec.nombre}>{tec.nombre}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Técnico de Apoyo */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>
-                Técnico de Apoyo (Opcional):
-              </label>
-              <select
-                value={tecnicoApoyo}
-                onChange={(e) => setTecnicoApoyo(e.target.value)}
-                className="form-control"
-                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)' }}
-              >
-                <option value="">-- Sin Apoyo --</option>
-                {tecnicos.map((tec) => (
-                  <option key={tec.id_tecnico} value={tec.nombre}>{tec.nombre}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Recomendaciones de Técnicos Cercanos */}
-          {showRecomendados && (
-            <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', borderRadius: '12px', padding: '16px', marginBottom: '25px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <strong style={{ color: '#065f46', fontSize: '0.88rem' }}>📍 Técnicos de {activeArea.toLowerCase()} más cercanos hoy:</strong>
-                <button
-                  type="button"
-                  onClick={() => setShowRecomendados(false)}
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#065f46', fontWeight: 800 }}
-                >
-                  <i className="fa-solid fa-xmark"></i> Cerrar
-                </button>
-              </div>
-              {loadingTecnicosCercanos ? (
-                <div style={{ fontSize: '0.82rem', color: '#065f46' }}><i className="fa-solid fa-spinner fa-spin"></i> Geolocalizando cuadrillas...</div>
-              ) : tecnicosCercanos.length === 0 ? (
-                <div style={{ fontSize: '0.82rem', color: '#c2410c' }}><i className="fa-solid fa-circle-info"></i> No hay cuadrillas activas con señal GPS hoy.</div>
-              ) : (
-                <ul style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: 0, paddingLeft: '15px' }}>
-                  {tecnicosCercanos.map((tec, idx) => (
-                    <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
-                      <span>
-                        <strong>{tec.nombre}</strong> (a {tec.distancia_km} km)
-                        <span style={{ marginLeft: '8px', padding: '2px 6px', background: '#dcfce7', color: '#166534', fontWeight: 800, borderRadius: '4px', fontSize: '0.72rem' }}>{tec.estado}</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTecnicoAsignado(tec.nombre);
-                          setShowRecomendados(false);
-                        }}
-                        style={{ background: '#166534', color: 'white', border: 'none', padding: '4px 10px', borderRadius: '6px', fontWeight: 800, fontSize: '0.75rem', cursor: 'pointer' }}
-                      >
-                        Asignar
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-
-          {/* Conflictos de Agenda detectados */}
-          {conflictos.length > 0 && (
-            <div style={{ background: 'rgba(245, 158, 11, 0.12)', borderLeft: '5px solid #f59e0b', borderRadius: '12px', padding: '16px', marginBottom: '25px', color: '#78350f', fontSize: '0.85rem' }}>
-              <strong>⚠️ Conflicto detectado en la Agenda del Técnico:</strong>
-              <ul style={{ margin: '5px 0 0 0', paddingLeft: '20px', lineHeight: '1.5' }}>
-                {conflictos.map((conf, idx) => (
-                  <li key={idx}>{conf}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* SECCIÓN 2: Datos del Cliente */}
-          <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '20px', marginTop: '30px' }}>
             <h3 style={{ margin: 0, color: 'var(--primary)', fontSize: '1.1rem', fontWeight: 800 }}>
               <i className="fa-solid fa-users" style={{ marginRight: '6px' }}></i> Datos del Cliente
             </h3>
@@ -649,6 +520,153 @@ function RegistroVisitasTab({ token, user, activeArea }) {
               />
             </div>
           </div>
+
+          {/* SECCIÓN 2: Datos de Asignación de Ruta */}
+          <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '20px', marginTop: '30px' }}>
+            <h3 style={{ margin: 0, color: 'var(--primary)', fontSize: '1.1rem', fontWeight: 800 }}>
+              <i className="fa-solid fa-user-gear" style={{ marginRight: '6px' }}></i> Datos de Asignación de Ruta
+            </h3>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '25px' }}>
+            
+            {/* Fecha Programada */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>
+                Fecha Programada (Día de la Visita):
+              </label>
+              <input
+                type="date"
+                min={getTodayLocal()}
+                value={fechaProgramada}
+                onChange={(e) => setFechaProgramada(e.target.value)}
+                required
+                className="form-control"
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
+              />
+            </div>
+
+            {/* Prioridad (Solo Soporte) */}
+            {activeArea !== 'INSTALACIONES' && (
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>
+                  Prioridad de Atención:
+                </label>
+                <select
+                  value={prioridad}
+                  onChange={(e) => setPrioridad(e.target.value)}
+                  className="form-control"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
+                >
+                  <option value="ALTA">🔴 ALTA</option>
+                  <option value="MEDIA">🟡 MEDIA</option>
+                  <option value="BAJA">⚪ BAJA</option>
+                </select>
+              </div>
+            )}
+
+            {/* Técnico Principal */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ margin: 0, fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)' }}>
+                  Técnico Principal:
+                </label>
+                <button
+                  type="button"
+                  onClick={recomendarTecnicoCercano}
+                  style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', color: 'var(--primary)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <i className="fa-solid fa-location-crosshairs"></i> Recomendar Cercano
+                </button>
+              </div>
+              <select
+                value={tecnicoAsignado}
+                onChange={(e) => setTecnicoAsignado(e.target.value)}
+                required
+                className="form-control"
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
+              >
+                <option value="">-- Seleccione Técnico Responsable --</option>
+                <option value="NO TECNICO">NO TECNICO (Sin Asignar / Por Coordinar)</option>
+                {tecnicos.filter(t => t.nombre !== 'NO TECNICO').map((tec) => (
+                  <option key={tec.id_tecnico} value={tec.nombre}>{tec.nombre}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Técnico de Apoyo */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>
+                Técnico de Apoyo (Opcional):
+              </label>
+              <select
+                value={tecnicoApoyo}
+                onChange={(e) => setTecnicoApoyo(e.target.value)}
+                className="form-control"
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)' }}
+              >
+                <option value="">-- Sin Apoyo --</option>
+                <option value="NO TECNICO">NO TECNICO</option>
+                {tecnicos.filter(t => t.nombre !== 'NO TECNICO').map((tec) => (
+                  <option key={tec.id_tecnico} value={tec.nombre}>{tec.nombre}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Recomendaciones de Técnicos Cercanos */}
+          {showRecomendados && (
+            <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', borderRadius: '12px', padding: '16px', marginBottom: '25px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <strong style={{ color: '#065f46', fontSize: '0.88rem' }}>📍 Técnicos de {activeArea.toLowerCase()} más cercanos hoy:</strong>
+                <button
+                  type="button"
+                  onClick={() => setShowRecomendados(false)}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#065f46', fontWeight: 800 }}
+                >
+                  <i className="fa-solid fa-xmark"></i> Cerrar
+                </button>
+              </div>
+              {loadingTecnicosCercanos ? (
+                <div style={{ fontSize: '0.82rem', color: '#065f46' }}><i className="fa-solid fa-spinner fa-spin"></i> Geolocalizando cuadrillas...</div>
+              ) : tecnicosCercanos.length === 0 ? (
+                <div style={{ fontSize: '0.82rem', color: '#c2410c' }}><i className="fa-solid fa-circle-info"></i> No hay cuadrillas activas con señal GPS hoy.</div>
+              ) : (
+                <ul style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: 0, paddingLeft: '15px' }}>
+                  {tecnicosCercanos.map((tec, idx) => (
+                    <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                      <span>
+                        <strong>{tec.nombre}</strong> (a {tec.distancia_km} km)
+                        <span style={{ marginLeft: '8px', padding: '2px 6px', background: '#dcfce7', color: '#166534', fontWeight: 800, borderRadius: '4px', fontSize: '0.72rem' }}>{tec.estado}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTecnicoAsignado(tec.nombre);
+                          setShowRecomendados(false);
+                        }}
+                        style={{ background: '#166534', color: 'white', border: 'none', padding: '4px 10px', borderRadius: '6px', fontWeight: 800, fontSize: '0.75rem', cursor: 'pointer' }}
+                      >
+                        Asignar
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {/* Conflictos de Agenda detectados */}
+          {conflictos.length > 0 && (
+            <div style={{ background: 'rgba(245, 158, 11, 0.12)', borderLeft: '5px solid #f59e0b', borderRadius: '12px', padding: '16px', marginBottom: '25px', color: '#78350f', fontSize: '0.85rem' }}>
+              <strong>⚠️ Conflicto detectado en la Agenda del Técnico:</strong>
+              <ul style={{ margin: '5px 0 0 0', paddingLeft: '20px', lineHeight: '1.5' }}>
+                {conflictos.map((conf, idx) => (
+                  <li key={idx}>{conf}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* SECCIÓN 3: Ubicación y Mapa */}
           <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '20px', marginTop: '30px' }}>

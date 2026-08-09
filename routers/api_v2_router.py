@@ -95,6 +95,19 @@ def api_v2_login():
                     "message": "Error interno al generar el token JWT"
                 }), 500
 
+            if usuario.get('rol') == 'TECNICO':
+                try:
+                    c_tec = conexion.cursor()
+                    c_tec.execute("""
+                        UPDATE tecnicos 
+                        SET estado_actividad = 'Disponible', 
+                            ultima_conexion = NOW()
+                        WHERE nombre = %s OR UPPER(nombre) = %s
+                    """, (usuario['nombre'], usuario['nombre'].upper()))
+                    c_tec.close()
+                except Exception as e_tec:
+                    print(f"Error actualizando estado del técnico en login v2: {e_tec}")
+
             return jsonify({
                 "status": "success",
                 "message": "Autenticación exitosa",
@@ -121,7 +134,15 @@ def api_v2_login():
 
 @api_v2_bp.route('/api/v2/sectores', methods=['GET'])
 def api_v2_sectores():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id']}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     conexion = get_db_connection()
@@ -265,10 +286,29 @@ def api_v2_get_visitas():
         for rec in recordatorios:
             if rec.get('fecha'):
                 rec['fecha'] = str(rec['fecha'])
+            if rec.get('fecha_creacion'):
+                rec['fecha_creacion'] = str(rec['fecha_creacion'])
             if rec.get('hora_inicio'):
-                rec['hora_inicio_str'] = str(rec['hora_inicio'])
+                if hasattr(rec['hora_inicio'], 'total_seconds'):
+                    tot_sec = int(rec['hora_inicio'].total_seconds())
+                    rec['hora_inicio_str'] = f"{tot_sec // 3600:02d}:{(tot_sec % 3600) // 60:02d}"
+                else:
+                    rec['hora_inicio_str'] = str(rec['hora_inicio'])
+                rec['hora_inicio'] = rec['hora_inicio_str']
+            else:
+                rec['hora_inicio'] = None
+                rec['hora_inicio_str'] = ''
+
             if rec.get('hora_fin'):
-                rec['hora_fin_str'] = str(rec['hora_fin'])
+                if hasattr(rec['hora_fin'], 'total_seconds'):
+                    tot_sec = int(rec['hora_fin'].total_seconds())
+                    rec['hora_fin_str'] = f"{tot_sec // 3600:02d}:{(tot_sec % 3600) // 60:02d}"
+                else:
+                    rec['hora_fin_str'] = str(rec['hora_fin'])
+                rec['hora_fin'] = rec['hora_fin_str']
+            else:
+                rec['hora_fin'] = None
+                rec['hora_fin_str'] = ''
 
         return jsonify({
             "status": "success",
@@ -328,8 +368,8 @@ def api_v2_tecnicos():
         cursor.execute("""
             SELECT id_tecnico, nombre, activo, placa_vehiculo, area_trabajo 
             FROM tecnicos 
-            WHERE nombre NOT IN ('TECNOLOGIA', 'NO TECNICO') AND activo = TRUE
-            ORDER BY nombre ASC
+            WHERE nombre != 'TECNOLOGIA' AND activo = TRUE
+            ORDER BY CASE WHEN nombre = 'NO TECNICO' THEN 0 ELSE 1 END, nombre ASC
         """)
         tecnicos = cursor.fetchall()
         return jsonify({"status": "success", "tecnicos": tecnicos})

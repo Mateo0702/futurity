@@ -8,30 +8,33 @@ cliente_bp = Blueprint('cliente', __name__)
 # ==========================================
 
 @cliente_bp.route('/rastreo/<token>')
+@cliente_bp.route('/seguimiento/<token>')
 def rastreo_cliente(token):
-    """Muestra la página del mapa al cliente o redirige a la encuesta si finalizó."""
-    conexion = get_db_connection()
-    cursor = conexion.cursor(dictionary=True)
-    # Buscamos de quién es este código secreto
-    cursor.execute("SELECT tecnico_principal, tecnico_apoyo, estado, cliente FROM visitas_tecnicas WHERE token_rastreo = %s", (token,))
-    visita = cursor.fetchone()
-    cursor.close()
-    conexion.close()
+    """Muestra la página del mapa al cliente vía React SPA."""
+    import os
+    from flask import send_from_directory, current_app
+    return send_from_directory(os.path.join(current_app.root_path, 'frontend/dist'), 'index.html')
 
-    if not visita:
-        return "Este enlace de rastreo no es válido o ya ha caducado.", 404
 
-    if visita['estado'] == 'FINALIZADA':
-        from flask import redirect
-        return redirect(url_for('cliente.encuesta_cliente', token=token))
-
-    # Le enviamos los datos a la plantilla del mapa
-    return render_template('mapa_cliente.html', visita=visita, token=token)
+@cliente_bp.route('/descargar')
+def descargar_app():
+    """Muestra la página de descarga de la app móvil Android vía React SPA."""
+    import os
+    from flask import send_from_directory, current_app
+    return send_from_directory(os.path.join(current_app.root_path, 'frontend/dist'), 'index.html')
 
 
 @cliente_bp.route('/encuesta/<token>')
 def encuesta_cliente(token):
-    """Muestra la encuesta de satisfacción detallada al cliente."""
+    """Muestra la encuesta de satisfacción detallada al cliente vía React SPA."""
+    import os
+    from flask import send_from_directory, current_app
+    return send_from_directory(os.path.join(current_app.root_path, 'frontend/dist'), 'index.html')
+
+
+@cliente_bp.route('/api/cliente/encuesta_info/<token>')
+def api_encuesta_info(token):
+    """Retorna los datos de la visita para alimentar el componente React de encuesta."""
     conexion = get_db_connection()
     cursor = conexion.cursor(dictionary=True)
     cursor.execute("SELECT tecnico_principal, tecnico_apoyo, estado, cliente FROM visitas_tecnicas WHERE token_rastreo = %s", (token,))
@@ -40,9 +43,9 @@ def encuesta_cliente(token):
     conexion.close()
 
     if not visita:
-        return "Este enlace no es válido o ya ha caducado.", 404
+        return jsonify({"status": "error", "message": "Este enlace no es válido o ha expirado."}), 404
 
-    return render_template('encuesta_cliente.html', visita=visita, token=token)
+    return jsonify({"status": "ok", "visita": visita})
 
 
 @cliente_bp.route('/api/rastreo_ubicacion/<token>')
@@ -182,18 +185,26 @@ def api_geocode():
 
 
 @cliente_bp.route('/firmar/<token>')
+@cliente_bp.route('/firma-remota/<token>')
 def firmar_remoto(token):
+    import os
+    from flask import send_from_directory, current_app
+    return send_from_directory(os.path.join(current_app.root_path, 'frontend/dist'), 'index.html')
+
+
+@cliente_bp.route('/api/cliente/firma_info/<token>')
+def api_firma_info(token):
     conexion = get_db_connection()
     cursor = conexion.cursor(dictionary=True)
-    cursor.execute("SELECT id_visita, cliente, tecnico_principal, es_instalacion FROM visitas_tecnicas WHERE token_rastreo = %s", (token,))
+    cursor.execute("SELECT id_visita, cliente, tecnico_principal, tecnico_apoyo, es_instalacion FROM visitas_tecnicas WHERE token_rastreo = %s", (token,))
     visita = cursor.fetchone()
     cursor.close()
     conexion.close()
 
     if not visita:
-        return "El enlace de firma no es válido o ha expirado.", 404
+        return jsonify({"status": "error", "message": "El enlace de firma no es válido o ha expirado."}), 404
 
-    return render_template('firma_cliente.html', visita=visita, token=token)
+    return jsonify({"status": "ok", "visita": visita})
 
 
 @cliente_bp.route('/api/cliente/firmar/<token>', methods=['POST'])
@@ -241,23 +252,25 @@ def guardar_firma_remota(token):
         conexion.close()
 
 
-@cliente_bp.route('/api/publico/cuadro_mando/<fecha>/<token>', methods=['GET'])
 @cliente_bp.route('/publico/cuadro_mando/<fecha>/<token>')
+def publico_cuadro_mando_view(fecha, token):
+    import os
+    from flask import send_from_directory, current_app
+    return send_from_directory(os.path.join(current_app.root_path, 'frontend/dist'), 'index.html')
+
+
+@cliente_bp.route('/api/publico/cuadro_mando/<fecha>/<token>', methods=['GET'])
 def publico_cuadro_mando(fecha, token):
     import hashlib
     from datetime import datetime, timedelta
-    from flask import current_app, render_template, request, jsonify
-    
-    is_json = request.path.startswith('/api/') or request.headers.get('Accept') == 'application/json'
+    from flask import current_app, request, jsonify
 
     # 1. Validar el token
     secret = current_app.secret_key or "fallback_secret_salt_futurity_2026"
     expected_token = hashlib.sha256(f"{fecha}_{secret}".encode('utf-8')).hexdigest()[:16]
     
     if token != expected_token:
-        if is_json:
-            return jsonify({"status": "error", "message": "El enlace es inválido, ha expirado o ha sido modificado."}), 403
-        return render_template('publico_cuadro_mando.html', error="El enlace es inválido, ha expirado o ha sido modificado.", fecha=fecha)
+        return jsonify({"status": "error", "message": "El enlace es inválido, ha expirado o ha sido modificado."}), 403
         
     conexion = get_db_connection()
     if not conexion:
@@ -527,54 +540,34 @@ def publico_cuadro_mando(fecha, token):
         """, (fecha,))
         actividades_tecnicos = cursor.fetchall()
         
-        if is_json:
-            return jsonify({
-                "status": "ok",
-                "fecha": fecha,
-                "agente_a": agente_a,
-                "agente_b": agente_b,
-                "agente_c": agente_c,
-                "soporte_a": soporte_a,
-                "soporte_b": soporte_b,
-                "soporte_c": soporte_c,
-                "rows_atenciones": rows_atenciones,
-                "agente_totals": agente_totals,
-                "total_cc_general": total_cc_general,
-                "kpis": {
-                    "pendientes_anteriores": kpi_pendientes_anteriores,
-                    "generadas_hoy": kpi_generadas_hoy,
-                    "total_carga": kpi_total_carga,
-                    "atendidas_hoy": kpi_atendidas_hoy,
-                    "pendientes_manana": kpi_pendientes_manana
-                },
-                "soluciones": active_soluciones,
-                "problemas": active_problemas,
-                "visitas_manana": visitas_manana,
-                "actividades_tecnicos": actividades_tecnicos
-            })
-
-        return render_template('publico_cuadro_mando.html',
-                               fecha=fecha,
-                               agente_a=agente_a,
-                               agente_b=agente_b,
-                               agente_c=agente_c,
-                               soporte_a=soporte_a,
-                               soporte_b=soporte_b,
-                               soporte_c=soporte_c,
-                               rows_atenciones=rows_atenciones,
-                               agente_totals=agente_totals,
-                               total_cc_general=total_cc_general,
-                               kpis={
-                                   "pendientes_anteriores": kpi_pendientes_anteriores,
-                                   "generadas_hoy": kpi_generadas_hoy,
-                                   "total_carga": kpi_total_carga,
-                                   "atendidas_hoy": kpi_atendidas_hoy,
-                                   "pendientes_manana": kpi_pendientes_manana
-                               },
-                               soluciones=active_soluciones,
-                               problemas=active_problemas,
-                               visitas_manana=visitas_manana,
-                               actividades_tecnicos=actividades_tecnicos)
+        for v in visitas_manana:
+            if v.get('fecha_registro'):
+                v['fecha_registro'] = v['fecha_registro'].isoformat() if hasattr(v['fecha_registro'], 'isoformat') else str(v['fecha_registro'])
+        
+        return jsonify({
+            "status": "ok",
+            "fecha": fecha,
+            "agente_a": agente_a,
+            "agente_b": agente_b,
+            "agente_c": agente_c,
+            "soporte_a": soporte_a,
+            "soporte_b": soporte_b,
+            "soporte_c": soporte_c,
+            "rows_atenciones": rows_atenciones,
+            "agente_totals": agente_totals,
+            "total_cc_general": total_cc_general,
+            "kpis": {
+                "pendientes_anteriores": kpi_pendientes_anteriores,
+                "generadas_hoy": kpi_generadas_hoy,
+                "total_carga": kpi_total_carga,
+                "atendidas_hoy": kpi_atendidas_hoy,
+                "pendientes_manana": kpi_pendientes_manana
+            },
+            "soluciones": active_soluciones,
+            "problemas": active_problemas,
+            "visitas_manana": visitas_manana,
+            "actividades_tecnicos": actividades_tecnicos
+        })
     except Exception as e:
         return f"Error al procesar el reporte: {str(e)}", 500
     finally:

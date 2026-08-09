@@ -2314,12 +2314,7 @@ def get_cuadro_mando_share_link():
     token = hashlib.sha256(f"{fecha}_{secret}".encode('utf-8')).hexdigest()[:16]
     
     # Determinar el dominio base del enlace público
-    if "localhost" in request.host or "127.0.0.1" in request.host:
-        base_url = "http://localhost:5173/"
-    elif "trycloudflare.com" in request.host:
-        base_url = request.host_url
-    else:
-        base_url = request.host_url
+    base_url = request.host_url
         
     if not base_url.endswith("/"):
         base_url += "/"
@@ -2332,21 +2327,36 @@ def get_cuadro_mando_share_link():
     })
 
 
-@admin_bp.route('/api/admin/cuadro_mando/excel', methods=['POST'])
+@admin_bp.route('/api/admin/cuadro_mando/excel', methods=['GET', 'POST'])
 def download_excel_cuadro_mando():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id']}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
-    data = request.get_json() or {}
-    fecha = data.get('fecha', date.today().isoformat())
-    
-    agente_a = data.get('agente_a', 'CC. Luis Saenz')
-    agente_b = data.get('agente_b', 'CC. Guissella Quezada')
-    agente_c = data.get('agente_c', 'CC. Mateo Samaniego')
-    
-    horario_a = data.get('horario_a', '7 AM - 4 PM')
-    horario_b = data.get('horario_b', '2 PM - 9 PM')
-    horario_c = data.get('horario_c', '10 AM - 8 PM')
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        fecha = data.get('fecha', date.today().isoformat())
+        agente_a = data.get('agente_a', 'CC. Luis Saenz')
+        agente_b = data.get('agente_b', 'CC. Guissella Quezada')
+        agente_c = data.get('agente_c', 'CC. Mateo Samaniego')
+        horario_a = data.get('horario_a', '7 AM - 4 PM')
+        horario_b = data.get('horario_b', '2 PM - 9 PM')
+        horario_c = data.get('horario_c', '10 AM - 8 PM')
+    else:
+        fecha = request.args.get('fecha', date.today().isoformat())
+        agente_a = request.args.get('agente_a', 'CC. Luis Saenz')
+        agente_b = request.args.get('agente_b', 'CC. Guissella Quezada')
+        agente_c = request.args.get('agente_c', 'CC. Mateo Samaniego')
+        horario_a = request.args.get('horario_a', '7 AM - 4 PM')
+        horario_b = request.args.get('horario_b', '2 PM - 9 PM')
+        horario_c = request.args.get('horario_c', '10 AM - 8 PM')
     
     try:
         soporte_a = int(data.get('soporte_a', 0))
@@ -2902,7 +2912,7 @@ def api_obtener_inventario():
 
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if role not in ['ADMIN', 'BODEGA']:
+    if role not in ['ADMIN', 'BODEGA', 'ASESOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver inventario."}), 403
         
     conexion = get_db_connection()
@@ -2916,9 +2926,18 @@ def api_obtener_inventario():
         cursor.execute("SELECT id_material, nombre_material, unidad_medida, stock_bodega FROM materiales ORDER BY nombre_material ASC")
         materiales = cursor.fetchall()
         
-        # 2. Obtener lista de placas de vehículos activos
-        cursor.execute("SELECT DISTINCT placa_vehiculo FROM tecnicos WHERE activo = 1 ORDER BY placa_vehiculo ASC")
-        placas = [p['placa_vehiculo'] for p in cursor.fetchall() if p['placa_vehiculo']]
+        # 2. Obtener lista detallada de técnicos y sus placas de vehículos
+        cursor.execute("SELECT id_tecnico, nombre, placa_vehiculo, placa_asignada_hoy FROM tecnicos WHERE activo = 1 ORDER BY nombre ASC")
+        tecnicos_vehiculos = cursor.fetchall()
+        
+        # Obtener lista única de placas para la vista clásica de tabla de custodias
+        placas_set = set()
+        for tv in tecnicos_vehiculos:
+            if tv.get('placa_vehiculo'):
+                placas_set.add(tv['placa_vehiculo'])
+            if tv.get('placa_asignada_hoy'):
+                placas_set.add(tv['placa_asignada_hoy'])
+        placas = sorted(list(placas_set))
         
         # 3. Obtener stock disponible en custodia por placa
         cursor.execute("SELECT placa_vehiculo, id_material, cantidad_disponible FROM inventario_tecnicos")
@@ -2961,6 +2980,7 @@ def api_obtener_inventario():
             "status": "ok",
             "materiales": materiales,
             "tecnicos": placas,  # Retorna placas bajo la clave 'tecnicos' para compatibilidad con el JS
+            "tecnicos_vehiculos": tecnicos_vehiculos,
             "inventario_tecnicos": inventario_tecnicos
         })
         
@@ -3679,11 +3699,20 @@ def verificar_conflictos_agenda():
 
 @admin_bp.route('/api/admin/visitas/<int:id_visita>/editar', methods=['POST'])
 def editar_visita(id_visita):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
-        flash('No tienes permiso para editar visitas.', 'danger')
-        return redirect(url_for('dashboard'))
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role')}
+
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    user_role = user.get('role') or user.get('rol')
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+        return jsonify({"status": "error", "message": "No tienes permiso para editar visitas."}), 403
 
     # Validar que la visita no esté cerrada o en progreso antes de editar
     conexion_check = get_db_connection()
@@ -3692,33 +3721,32 @@ def editar_visita(id_visita):
         cursor_check.execute("SELECT estado FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
         visita_actual = cursor_check.fetchone()
         if not visita_actual:
-            flash('Visita no encontrada.', 'danger')
-            return redirect(request.referrer or url_for('dashboard'))
+            return jsonify({"status": "error", "message": "Visita no encontrada."}), 404
         if visita_actual['estado'] not in ['PENDIENTE', 'EN_RUTA']:
-            flash('No se puede editar una visita que ya se encuentra cerrada (Finalizada/Cancelada), reagendada o en progreso.', 'danger')
-            return redirect(request.referrer or url_for('dashboard'))
+            return jsonify({"status": "error", "message": "No se puede editar una visita que ya se encuentra cerrada o en progreso."}), 400
     finally:
         cursor_check.close()
         conexion_check.close()
 
-    cliente = request.form.get('cliente').strip()
+    cliente = request.form.get('cliente', '').strip()
     contrato = request.form.get('contrato', '').strip() or None
     telefonos = request.form.get('telefonos', '').strip() or None
-    sector = request.form.get('sector').strip()
-    direccion = request.form.get('direccion').strip()
+    sector = request.form.get('sector', '').strip()
+    direccion = request.form.get('direccion', '').strip()
     lat = request.form.get('latitud', '').strip() or None
     lon = request.form.get('longitud', '').strip() or None
-    preferencia = request.form.get('preferencia_horaria').strip()
-    servicio = request.form.get('servicio').strip()
+    preferencia = request.form.get('preferencia_horaria', '').strip()
+    servicio = request.form.get('servicio', '').strip()
     
     velocidad_mbps_raw = request.form.get('velocidad_mbps', '').strip()
     velocidad_mbps = int(velocidad_mbps_raw) if velocidad_mbps_raw else None
     
-    problema = request.form.get('problema').strip()
+    problema = request.form.get('problema', '').strip()
     obs_call = request.form.get('observacion_callcenter', '').strip() or None
-    fecha_prog = request.form.get('fecha_programada').strip()
-    estado = request.form.get('estado').strip()
-    tecnico = request.form.get('tecnico_principal').strip()
+    fecha_prog = request.form.get('fecha_programada', '').strip()
+    estado = request.form.get('estado', '').strip()
+    tecnico_principal = request.form.get('tecnico_principal')
+    tecnico_apoyo = request.form.get('tecnico_apoyo')
 
     # Reconstruir información técnica
     info_parts = []
@@ -3744,6 +3772,14 @@ def editar_visita(id_visita):
     conexion = get_db_connection()
     cursor = conexion.cursor()
     try:
+        # Si no viene especificado en la petición, preservar los técnicos asignados actuales
+        if tecnico_principal is None:
+            cursor.execute("SELECT tecnico_principal, tecnico_apoyo FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+            row_tec = cursor.fetchone()
+            if row_tec:
+                tecnico_principal = row_tec[0]
+                tecnico_apoyo = row_tec[1]
+
         # Si se restablece a un estado activo, limpiar datos de cierre para permitir que se vuelva a ejecutar
         if estado in ['PENDIENTE', 'REAGENDADA', 'EN_RUTA', 'EN_PROGRESO']:
             query = """
@@ -3752,7 +3788,7 @@ def editar_visita(id_visita):
                     latitud = %s, longitud = %s, preferencia_horaria = %s, servicio = %s,
                     velocidad_mbps = %s, problema = %s, observacion_callcenter = %s,
                     informacion_tecnico = %s, fecha_programada = %s, estado = %s,
-                    tecnico_principal = %s, ventana_inicio_min = %s, ventana_fin_min = %s,
+                    tecnico_principal = %s, tecnico_apoyo = %s, ventana_inicio_min = %s, ventana_fin_min = %s,
                     hora_fin_visita = NULL, solucion_tecnico = NULL, observacion_tecnico = NULL,
                     modelo_onu = NULL, modelo_router = NULL, coordenadas_tecnico = NULL,
                     foto_equipos = NULL, foto_equipos_2 = NULL, firma_cliente = NULL
@@ -3761,7 +3797,7 @@ def editar_visita(id_visita):
             cursor.execute(query, (
                 cliente, contrato, telefonos, sector, direccion, lat, lon, preferencia, servicio,
                 velocidad_mbps, problema, obs_call, informacion_tecnico, fecha_prog, estado,
-                tecnico, ventana_inicio, ventana_fin, id_visita
+                tecnico_principal, tecnico_apoyo, ventana_inicio, ventana_fin, id_visita
             ))
         else:
             query = """
@@ -3770,21 +3806,19 @@ def editar_visita(id_visita):
                     latitud = %s, longitud = %s, preferencia_horaria = %s, servicio = %s,
                     velocidad_mbps = %s, problema = %s, observacion_callcenter = %s,
                     informacion_tecnico = %s, fecha_programada = %s, estado = %s,
-                    tecnico_principal = %s, ventana_inicio_min = %s, ventana_fin_min = %s
+                    tecnico_principal = %s, tecnico_apoyo = %s, ventana_inicio_min = %s, ventana_fin_min = %s
                 WHERE id_visita = %s
             """
             cursor.execute(query, (
                 cliente, contrato, telefonos, sector, direccion, lat, lon, preferencia, servicio,
                 velocidad_mbps, problema, obs_call, informacion_tecnico, fecha_prog, estado,
-                tecnico, ventana_inicio, ventana_fin, id_visita
+                tecnico_principal, tecnico_apoyo, ventana_inicio, ventana_fin, id_visita
             ))
         conexion.commit()
-        flash('Visita actualizada correctamente.', 'success')
+        return jsonify({"status": "ok", "message": "Visita actualizada correctamente."})
     except Exception as e:
         print(f"Error al editar visita: {e}")
-        flash(f"Error al guardar cambios: {e}", 'danger')
+        return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()
-        conexion.close()
-
-    return redirect(request.referrer or url_for('dashboard'))
+        conexion.close()

@@ -1,0 +1,3446 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Sincronización e Integridad: Drive vs Atlas</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #f8fafc;
+            --bg-card: #ffffff;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --primary: #2563eb;
+            --primary-light: #eff6ff;
+            --border: #e2e8f0;
+            --danger: #ef4444;
+            --danger-light: #fef2f2;
+            --success: #10b981;
+            --success-light: #ecfdf5;
+            --warning: #f59e0b;
+            --warning-light: #fffbeb;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 2rem;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            margin-bottom: 2.5rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1.5rem;
+        }
+
+        .header h1 {
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        .meta-info {
+            margin-top: 1rem;
+            display: flex;
+            gap: 2rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .meta-info strong {
+            color: var(--text-primary);
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .stat-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-desc {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        /* Color themes for cards */
+        .card-blue {
+            border-left: 4px solid var(--primary);
+        }
+
+        .card-green {
+            border-left: 4px solid var(--success);
+        }
+
+        .card-red {
+            border-left: 4px solid var(--danger);
+        }
+
+        .card-orange {
+            border-left: 4px solid var(--warning);
+        }
+
+        /* Tabs layout */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1.5rem;
+            gap: 1rem;
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 0.75rem 1.25rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+            font-weight: 600;
+        }
+
+        /* Table styles */
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .table-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        .table-header-bar {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .table-header-title {
+            font-weight: 600;
+            font-size: 1.125rem;
+        }
+
+        .search-box input {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.875rem;
+            width: 300px;
+            outline: none;
+        }
+
+        .search-box input:focus {
+            border-color: var(--primary);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.875rem;
+        }
+
+        th {
+            background-color: #f8fafc;
+            padding: 1rem 1.5rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+
+        td {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-primary);
+            vertical-align: top;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background-color: #f8fafc;
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-danger {
+            background-color: var(--danger-light);
+            color: var(--danger);
+        }
+
+        .badge-success {
+            background-color: var(--success-light);
+            color: var(--success);
+        }
+
+        .badge-warning {
+            background-color: var(--warning-light);
+            color: var(--warning);
+        }
+
+        /* Discrepancies list styling */
+        .disc-item {
+            margin-bottom: 0.25rem;
+            color: var(--danger);
+            font-weight: 500;
+        }
+
+        .disc-item::before {
+            content: "• ";
+        }
+
+        /* Section text details */
+        .section-text {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            max-width: 800px;
+        }
+
+        /* Conclusions Card */
+        .conclusions-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-top: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .conclusions-box h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .conclusions-list {
+            margin-left: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .conclusions-list li {
+            margin-bottom: 0.5rem;
+        }
+
+        .conclusions-list strong {
+            color: var(--primary);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <div class="header">
+            <h1>Informe de Sincronización e Integridad de Datos</h1>
+            <p>Auditoría Cruzada entre Reportes del Drive y Base de Datos Atlas</p>
+            <div class="meta-info">
+                <span>Fecha del análisis: <strong>03/08/2026 15:35:14</strong></span>
+                <span>Rango analizado: <strong>13/07/2026 al 02/08/2026</strong></span>
+                <span>Estado: <strong style="color: var(--danger);">DISCREPANCIAS DETECTADAS</strong></span>
+            </div>
+        </div>
+
+        <!-- executive summary metrics -->
+        <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem;">Métricas de Visitas Técnicas</h2>
+        <div class="stats-grid">
+            <div class="stat-card card-blue">
+                <div class="stat-title">Total en Drive</div>
+                <div class="stat-value">292</div>
+                <div class="stat-desc">Visitas en hojas del Excel</div>
+            </div>
+            <div class="stat-card card-blue">
+                <div class="stat-title">Total en Atlas</div>
+                <div class="stat-value">265</div>
+                <div class="stat-desc">Visitas creadas en la base de datos</div>
+            </div>
+            <div class="stat-card card-green">
+                <div class="stat-title">Coincidencias</div>
+                <div class="stat-value">263</div>
+                <div class="stat-desc">Registros vinculados correctamente</div>
+            </div>
+            <div class="stat-card card-orange">
+                <div class="stat-title">Diferencias Datos</div>
+                <div class="stat-value">83</div>
+                <div class="stat-desc">Registros coincidentes con datos distintos</div>
+            </div>
+            <div class="stat-card card-red">
+                <div class="stat-title">Faltan en Atlas</div>
+                <div class="stat-value">29</div>
+                <div class="stat-desc">Solo están en el Drive (No en Atlas)</div>
+            </div>
+        </div>
+
+        <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem;">Métricas de Atenciones </h2>
+        <div class="stats-grid">
+            <div class="stat-card card-blue">
+                <div class="stat-title">Total en Drive</div>
+                <div class="stat-value">1013</div>
+                <div class="stat-desc">Atenciones de Tati, Luis y Mateo en Excel</div>
+            </div>
+            <div class="stat-card card-blue">
+                <div class="stat-title">Total en Atlas</div>
+                <div class="stat-value">997</div>
+                <div class="stat-desc">Atenciones creadas en base de datos</div>
+            </div>
+            <div class="stat-card card-green">
+                <div class="stat-title">Coincidencias</div>
+                <div class="stat-value">954</div>
+                <div class="stat-desc">Atenciones vinculadas correctamente</div>
+            </div>
+            <div class="stat-card card-red">
+                <div class="stat-title">Faltan en Atlas</div>
+                <div class="stat-value">59</div>
+                <div class="stat-desc">Solo están en el Drive (No en Atlas)</div>
+            </div>
+            <div class="stat-card card-orange">
+                <div class="stat-title">No en el Drive</div>
+                <div class="stat-value">78</div>
+                <div class="stat-desc">Creadas directamente en Atlas</div>
+            </div>
+        </div>
+
+        <!-- TABS NAV -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="openTab(event, 'tab-discrepancias')">Visitas con Discrepancias
+                (83)</button>
+            <button class="tab-btn" onclick="openTab(event, 'tab-faltantes-v')">Visitas Faltantes en Atlas (29)</button>
+            <button class="tab-btn" onclick="openTab(event, 'tab-sobrantes-v')">Visitas Sobrantes en Atlas (17)</button>
+            <button class="tab-btn" onclick="openTab(event, 'tab-faltantes-a')">Atenciones Faltantes en Atlas
+                (59)</button>
+            <button class="tab-btn" onclick="openTab(event, 'tab-sobrantes-a')">Atenciones Sobrantes en Atlas
+                (78)</button>
+        </div>
+
+        <!-- TAB 1: VISITAS CON DISCREPANCIAS -->
+        <div id="tab-discrepancias" class="tab-content active">
+            <p class="section-text">
+                Estas visitas existen tanto en los reportes diarios de Excel como en la base de datos Atlas (coinciden
+                en contrato y fecha o nombre), pero los datos de su ejecución varían (estados diferentes, técnicos
+                principales incorrectos o soluciones distintas). <strong>Estas son inconsistencias de registro
+                    diario.</strong>
+            </p>
+            <div class="table-container">
+                <div class="table-header-bar">
+                    <span class="table-header-title">Detalle de Discrepancias</span>
+                    <div class="search-box">
+                        <input type="text" placeholder="Filtrar por Contrato, Cliente o Técnico..."
+                            onkeyup="filterTable(this, 'table-disc')">
+                    </div>
+                </div>
+                <table id="table-disc">
+                    <thead>
+                        <tr>
+                            <th width="10%">ID Visita</th>
+                            <th width="10%">Contrato</th>
+                            <th width="20%">Cliente</th>
+                            <th width="15%">Hoja (Fecha)</th>
+                            <th width="45%">Detalle de Discrepancia</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+
+                        <tr>
+                            <td><strong>12824</strong></td>
+                            <td>28846</td>
+                            <td>PADILLA PADILLA EDISON JAVIER</td>
+                            <td>13 JULIO</td>
+                            <td>
+                                <div class="disc-item">Solución: Drive=&#x27;CAMBIO DE CONECTORES RJ45&#x27;,
+                                    Atlas=&#x27;CAMBIO DE CONECTORES APC/UPC&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12846</strong></td>
+                            <td>41570</td>
+                            <td>ASTUDILLO VARGAS MARIA INES</td>
+                            <td>14 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=PENDIENTE, Atlas=FINALIZADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;MILTON BERMEO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12851</strong></td>
+                            <td>624</td>
+                            <td>PANAMA GALLEGOS JORGE EDUARDO</td>
+                            <td>14 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=CANCELADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12827</strong></td>
+                            <td>33744</td>
+                            <td>TACURI QUEZADA FABIOLA MARIBEL</td>
+                            <td>14 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12848</strong></td>
+                            <td>36733</td>
+                            <td>ROMERO SOLANO ELGIO FABIAN</td>
+                            <td>14 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=PENDIENTE, Atlas=FINALIZADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;MILTON BERMEO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12859</strong></td>
+                            <td>42728</td>
+                            <td>DIEGO RAFAEL ESPINOZA VINTIMILLA</td>
+                            <td>15 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;JDM&#x27;, Atlas=&#x27;JUAN DIEGO
+                                    MAITA&#x27;</div>
+                                <div class="disc-item">Solución: Drive=&#x27;GENERAR TICKET AL NOC (PROBLEMA HFC)&#x27;,
+                                    Atlas=&#x27;GENERAR TICKET AL NOC (PROBLEMA FIBRA OPTICA)&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12827</strong></td>
+                            <td>33744</td>
+                            <td>TACURI QUEZADA FABIOLA MARIBEL</td>
+                            <td>15 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12869</strong></td>
+                            <td>41477</td>
+                            <td>MOREIRA ALCIVAR JOSE LEONARDO</td>
+                            <td>15 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;MILTON BERMEO&#x27;, Atlas=&#x27;VICTOR
+                                    ARIAS&#x27;</div>
+                                <div class="disc-item">Solución: Drive=&#x27;GENERAR CAMBIO DE FO&#x27;,
+                                    Atlas=&#x27;CAMBIO DE FO&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12854</strong></td>
+                            <td>38669</td>
+                            <td>MORA GRANDA LUIS ENRIQUE</td>
+                            <td>16 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=PENDIENTE</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12858</strong></td>
+                            <td>41200</td>
+                            <td>PAULA ELIZABETH LEON ONITCHENKO</td>
+                            <td>16 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12868</strong></td>
+                            <td>30344</td>
+                            <td>JORGE PATRICIO ORELLANA CALLE</td>
+                            <td>16 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=CANCELADA</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12876</strong></td>
+                            <td>28846</td>
+                            <td>PADILLA PADILLA EDISON JAVIER</td>
+                            <td>16 JULIO</td>
+                            <td>
+                                <div class="disc-item">Solución: Drive=&#x27;CONF. DE EQUIPOS GPON/ROUTER&#x27;,
+                                    Atlas=&#x27;INSTALACION DE ADICIONAL&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12880</strong></td>
+                            <td>445d</td>
+                            <td>QUITO LEON MAURICIO SANTIAG</td>
+                            <td>16 JULIO</td>
+                            <td>
+                                <div class="disc-item">Solución: Drive=&#x27;CONEXION ELECTRICA&#x27;,
+                                    Atlas=&#x27;SOLUCION PARCIAL&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12827</strong></td>
+                            <td>33744</td>
+                            <td>TACURI QUEZADA FABIOLA MARIBEL</td>
+                            <td>16 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12913</strong></td>
+                            <td>29397</td>
+                            <td></td>
+                            <td>17 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12892</strong></td>
+                            <td>8753</td>
+                            <td>ALVAREZ JIMENEZ CRISTIAN RAMIRO</td>
+                            <td>17 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=CANCELADA</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12893</strong></td>
+                            <td>28036</td>
+                            <td>MEJIA BUSTOS GEOVANNA KATHERINE</td>
+                            <td>17 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=SOLVENTADA_REMOTA</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12915</strong></td>
+                            <td>42714</td>
+                            <td>RIVERA CUESTA JOSE ARIOLFO</td>
+                            <td>17 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=CANCELADA</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12916</strong></td>
+                            <td>27606</td>
+                            <td>SOLORZANO HERAS MARIA DEL CARMEN</td>
+                            <td>17 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=SOLVENTADA_REMOTA</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12898</strong></td>
+                            <td>897</td>
+                            <td>EDGAR BYRON FERNANDEZ TENE</td>
+                            <td>18 JULIO</td>
+                            <td>
+                                <div class="disc-item">Solución: Drive=&#x27;CAMBIO DE FO&#x27;, Atlas=&#x27;SOLUCION
+                                    PARCIAL&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12902</strong></td>
+                            <td>24568</td>
+                            <td>CAMBIO DE DOMICILIO</td>
+                            <td>18 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12901</strong></td>
+                            <td>030109</td>
+                            <td>PINDO YUNGA WILMER MIGDONIO</td>
+                            <td>18 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12906</strong></td>
+                            <td>42714</td>
+                            <td>RIVERA CUESTA JOSE ARIOLFO</td>
+                            <td>18 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12907</strong></td>
+                            <td>030109</td>
+                            <td>PINDO YUNGA WILMER MIGDONIO</td>
+                            <td>19 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12909</strong></td>
+                            <td>42714</td>
+                            <td>RIVERA CUESTA JOSE ARIOLFO</td>
+                            <td>19 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12871</strong></td>
+                            <td>29397</td>
+                            <td>LOJANO ARPI MANUEL HECTOR</td>
+                            <td>20 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12923</strong></td>
+                            <td>38317</td>
+                            <td>QUILAMBAQUI VELEZ DANIEL JOSUE</td>
+                            <td>20 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12922</strong></td>
+                            <td>897</td>
+                            <td>EDGAR BYRON FERNANDEZ TENE</td>
+                            <td>20 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=PENDIENTE</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12928</strong></td>
+                            <td>35786</td>
+                            <td>MALDONADO MALDONADO LAUTARO HUMBERTO</td>
+                            <td>20 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=SOLVENTADA_REMOTA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;VICTOR ARIAS&#x27;, Atlas=&#x27;NO
+                                    TECNICO&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12929</strong></td>
+                            <td>23932</td>
+                            <td>CANAR CANAR LUIS ANTONIO</td>
+                            <td>21 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                                <div class="disc-item">Solución: Drive=&#x27;NO SE PUEDE REALIZAR VISITA - SATURACION
+                                    DEL DIA&#x27;, Atlas=&#x27;INSTALACION DE ROUTER&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12946</strong></td>
+                            <td>364</td>
+                            <td>JOSE IVAN ZHUMI NIEVES</td>
+                            <td>21 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                                <div class="disc-item">Solución: Drive=&#x27;NO SE PUEDE REALIZAR VISITA - SATURACION
+                                    DEL DIA&#x27;, Atlas=&#x27;VISITA REAGENDADA&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12934</strong></td>
+                            <td>30092</td>
+                            <td>LEON COLLAHUAZO JORGE FABIAN</td>
+                            <td>21 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;VICTOR ARIAS&#x27;
+                                </div>
+                                <div class="disc-item">Solución: Drive=&#x27;VISITA REAGENDADA&#x27;, Atlas=&#x27;CAMBIO
+                                    DE ROUTER ANTIGUO/PROBLEMAS&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12936</strong></td>
+                            <td>41771</td>
+                            <td>PEREZ LAZO MANUEL TARQUINO</td>
+                            <td>22 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NO TECNICO&#x27;, Atlas=&#x27;VICTOR
+                                    ARIAS&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12947</strong></td>
+                            <td>940</td>
+                            <td>ILLESCAS CRIOLLO MARIO BOLIVAR</td>
+                            <td>22 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12949</strong></td>
+                            <td>30663</td>
+                            <td>CALLE AVILA LAURO ABELARDO</td>
+                            <td>22 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12946</strong></td>
+                            <td>364</td>
+                            <td>JOSE IVAN ZHUMI NIEVES</td>
+                            <td>22 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12962</strong></td>
+                            <td>34450</td>
+                            <td>SEGUNDO AMBROCIO BURUHAN CHILLOGALLY</td>
+                            <td>22 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;OSWALDO BERMEO&#x27;, Atlas=&#x27;ERICK
+                                    LOJANO&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12950</strong></td>
+                            <td>118</td>
+                            <td>LUIS EDUARDO CUMBE TAPIA</td>
+                            <td>23 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=PENDIENTE</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12951</strong></td>
+                            <td>31388</td>
+                            <td>LUIS IGNACIO GALLEGOS COLLAGUAZO</td>
+                            <td>23 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12974</strong></td>
+                            <td>41010</td>
+                            <td>SIGUENZA PAZ PABLO ANIBAL</td>
+                            <td>23 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;MILTON BERMEO&#x27;, Atlas=&#x27;VICTOR
+                                    ARIAS&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12971</strong></td>
+                            <td>30663</td>
+                            <td>CALLE AVILA LAURO ABELARDO</td>
+                            <td>23 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=CANCELADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12978</strong></td>
+                            <td>38317</td>
+                            <td>QUILAMBAQUI VELEZ DANIEL JOSUE</td>
+                            <td>23 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12979</strong></td>
+                            <td>364</td>
+                            <td>JOSE IVAN ZHUMI NIEVES</td>
+                            <td>23 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12984</strong></td>
+                            <td>41325</td>
+                            <td>JORGE LUIS CAPA GALLARDO</td>
+                            <td>23 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12993</strong></td>
+                            <td>29722</td>
+                            <td>JOHN CARLOS ROLDAN JARAMA</td>
+                            <td>23 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;VICTOR ARIAS&#x27;, Atlas=&#x27;NO
+                                    TECNICO&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12964</strong></td>
+                            <td>940</td>
+                            <td>ILLESCAS CRIOLLO MARIO BOLIVAR</td>
+                            <td>24 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=CANCELADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12992</strong></td>
+                            <td>192I</td>
+                            <td>RENTERIA SEGURA BERONICA MARINA</td>
+                            <td>24 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;VICTOR ARIAS&#x27;
+                                </div>
+                                <div class="disc-item">Solución: Drive=&#x27;NO SE PUEDE REALIZAR VISITA - SATURACION
+                                    DEL DIA&#x27;, Atlas=&#x27;VISITA REAGENDADA&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13003</strong></td>
+                            <td>39347</td>
+                            <td>ZHUNAULA GUAMAN MARIA SUSANA</td>
+                            <td>24 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=CANCELADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;MILTON BERMEO&#x27;, Atlas=&#x27;NO
+                                    TECNICO&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13003</strong></td>
+                            <td>39347</td>
+                            <td>ZHUNAULA GUAMAN MARIA SUSANA</td>
+                            <td>24 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12844</strong></td>
+                            <td>30942</td>
+                            <td>GAONA CABRERA HERNAN TELESFORO</td>
+                            <td>25 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=SOLVENTADA_REMOTA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;EDUARDO CRUZ&#x27;, Atlas=&#x27;NO
+                                    TECNICO&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13012</strong></td>
+                            <td>43123</td>
+                            <td>CAMBIO DE DOMICILIO</td>
+                            <td>25 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=SOLVENTADA_REMOTA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;EDUARDO CRUZ&#x27;, Atlas=&#x27;NO
+                                    TECNICO&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13009</strong></td>
+                            <td>40700</td>
+                            <td>LOJANO ARPI BRYAM DANIEL</td>
+                            <td>25 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=CANCELADA</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12983</strong></td>
+                            <td>40896</td>
+                            <td>VILLA LLIVICURA MARCO EDUARDO</td>
+                            <td>25 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=SOLVENTADA_REMOTA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;HENRY CUENCA&#x27;, Atlas=&#x27;NO
+                                    TECNICO&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13002</strong></td>
+                            <td>13551A</td>
+                            <td>BERMEO CABRERA AIDA MARGOTH</td>
+                            <td>25 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=SOLVENTADA_REMOTA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;EDUARDO CRUZ&#x27;, Atlas=&#x27;NO
+                                    TECNICO&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13007</strong></td>
+                            <td>39347</td>
+                            <td>ZHUNAULA GUAMAN MARIA SUSANA</td>
+                            <td>25 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=PENDIENTE</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13008</strong></td>
+                            <td>30266</td>
+                            <td>BARBECHO BARRERA CRISTIAN FERNANDO</td>
+                            <td>25 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=SOLVENTADA_REMOTA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;EDUARDO CRUZ&#x27;, Atlas=&#x27;NO
+                                    TECNICO&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13010</strong></td>
+                            <td>34563</td>
+                            <td>CHAPA QUIZHPI MARIA LEONOR</td>
+                            <td>25 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=CANCELADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;EDUARDO CRUZ&#x27;, Atlas=&#x27;NO
+                                    TECNICO&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12992</strong></td>
+                            <td>192I</td>
+                            <td>RENTERIA SEGURA BERONICA MARINA</td>
+                            <td>25 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=PENDIENTE, Atlas=FINALIZADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;VICTOR ARIAS&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13017</strong></td>
+                            <td>28473</td>
+                            <td>GUANUQUIZA TIMBE EDISSON ROBERTO</td>
+                            <td>26 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;MILTON BERMEO&#x27;
+                                </div>
+                                <div class="disc-item">Solución: Drive=&#x27;VISITA REAGENDADA&#x27;,
+                                    Atlas=&#x27;INSTALACION EFECTIVA&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13006</strong></td>
+                            <td>445</td>
+                            <td>GABRIELA FERNANDA GUIRACOCHA TAPIA</td>
+                            <td>27 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=PENDIENTE, Atlas=FINALIZADA</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13031</strong></td>
+                            <td>41502</td>
+                            <td>MOTOCHE MORA LAURA JANNETH</td>
+                            <td>28 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13032</strong></td>
+                            <td>38334</td>
+                            <td>GHC Y ASOCIADOS GAHEC SA EMPRESA DE TRANSPORTES</td>
+                            <td>28 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13039</strong></td>
+                            <td>41571</td>
+                            <td>BACULIMA FERNANDO TEODORO FERNANDO</td>
+                            <td>28 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13043</strong></td>
+                            <td>572</td>
+                            <td>JUAN GABRIEL DUCHI DOMINGUEZ</td>
+                            <td>29 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13039</strong></td>
+                            <td>41571</td>
+                            <td>BACULIMA FERNANDO TEODORO FERNANDO</td>
+                            <td>29 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13065</strong></td>
+                            <td>13607</td>
+                            <td>HERNAN FABRICIO CALDERON TORAL</td>
+                            <td>29 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13066</strong></td>
+                            <td>34713</td>
+                            <td>CALLE CALLE JUAN PABLO</td>
+                            <td>29 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13048</strong></td>
+                            <td>42296</td>
+                            <td>CAMILA DAYANNA PENARANDA CAJAMARCA</td>
+                            <td>29 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13038</strong></td>
+                            <td>5094</td>
+                            <td>BELTRAN SACOTO RODRIGO ENRIQUE</td>
+                            <td>29 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;KEVIN ENDARA&#x27;
+                                </div>
+                                <div class="disc-item">Solución: Drive=&#x27;VISITA REAGENDADA&#x27;, Atlas=&#x27;CAMBIO
+                                    DE ROUTER ANTIGUO/PROBLEMAS&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13052</strong></td>
+                            <td>31771</td>
+                            <td>JARA MEJIA WILSON PATRICIO</td>
+                            <td>29 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13044</strong></td>
+                            <td>16</td>
+                            <td>MOROCHO ASTUDILLO CELSO ENRIQUE</td>
+                            <td>30 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=CANCELADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13071</strong></td>
+                            <td>12813</td>
+                            <td>SALAZAR ERREYES MARIA EDISA</td>
+                            <td>30 JULIO</td>
+                            <td>
+                                <div class="disc-item">Solución: Drive=&#x27;CAMBIO DE CONECTORES RJ45&#x27;,
+                                    Atlas=&#x27;ARREGLO DE INSTALACION&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13059</strong></td>
+                            <td>42296</td>
+                            <td>CAMILA DAYANNA PENARANDA CAJAMARCA</td>
+                            <td>30 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=PENDIENTE</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13079</strong></td>
+                            <td>30684</td>
+                            <td>BUENO TACURI HOLGER BERNARDO</td>
+                            <td>30 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;BRYAN G&#x27;, Atlas=&#x27;KEVIN
+                                    ENDARA&#x27;</div>
+                                <div class="disc-item">Solución: Drive=&#x27;CAMBIO DE EQUIPO ONT&#x27;,
+                                    Atlas=&#x27;INSPECCION&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13073</strong></td>
+                            <td>40053</td>
+                            <td>CONTRERAS CARDENAS DANIELA DOMENICA</td>
+                            <td>31 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13080</strong></td>
+                            <td>37213</td>
+                            <td>OJEDA OJEDA CECIBEL DEL CISNE</td>
+                            <td>31 JULIO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13077</strong></td>
+                            <td>32323</td>
+                            <td>MERCY CARMITA PULGARIN AVILA</td>
+                            <td>31 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13093</strong></td>
+                            <td>30684</td>
+                            <td>BUENO TACURI HOLGER BERNARDO</td>
+                            <td>31 JULIO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13096</strong></td>
+                            <td>821</td>
+                            <td>PILLCO TOCACHI FRANCISCO RODRIGO</td>
+                            <td>31 JULIO</td>
+                            <td>
+                                <div class="disc-item">Solución: Drive=&#x27;GENERAR CAMBIO DE FO&#x27;,
+                                    Atlas=&#x27;CAMBIO DE FO&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13058</strong></td>
+                            <td>34713</td>
+                            <td>CALLE CALLE JUAN PABLO</td>
+                            <td>1 AGOSTO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=SOLVENTADA_REMOTA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;MILTON BERMEO&#x27;, Atlas=&#x27;NO
+                                    TECNICO&#x27;</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13094</strong></td>
+                            <td>37365</td>
+                            <td>GONZALEZ ANDRADE JULIE VICTORIA</td>
+                            <td>1 AGOSTO</td>
+                            <td>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13093</strong></td>
+                            <td>30684</td>
+                            <td>BUENO TACURI HOLGER BERNARDO</td>
+                            <td>1 AGOSTO</td>
+                            <td>
+                                <div class="disc-item">Estado: Drive=FINALIZADA, Atlas=REAGENDADA</div>
+                                <div class="disc-item">Técnico: Drive=&#x27;NAN&#x27;, Atlas=&#x27;NO TECNICO&#x27;
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13103</strong></td>
+                            <td>30406</td>
+                            <td>NANCY PAOLA CABRERA CHALCO</td>
+                            <td>2 AGOSTO</td>
+                            <td>
+                                <div class="disc-item">Solución: Drive=&#x27;CAMBIO DE FO&#x27;, Atlas=&#x27;GENERAR
+                                    CAMBIO DE FO&#x27;</div>
+                            </td>
+                        </tr>
+
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB 2: VISITAS FALTANTES EN ATLAS -->
+        <div id="tab-faltantes-v" class="tab-content">
+            <p class="section-text">
+                Visitas técnicas que se planificaron, asignaron o finalizaron en las hojas diarias del Excel pero que
+                <strong>no se crearon en Atlas</strong>. Indica tareas realizadas de las que no hay evidencia o rastro
+                en el sistema.
+            </p>
+            <div class="table-container">
+                <div class="table-header-bar">
+                    <span class="table-header-title">Visitas en el Drive no registradas en Atlas</span>
+                    <div class="search-box">
+                        <input type="text" placeholder="Filtrar..."
+                            onkeyup="filterTable(this, 'table-faltantes-v-data')">
+                    </div>
+                </div>
+                <table id="table-faltantes-v-data">
+                    <thead>
+                        <tr>
+                            <th width="10%">Fecha (Hoja)</th>
+                            <th width="10%">Contrato</th>
+                            <th width="20%">Cliente</th>
+                            <th width="15%">Técnico</th>
+                            <th width="15%">Solución</th>
+                            <th width="30%">Observación Técnico</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+
+                        <tr>
+                            <td>13 JULIO</td>
+                            <td>33744</td>
+                            <td>TACURI QUEZADA FABIOLA MARIBEL</td>
+                            <td>NO TECNICO</td>
+                            <td><span class="badge badge-success">VISITA REAGENDADA</span></td>
+                            <td>CLIENTE INDICA QUE TUVO QUE SALIR, QUE PUEDE RECIBIR EL DÍA DE MAÑANA DE 2-4PM</td>
+                        </tr>
+
+                        <tr>
+                            <td>13 JULIO</td>
+                            <td>36733</td>
+                            <td>ROMERO SOLANO ELGIO FABIAN</td>
+                            <td>nan</td>
+                            <td><span class="badge badge-success">VISITA REAGENDADA</span></td>
+                            <td>por saturación se pasa visita para mañana</td>
+                        </tr>
+
+                        <tr>
+                            <td>14 JULIO</td>
+                            <td>223</td>
+                            <td>CHICAIZA QUINDE ROSA ISABEL</td>
+                            <td>VICTOR ARIAS</td>
+                            <td><span class="badge badge-success">CAMBIO DE FO</span></td>
+                            <td>se cambia de fo / se actualiza equipos se verifica servicio con cliente se trata de
+                                dejar equipos mejor centralizados cliente no desea moverlos se prueba servicio con
+                                cliente en dispositivos todo correcto persona de la 3era edad</td>
+                        </tr>
+
+                        <tr>
+                            <td>14 JULIO</td>
+                            <td>41200</td>
+                            <td>PAULA ELIZABETH LEON ONITCHENKO</td>
+                            <td>nan</td>
+                            <td><span class="badge badge-warning">PENDIENTE</span></td>
+                            <td>nan</td>
+                        </tr>
+
+                        <tr>
+                            <td>14 JULIO</td>
+                            <td>S/C</td>
+                            <td>RETIRAR ESCALERA DONDE ING ALBERTO</td>
+                            <td>MILTON BERMEO</td>
+                            <td><span class="badge badge-success">INSPECCION</span></td>
+                            <td>se retira escalera exhaustiva</td>
+                        </tr>
+
+                        <tr>
+                            <td>15 JULIO</td>
+                            <td>43173</td>
+                            <td>JUAN MANUEL CORDERO MOSCOSO</td>
+                            <td>nan</td>
+                            <td><span class="badge badge-success">VISITA REAGENDADA</span></td>
+                            <td>cliente solicita para el siguiente miercoles</td>
+                        </tr>
+
+                        <tr>
+                            <td>15 JULIO</td>
+                            <td>36051</td>
+                            <td>GUAMAN GUAMAN CESAR AUGUSTO</td>
+                            <td>nan</td>
+                            <td><span class="badge badge-warning">PENDIENTE</span></td>
+                            <td>nan</td>
+                        </tr>
+
+                        <tr>
+                            <td>16 JULIO</td>
+                            <td>8906</td>
+                            <td>NAUTA DIAZ JUAN FERNANDO</td>
+                            <td>nan</td>
+                            <td><span class="badge badge-warning">PENDIENTE</span></td>
+                            <td>nan</td>
+                        </tr>
+
+                        <tr>
+                            <td>16 JULIO</td>
+                            <td>S/C</td>
+                            <td>SOLICITA JDM</td>
+                            <td>nan</td>
+                            <td><span class="badge badge-warning">PENDIENTE</span></td>
+                            <td>JDM indica que ya va a colocar el</td>
+                        </tr>
+
+                        <tr>
+                            <td>16 JULIO</td>
+                            <td>36051</td>
+                            <td>GUAMAN GUAMAN CESAR AUGUSTO</td>
+                            <td>MILTON BERMEO</td>
+                            <td><span class="badge badge-success">VISITA REAGENDADA</span></td>
+                            <td>se reagenda con cliente para el sábado en la mñana</td>
+                        </tr>
+
+                        <tr>
+                            <td>18 JULIO</td>
+                            <td>30942</td>
+                            <td>GAONA CABRERA HERNAN TELESFORO</td>
+                            <td>EDUARDO CRUZ</td>
+                            <td><span class="badge badge-success">VISITA REAGENDADA</span></td>
+                            <td>cliente reagenda visita</td>
+                        </tr>
+
+                        <tr>
+                            <td>19 JULIO</td>
+                            <td>S/C</td>
+                            <td>INSTALACION</td>
+                            <td>OSWALDO BERMEO</td>
+                            <td><span class="badge badge-success">INSTALACION EFECTIVA</span></td>
+                            <td>nan</td>
+                        </tr>
+
+                        <tr>
+                            <td>19 JULIO</td>
+                            <td>572</td>
+                            <td>ANGULO NARANJO WALTER PATRICIO</td>
+                            <td>OSWALDO BERMEO</td>
+                            <td><span class="badge badge-success">CONF. DE EQUIPOS GPON/ROUTER</span></td>
+                            <td>se realiza escaneo de canales senal de tv sale opaca por la misma tv se verifica
+                                servicio ok</td>
+                        </tr>
+
+                        <tr>
+                            <td>19 JULIO</td>
+                            <td>S/C</td>
+                            <td>INSTALACION</td>
+                            <td>OSWALDO BERMEO</td>
+                            <td><span class="badge badge-success">INSTALACION EFECTIVA</span></td>
+                            <td>nan</td>
+                        </tr>
+
+                        <tr>
+                            <td>21 JULIO</td>
+                            <td>S/C</td>
+                            <td>LLEVAR DINERO DE CHRISTIAN A EL VALLE</td>
+                            <td>nan</td>
+                            <td><span class="badge badge-warning">PENDIENTE</span></td>
+                            <td>nan</td>
+                        </tr>
+
+                        <tr>
+                            <td>26 JULIO</td>
+                            <td>40757</td>
+                            <td>PILLCO GUAPISACA LUIS FELIPE</td>
+                            <td>nan</td>
+                            <td><span class="badge badge-success">NO DESEA VISITA</span></td>
+                            <td>CLIENTE INDICA QUE YA NO DESEA, SE PASA A RETENCIÓN</td>
+                        </tr>
+
+                        <tr>
+                            <td>26 JULIO</td>
+                            <td>89</td>
+                            <td>LEON EDGAR ANIBAL</td>
+                            <td>OSWALDO BERMEO</td>
+                            <td><span class="badge badge-success">CAMBIO DE ROUTER ANTIGUO/PROBLEMAS</span></td>
+                            <td>se retira 2 decos cudy y se deja un router tplink se pasa cable utp a tv ya que ahi
+                                estaba un deco inalambricamente y se conectaba con cable utp a tv queda pendiente
+                                cambiar el otro deco pero departamento esta con llave cliente se comunicará para cambiar
+                                se hace pruebas ok se explica aplicación aginet atiende hermana sra Gladis Sevilla</td>
+                        </tr>
+
+                        <tr>
+                            <td>26 JULIO</td>
+                            <td>192I</td>
+                            <td>RENTERIA SEGURA BERONICA MARINA</td>
+                            <td>nan</td>
+                            <td><span class="badge badge-warning">PENDIENTE</span></td>
+                            <td>nan</td>
+                        </tr>
+
+                        <tr>
+                            <td>27 JULIO</td>
+                            <td>29722</td>
+                            <td>JOHN CARLOS ROLDAN JARAMA</td>
+                            <td>KEVIN ENDARA</td>
+                            <td><span class="badge badge-success">ARREGLO DE INSTALACION</span></td>
+                            <td>nan</td>
+                        </tr>
+
+                        <tr>
+                            <td>27 JULIO</td>
+                            <td>192I</td>
+                            <td>RENTERIA SEGURA BERONICA MARINA</td>
+                            <td>nan</td>
+                            <td><span class="badge badge-success">NO SE PUEDE REALIZAR VISITA - SATURACION DEL
+                                    DIA</span></td>
+                            <td>nan</td>
+                        </tr>
+
+                        <tr>
+                            <td>27 JULIO</td>
+                            <td>358</td>
+                            <td>LEON COLLAGUAZO FERNANDO MARCELO</td>
+                            <td>VICTOR ARIAS</td>
+                            <td><span class="badge badge-success">INSPECCION</span></td>
+                            <td>se llega a domicilio se tiene que ver equipo router y dejarlo centralizado para ganar
+                                cobertura en el balcón cliente está al tanto de donde se dejarían los equipos adicional
+                                se le indica para poderle dejar un 2do router para evitar la extinción que cliente tiene
+                                no se procede con la actividad ya que cliente está de salida y no puede esperar más
+                                tiempo coordinar con cliente para poder realizar la actividad ya que cliente pasa
+                                ocupado las mañanas</td>
+                        </tr>
+
+                        <tr>
+                            <td>27 JULIO</td>
+                            <td>29722</td>
+                            <td>JOHN CARLOS ROLDAN JARAMA</td>
+                            <td>nan</td>
+                            <td><span class="badge badge-success">NO SE PUEDE REALIZAR VISITA - SATURACION DEL
+                                    DIA</span></td>
+                            <td>nan</td>
+                        </tr>
+
+                        <tr>
+                            <td>28 JULIO</td>
+                            <td>S/C</td>
+                            <td>INSPECCION JENNIFER</td>
+                            <td>KEVIN ENDARA</td>
+                            <td><span class="badge badge-success">INSPECCION</span></td>
+                            <td>Se hace inspección se detecta que la Instalación va a ser por aérea, fibra óptica,
+                                posiblemente a 200 m de la caja nap, se revisa y se detecta que el cliente necesita un
+                                equipo adicional, ya que la case es demasiado grande y las paredes son muy gruesas.￼￼
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>29 JULIO</td>
+                            <td>S/C</td>
+                            <td>INVENTARIO GENERAR VTS DESDE LAS 10AM</td>
+                            <td>nan</td>
+                            <td><span class="badge badge-warning">PENDIENTE</span></td>
+                            <td>nan</td>
+                        </tr>
+
+                        <tr>
+                            <td>29 JULIO</td>
+                            <td>330</td>
+                            <td>QUILLI PAUTE CARMITA DEL ROCIO</td>
+                            <td>VICTOR ARIAS</td>
+                            <td><span class="badge badge-success">CAMBIO DE FO</span></td>
+                            <td>Se pasa tramo de fo , se coloca unión se reconecta fibra se verifica servicio ok</td>
+                        </tr>
+
+                        <tr>
+                            <td>29 JULIO</td>
+                            <td>398</td>
+                            <td>QUILLI PAUTE JAIME LEONARDO</td>
+                            <td>VICTOR ARIAS</td>
+                            <td><span class="badge badge-success">CAMBIO DE FO</span></td>
+                            <td>Se pasa tramo de fo , se coloca unión se reconecta fibra se verifica servicio ok</td>
+                        </tr>
+
+                        <tr>
+                            <td>29 JULIO</td>
+                            <td>199</td>
+                            <td>MACHUCA TACURI JOHN JAIRO</td>
+                            <td>MILTON BERMEO</td>
+                            <td><span class="badge badge-success">CAMBIO DE CONECTORES APC/UPC</span></td>
+                            <td>Se corta tramo de fibra chamcado en el ingreso de la caja se verifica servicio correcto
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>30 JULIO</td>
+                            <td>S/C</td>
+                            <td>ERICK NO TRABAJA CON NOSOTROS</td>
+                            <td>nan</td>
+                            <td><span class="badge badge-warning">PENDIENTE</span></td>
+                            <td>nan</td>
+                        </tr>
+
+                        <tr>
+                            <td>30 JULIO</td>
+                            <td>347</td>
+                            <td>ILLIZACA PENAHERRERA JORGE LEONARDO</td>
+                            <td>KEVIN ENDARA</td>
+                            <td><span class="badge badge-success">CAMBIO DE ROUTER ANTIGUO/PROBLEMAS</span></td>
+                            <td>Cliente queda en configurar las cámaras ya que se cambio de equipos y credenciales, se
+                                deja acomodando de mejor manera, cliente satisfecho y con navegación estable</td>
+                        </tr>
+
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB 3: VISITAS SOBRANTES EN ATLAS -->
+        <div id="tab-sobrantes-v" class="tab-content">
+            <p class="section-text">
+                Visitas técnicas registradas en la base de datos Atlas pero que <strong>no figuran en las hojas de
+                    Excel</strong>. Indica tareas realizadas mediante la plataforma que no se reportaron de forma
+                manual.
+            </p>
+            <div class="table-container">
+                <div class="table-header-bar">
+                    <span class="table-header-title">Visitas registradas en Atlas no anotadas en el Excel</span>
+                    <div class="search-box">
+                        <input type="text" placeholder="Filtrar..."
+                            onkeyup="filterTable(this, 'table-sobrantes-v-data')">
+                    </div>
+                </div>
+                <table id="table-sobrantes-v-data">
+                    <thead>
+                        <tr>
+                            <th width="10%">ID Visita</th>
+                            <th width="15%">Fecha Programada</th>
+                            <th width="10%">Contrato</th>
+                            <th width="25%">Cliente</th>
+                            <th width="15%">Técnico Principal</th>
+                            <th width="10%">Estado</th>
+                            <th width="15%">Solución</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+
+                        <tr>
+                            <td><strong>12847</strong></td>
+                            <td>2026-07-14</td>
+                            <td>223F</td>
+                            <td>ROSA ISABEL CHICAIZA QUINDE</td>
+                            <td>VICTOR ARIAS</td>
+                            <td><span class="badge badge-success">FINALIZADA</span></td>
+                            <td>CAMBIO DE FO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12894</strong></td>
+                            <td>2026-07-19</td>
+                            <td>S/C</td>
+                            <td>WALTER PATRICIO ANGULO NARANJO</td>
+                            <td>OSWALDO BERMEO</td>
+                            <td><span class="badge badge-success">FINALIZADA</span></td>
+                            <td>CONF. DE EQUIPOS GPON/ROUTER</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12895</strong></td>
+                            <td>2026-07-17</td>
+                            <td>30046</td>
+                            <td>JOHN PAUL CARPIO FLOR</td>
+                            <td>NO TECNICO</td>
+                            <td><span class="badge badge-warning">REAGENDADA</span></td>
+                            <td></td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12896</strong></td>
+                            <td>2026-07-17</td>
+                            <td>30109</td>
+                            <td>PINDO YUNGA WILMER MIGDONIO</td>
+                            <td>ERICK LOJANO</td>
+                            <td><span class="badge badge-warning">REAGENDADA</span></td>
+                            <td></td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12905</strong></td>
+                            <td>2026-07-20</td>
+                            <td>24568</td>
+                            <td>CORDERO LOPEZ JUAN FRANCISCO</td>
+                            <td>NO TECNICO</td>
+                            <td><span class="badge badge-warning">CANCELADA</span></td>
+                            <td></td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>12990</strong></td>
+                            <td>2026-07-23</td>
+                            <td>364</td>
+                            <td>JOSE IVAN ZHUMI NIEVES</td>
+                            <td>NO TECNICO</td>
+                            <td><span class="badge badge-warning">CANCELADA</span></td>
+                            <td></td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13011</strong></td>
+                            <td>2026-07-24</td>
+                            <td>192I</td>
+                            <td>BERONICA MARINA RENTERIA SEGURA</td>
+                            <td>NO TECNICO</td>
+                            <td><span class="badge badge-warning">PENDIENTE</span></td>
+                            <td></td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13015</strong></td>
+                            <td>2026-07-26</td>
+                            <td>89f</td>
+                            <td>EDGAR ANIBAL LEON</td>
+                            <td>OSWALDO BERMEO</td>
+                            <td><span class="badge badge-success">FINALIZADA</span></td>
+                            <td>CAMBIO DE ROUTER ANTIGUO/PROBLEMAS</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13020</strong></td>
+                            <td>2026-07-27</td>
+                            <td>358f</td>
+                            <td>FERNANDO MARCELO LEON COLLAHUAZO</td>
+                            <td>VICTOR ARIAS</td>
+                            <td><span class="badge badge-success">FINALIZADA</span></td>
+                            <td>SOLUCION PARCIAL</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13045</strong></td>
+                            <td>2026-07-29</td>
+                            <td>330F</td>
+                            <td>CARMITA DEL ROCIO QUILLI PAUTE</td>
+                            <td>VICTOR ARIAS</td>
+                            <td><span class="badge badge-success">FINALIZADA</span></td>
+                            <td>CAMBIO DE FO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13046</strong></td>
+                            <td>2026-07-29</td>
+                            <td>398F</td>
+                            <td>JAIME LEONARDO QUILLI PAUTE</td>
+                            <td>VICTOR ARIAS</td>
+                            <td><span class="badge badge-success">FINALIZADA</span></td>
+                            <td>CAMBIO DE FO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13055</strong></td>
+                            <td>2026-07-29</td>
+                            <td>199F</td>
+                            <td>JOHN JAIRO MACHUCA TACURI</td>
+                            <td>MILTON BERMEO</td>
+                            <td><span class="badge badge-success">FINALIZADA</span></td>
+                            <td>CAMBIO DE CONECTORES APC/UPC</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13062</strong></td>
+                            <td>2026-07-29</td>
+                            <td>5094</td>
+                            <td>BELTRAN SACOTO RODRIGO ENRIQUE</td>
+                            <td></td>
+                            <td><span class="badge badge-warning">REAGENDADA</span></td>
+                            <td>VISITA REAGENDADA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13076</strong></td>
+                            <td>2026-07-30</td>
+                            <td>347f</td>
+                            <td>JORGE LEONARDO ILLIZACA PENAHERRERA</td>
+                            <td>KEVIN ENDARA</td>
+                            <td><span class="badge badge-success">FINALIZADA</span></td>
+                            <td>CAMBIO DE ROUTER ANTIGUO/PROBLEMAS</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13086</strong></td>
+                            <td>2026-07-30</td>
+                            <td>30684</td>
+                            <td>BUENO TACURI HOLGER BERNARDO</td>
+                            <td>BRYAN G</td>
+                            <td><span class="badge badge-success">FINALIZADA</span></td>
+                            <td>CAMBIO DE EQUIPO ONT</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13091</strong></td>
+                            <td>2026-07-31</td>
+                            <td>821F</td>
+                            <td>FRANCISCO RODRIGO PILLCO TOCACHI</td>
+                            <td>MILTON BERMEO</td>
+                            <td><span class="badge badge-success">FINALIZADA</span></td>
+                            <td>GENERAR CAMBIO DE FO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>13100</strong></td>
+                            <td>2026-08-01</td>
+                            <td>34713</td>
+                            <td>JUAN PABLO CALLE CALLE</td>
+                            <td>MILTON BERMEO</td>
+                            <td><span class="badge badge-success">FINALIZADA</span></td>
+                            <td>CAMBIO DE EQUIPO ONT</td>
+                        </tr>
+
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB 4: ATENCIONES FALTANTES EN ATLAS -->
+        <div id="tab-faltantes-a" class="tab-content">
+            <p class="section-text">
+                Atenciones de los asesores Tati, Luis y Mateo registradas de forma manual en el reporte general de
+                Drive, pero que <strong>no se guardaron en la base de datos Atlas</strong>.
+            </p>
+            <div class="table-container">
+                <div class="table-header-bar">
+                    <span class="table-header-title">Atenciones en Drive no ingresadas en Atlas</span>
+                    <div class="search-box">
+                        <input type="text" placeholder="Filtrar..."
+                            onkeyup="filterTable(this, 'table-faltantes-a-data')">
+                    </div>
+                </div>
+                <table id="table-faltantes-a-data">
+                    <thead>
+                        <tr>
+                            <th width="8%">Fila</th>
+                            <th width="12%">Fecha / Hora</th>
+                            <th width="10%">Contrato</th>
+                            <th width="20%">Cliente</th>
+                            <th width="10%">Agente</th>
+                            <th width="15%">Acción</th>
+                            <th width="25%">Observación</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+
+                        <tr>
+                            <td>36</td>
+                            <td>2026-07-13 15:58:54</td>
+                            <td>34658</td>
+                            <td>JOSE MIGUEL TIGRE TIGRE</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>cliente consulto como puede ocultar la red pero luego indicó que ya lo ha hecho, no hay
+                                respuesta del cliente</td>
+                        </tr>
+
+                        <tr>
+                            <td>39</td>
+                            <td>2026-07-13 16:03:04</td>
+                            <td>37242</td>
+                            <td>LUIS WILLIAM CHIRIBOGA ALTAMIRANO</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>se cambia vlan porque bloque a página de compras públicas</td>
+                        </tr>
+
+                        <tr>
+                            <td>82</td>
+                            <td>2026-07-14 12:58:19</td>
+                            <td>223f</td>
+                            <td>ROSA ISABEL CHICAIZA QUINDE</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>se activa servicio por cambio de onu</td>
+                        </tr>
+
+                        <tr>
+                            <td>89</td>
+                            <td>2026-07-14 15:41:55</td>
+                            <td>927f</td>
+                            <td>GLADIS ENMA LLIVISACA JARA</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>cliente indica problemas constantes en el servicio, solo esta una persona de la tercera
+                                edad</td>
+                        </tr>
+
+                        <tr>
+                            <td>94</td>
+                            <td>2026-07-14 16:02:22</td>
+                            <td>40969</td>
+                            <td>MARIA SUSANA SOLIS MUNOZ</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>se informa horario de vt</td>
+                        </tr>
+
+                        <tr>
+                            <td>98</td>
+                            <td>2026-07-14 16:11:12</td>
+                            <td>34667</td>
+                            <td>FLANKLIN EDUARDO VILLAVICENCIO</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>SE BRINDA INFORMACIÓN SOBRE VT</td>
+                        </tr>
+
+                        <tr>
+                            <td>174</td>
+                            <td>2026-07-15 07:15:26</td>
+                            <td>4077</td>
+                            <td>LEON RAMON CRISTINA FERNANDA</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>reco por pago</td>
+                        </tr>
+
+                        <tr>
+                            <td>312</td>
+                            <td>2026-07-16 14:15:07</td>
+                            <td>38107</td>
+                            <td>JUAN CARLOS MUNOZ LLORET</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>se brinda información sobre vt</td>
+                        </tr>
+
+                        <tr>
+                            <td>318</td>
+                            <td>2026-07-16 15:08:06</td>
+                            <td>437f</td>
+                            <td>JULIA MARTHA LEON CORONEL</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>VISITA TECNICA</td>
+                            <td>se genera vt para revision del servicio</td>
+                        </tr>
+
+                        <tr>
+                            <td>325</td>
+                            <td>2026-07-16 15:39:01</td>
+                            <td>35254</td>
+                            <td>TANIA MARITHZA VASQUEZ GUZHNAY</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>cliente presenta intermitencia por daño electrico en el nodo, se indica verificar
+                                servicio al solventar, indica servicio ok</td>
+                        </tr>
+
+                        <tr>
+                            <td>328</td>
+                            <td>2026-07-16 15:41:06</td>
+                            <td>43241</td>
+                            <td>HOSPITAL_RIO_HAB_217</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>se activa servicio instalación nueva</td>
+                        </tr>
+
+                        <tr>
+                            <td>329</td>
+                            <td>2026-07-16 15:41:51</td>
+                            <td>33570</td>
+                            <td>TANIA MARIBEL ZUNIGA LAZO</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>se brinda información sobre vt</td>
+                        </tr>
+
+                        <tr>
+                            <td>337</td>
+                            <td>2026-07-16 16:15:24</td>
+                            <td>43219</td>
+                            <td>NUBE DEL ROCIO GALLEGOS CARCHIPULLA</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>Cliente indica que unicamente presenta inconvenientes cuando se conecta mediante la
+                                computadora a clases virtuales, que en los demás dispositivos funciona de manera
+                                correcta, solicita llamada el sábado después de las 2 pm para verificar si ya estuvo
+                                estable la conexión</td>
+                        </tr>
+
+                        <tr>
+                            <td>342</td>
+                            <td>2026-07-16 16:48:57</td>
+                            <td>3346</td>
+                            <td>CARDENAS CARDENAS ANGEL BENIGNO</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>SE GENERA TICKET POR DAÑO HFC</td>
+                        </tr>
+
+                        <tr>
+                            <td>373</td>
+                            <td>2026-07-17 05:53:55</td>
+                            <td>3383</td>
+                            <td>GOMEZ LOPEZ FLOR MARIA</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>SE BRINDA INFORMACIÓN DE CAIDA DE EDGE UNO, SE VALIDA SERVICIO TODO OKA</td>
+                        </tr>
+
+                        <tr>
+                            <td>374</td>
+                            <td>2026-07-17 05:53:55</td>
+                            <td>741F</td>
+                            <td>MARIA DE LOS ANGELES LIMA NAULA</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE RECONECTA SERVICIO , ENVIA COMPROBANTE DE PAGO</td>
+                        </tr>
+
+                        <tr>
+                            <td>375</td>
+                            <td>2026-07-17 05:53:55</td>
+                            <td>398410</td>
+                            <td>VICTOR FAUSTO QUIZHPI LOJA</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>NO HAY RESPUESTA SE CIERRA TICKET, PERO SE COMUNICÓ DURANTE CAÍDA DE EDGEUNO</td>
+                        </tr>
+
+                        <tr>
+                            <td>421</td>
+                            <td>2026-07-17 16:05:39</td>
+                            <td>41350</td>
+                            <td>BENIGNO NICEFORO RUIZ PENARRIETA</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>cliente va a indicar cuando puede recibir para revisar pot con degrado</td>
+                        </tr>
+
+                        <tr>
+                            <td>432</td>
+                            <td>2026-07-17 18:10:20</td>
+                            <td>209I</td>
+                            <td>JULIA GUILLERMINA VASQUEZ MOREJON</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>se reconecta servicio, estaba en corte en el mikrotik</td>
+                        </tr>
+
+                        <tr>
+                            <td>480</td>
+                            <td>2026-07-20 00:24:36</td>
+                            <td>38463</td>
+                            <td>ANDREA JOHANNA TIGRE TORRES</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>EXTRA: CLIENTE COMENTA NO TENER CONEXIÓN, SE VERIFICA QUE EN SISTEMA APARECE 8H EN POWER
+                                FAIL. SE SOLICITA REINICIO Y SE VALIDA SERVICIO CORRECTO CON CLIENTE.</td>
+                        </tr>
+
+                        <tr>
+                            <td>481</td>
+                            <td>2026-07-20 00:49:57</td>
+                            <td>42559</td>
+                            <td>ROSARIO LUCRECIA MOROCHO DOMINGUEZ</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>EXTRA: CAÍDA EDGE UNO, TICKET AL NOC SE BRINDA INFORMACIÓN</td>
+                        </tr>
+
+                        <tr>
+                            <td>482</td>
+                            <td>2026-07-20 00:51:07</td>
+                            <td>41382</td>
+                            <td>MARIA PIA GARCIA CORDOVA</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>EXTRA: CAÍDA EDGE UNO, TICKET AL NOC SE BRINDA INFORMACIÓN</td>
+                        </tr>
+
+                        <tr>
+                            <td>483</td>
+                            <td>2026-07-20 01:02:28</td>
+                            <td>3804</td>
+                            <td>MACHADO TAPIA JULIO ALFONSO</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>CAMBIO DE ONT, ESTABA PENDIENTE</td>
+                        </tr>
+
+                        <tr>
+                            <td>484</td>
+                            <td>2026-07-20 01:11:43</td>
+                            <td>41864</td>
+                            <td>NATALY ANDREA PONCE COLLAGUASO</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>EXTRA: CLIENTE SE COMUNICA POR TICKET DEL NOC, SOLICITA CAMBIO DE CONTRASEÑA. SE HACE
+                                CAMBIO A NUEVA SOLICITADA POR CLIENTE</td>
+                        </tr>
+
+                        <tr>
+                            <td>485</td>
+                            <td>2026-07-20 01:13:29</td>
+                            <td>880f</td>
+                            <td>MIGUEL ANGEL PILACUAN ZHAGUI</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>EXTRA: CAÍDA EDGE UNO, TICKET AL NOC SE BRINDA INFORMACIÓN</td>
+                        </tr>
+
+                        <tr>
+                            <td>486</td>
+                            <td>2026-07-20 01:16:15</td>
+                            <td>30987</td>
+                            <td>JAIME FABIAN LOPEZ QUITO</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>EXTRA: CAÍDA EDGE UNO, TICKET AL NOC SE BRINDA INFORMACIÓN</td>
+                        </tr>
+
+                        <tr>
+                            <td>487</td>
+                            <td>2026-07-20 01:18:12</td>
+                            <td>42559</td>
+                            <td>ROSARIO LUCRECIA MOROCHO DOMINGUEZ</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>EXTRA: CAÍDA EDGE UNO, TICKET AL NOC SE BRINDA INFORMACIÓN</td>
+                        </tr>
+
+                        <tr>
+                            <td>488</td>
+                            <td>2026-07-20 01:24:34</td>
+                            <td>34742</td>
+                            <td>DIANA CECILIA QUINTUNA BUELE</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>EXTRA: CLIENTE INDICA NO TENER SEÑAL DE CABLE, SE REINICIA ONT Y CLIENTE INDICA QUE
+                                SINTONIZACIÓN DE CANALES SE COLOOCÓ EN HD, SE EXPLICA COMO CAMBIARLO</td>
+                        </tr>
+
+                        <tr>
+                            <td>489</td>
+                            <td>2026-07-20 01:27:59</td>
+                            <td>489F</td>
+                            <td>MIGUEL FROILAN CRIOLLO GUAMAN</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>EXTRA: CAÍDA EDGE UNO, TICKET AL NOC SE BRINDA INFORMACIÓN</td>
+                        </tr>
+
+                        <tr>
+                            <td>491</td>
+                            <td>2026-07-20 01:30:54</td>
+                            <td>26180</td>
+                            <td>JOSE VICTOR VELEZ AGUDO</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>EXTRA: CAÍDA EDGE UNO, TICKET AL NOC SE BRINDA INFORMACIÓN</td>
+                        </tr>
+
+                        <tr>
+                            <td>495</td>
+                            <td>2026-07-20 01:34:21</td>
+                            <td>41183</td>
+                            <td>CARLOS ADRIAN GUACHICHULLCA SINCHI</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>EXTRA: CAÍDA EDGE UNO, TICKET AL NOC SE BRINDA INFORMACIÓN</td>
+                        </tr>
+
+                        <tr>
+                            <td>496</td>
+                            <td>2026-07-20 01:34:28</td>
+                            <td>701f</td>
+                            <td>SEGUNDO SANTOS GARAY ORDONEZ</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>EXTRA: CAÍDA EDGE UNO, TICKET AL NOC SE BRINDA INFORMACIÓN</td>
+                        </tr>
+
+                        <tr>
+                            <td>497</td>
+                            <td>2026-07-20 01:36:03</td>
+                            <td>4300</td>
+                            <td>FELIPE ISMAEL PENA ANDRADE</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>EXTRA: CAÍDA EDGE UNO, TICKET AL NOC SE BRINDA INFORMACIÓN. se cierra ticket por
+                                inactividad</td>
+                        </tr>
+
+                        <tr>
+                            <td>498</td>
+                            <td>2026-07-20 01:36:30</td>
+                            <td>29810</td>
+                            <td>MIRYAM DEL ROCIO CAMPOVERDE PAUTA</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>EXTRA: CAÍDA EDGE UNO, TICKET AL NOC SE BRINDA INFORMACIÓN</td>
+                        </tr>
+
+                        <tr>
+                            <td>593</td>
+                            <td>2026-07-20 19:52:05</td>
+                            <td>364F</td>
+                            <td>JOSE IVAN ZHUMI NIEVES</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>VISITA TECNICA</td>
+                            <td>CLIENTE COMENTA QUE TIENE PROBLEMAS EN LA RED, SOLICITA REVISIÓN: SIN EMBARGO SOLO PUEDE
+                                POR LA MAÑANA. SE REALIZA REINICIO DE LOS EQUIPOS PARA PODER VALIDAR CON CLIENTE. AUNQUE
+                                SERÍA BUENO CONVERSAR EL DÍA DE MAÑANA</td>
+                        </tr>
+
+                        <tr>
+                            <td>598</td>
+                            <td>2026-07-20 20:31:10</td>
+                            <td>141I</td>
+                            <td>YOLANDA ZHAGNAY PALAGUACHI</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>CLIENTE COMENTA SERVICIO LENTO, SE REINICIA EQUIPOS, SE CAMBIAN PARÁMETROS EN ROUTER. SE
+                                VALIDA CON CLIENTE INDICA QUE TODO OKAY</td>
+                        </tr>
+
+                        <tr>
+                            <td>600</td>
+                            <td>2026-07-20 20:52:18</td>
+                            <td>41533</td>
+                            <td>PAOLA ALEXANDRA CUASPUD CUARAN</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>cliente con equipos inhibidos, indica que los reinició y retomó servicio. Se valida
+                                servicio con cliente todo ok</td>
+                        </tr>
+
+                        <tr>
+                            <td>601</td>
+                            <td>2026-07-20 20:58:49</td>
+                            <td>41879</td>
+                            <td>CARMEN ROSA PALTIN OTAVALO</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>CLIENTE SOLICITA ACUERDO DE PAGOS, CARTERA APRUEBA DICHO ACUERDO DE PAGOS POR 24H</td>
+                        </tr>
+
+                        <tr>
+                            <td>606</td>
+                            <td>2026-07-21 10:13:32</td>
+                            <td>0</td>
+                            <td>GUALPA BOHORQUES ANDREA NOEMI</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>se elimina cuenta DGO, solicita Pilar</td>
+                        </tr>
+
+                        <tr>
+                            <td>700</td>
+                            <td>2026-07-22 13:03:27</td>
+                            <td>41921</td>
+                            <td>RAMIRO HERNAN CORDOVA AGILA</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>se informa horario de vt</td>
+                        </tr>
+
+                        <tr>
+                            <td>724</td>
+                            <td>2026-07-22 16:51:47</td>
+                            <td>400010</td>
+                            <td>JHONY LEONARDO CABRERA RAMON</td>
+                            <td>CC. Mateo Samaniego</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>se genera ticket al NOC</td>
+                        </tr>
+
+                        <tr>
+                            <td>736</td>
+                            <td>2026-07-22 20:21:32</td>
+                            <td>41771</td>
+                            <td>MANUEL TARQUINO PEREZ LAZO</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>se brinda información sobre horario de vt para el día jueves</td>
+                        </tr>
+
+                        <tr>
+                            <td>737</td>
+                            <td>2026-07-22 20:22:04</td>
+                            <td>38317</td>
+                            <td>DANIEL JOSUE QUILAMBAQUI VELEZ</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>se brinda información sobre horario de vt para el día jueves</td>
+                        </tr>
+
+                        <tr>
+                            <td>783</td>
+                            <td>2026-07-23 20:18:55</td>
+                            <td>35160</td>
+                            <td>SANDRA MARICELA MORALES CARRASCO</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>se valida con cliente servicio ok, luego de solventar daño, no hay respuesta del cliente
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>799</td>
+                            <td>2026-07-24 11:30:55</td>
+                            <td>0</td>
+                            <td>FERNANDEZ GUILLEN PABLO GUILLERMO</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>se corta cuenta DGO, solicita Pilar</td>
+                        </tr>
+
+                        <tr>
+                            <td>800</td>
+                            <td>2026-07-24 12:03:43</td>
+                            <td>0</td>
+                            <td>JOSTIN ELIAN VACA CUENCA</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>se corta cuenta DGO, solicita Pilar</td>
+                        </tr>
+
+                        <tr>
+                            <td>824</td>
+                            <td>2026-07-24 12:46:31</td>
+                            <td>40757</td>
+                            <td>LUIS FELIPE PILLCO GUAPISACA</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>VISITA TECNICA</td>
+                            <td>se genera vt para revisión completa de servicio, cliente quiere cancelar</td>
+                        </tr>
+
+                        <tr>
+                            <td>847</td>
+                            <td>2026-07-24 17:17:04</td>
+                            <td>7761</td>
+                            <td>ABRIL CAMPOVERDE CARMEN UBALDINA</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>se configura correctamente DNS, se realiza cambio en las configuraciones, se valida con
+                                cliente indica servicio correcto</td>
+                        </tr>
+
+                        <tr>
+                            <td>856</td>
+                            <td>2026-07-24 20:11:23</td>
+                            <td>39347</td>
+                            <td>MARIA SUSANA ZHUNAULA GUAMAN</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>se indica horario de vt</td>
+                        </tr>
+
+                        <tr>
+                            <td>893</td>
+                            <td>2026-07-26 12:50:06</td>
+                            <td>701F</td>
+                            <td>SEGUNDO SANTOS GARAY ORDONEZ</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>leve corte en el servicio de internet, se valida servicio con cliente funcional</td>
+                        </tr>
+
+                        <tr>
+                            <td>905</td>
+                            <td>2026-07-27 08:15:20</td>
+                            <td>43280</td>
+                            <td>BRIAN MOGROVEJO</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>cliente indica ya no encontrase en el domicilio, el fin de semana estuvo con la
+                                navegación correcta indica que nos enviará un mensaje indicando cualquier novedad</td>
+                        </tr>
+
+                        <tr>
+                            <td>952</td>
+                            <td>2026-08-03 00:00:00</td>
+                            <td>21196</td>
+                            <td>WALTER FERNANDO PINTADO LAZO</td>
+                            <td>CC. Mateo Samaniego</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>se corta cuenta de zapping, solicita cartera</td>
+                        </tr>
+
+                        <tr>
+                            <td>1030</td>
+                            <td>2026-07-29 11:24:11</td>
+                            <td>398f</td>
+                            <td>JAIME LEONARDO QUILLI PAUTE</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>se brinda información sobre vt</td>
+                        </tr>
+
+                        <tr>
+                            <td>1075</td>
+                            <td>2026-07-30 09:16:57</td>
+                            <td>15295</td>
+                            <td>CARLOS FERNANDO CHAVEZ BERMEO</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>CLIENTE COMENTA QUE SERVICIO SE ENCUENTRA INTERMITENTE, SE REINCIIA YHAY QUE DEVOLVER
+                                LLAMADA A CLIENTE A LAS 2:00PM</td>
+                        </tr>
+
+                        <tr>
+                            <td>1158</td>
+                            <td>2026-07-31 13:03:29</td>
+                            <td>42947</td>
+                            <td>BLANCA ALICIA NAULA ANGUISACA</td>
+                            <td>CC. Luis Saenz</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>CLIENTE COMENTA NO CONTAR CON SERVICIO, SE VERIFICA EQUIPO APAGADO, SE CONSULTA CON
+                                CLIENTE QUE REGLETA SE ENCUENTRA SIN SERVICIO, SE ENCIENDE Y SE VALIDA SERVICIO</td>
+                        </tr>
+
+                        <tr>
+                            <td>1197</td>
+                            <td>2026-08-01 16:21:50</td>
+                            <td>36195</td>
+                            <td>JANNETH LORENA CARDENAS CAMPOVERDE</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>se indica horario de vt</td>
+                        </tr>
+
+                        <tr>
+                            <td>1203</td>
+                            <td>2026-08-01 17:14:29</td>
+                            <td>32323</td>
+                            <td>MERCY CARMITA PULGARIN AVILA</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>se activa servicio pro cambio de ont</td>
+                        </tr>
+
+                        <tr>
+                            <td>1207</td>
+                            <td>2026-08-02 09:11:08</td>
+                            <td>847f</td>
+                            <td>BLANCA LUCIA VIZHNAY SANCHEZ</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>cliente indica que desea suspender el servicio debido a intermitencias, se ofrece visita
+                                para actualización de equipos, cliente indica que va a conversar con el esposo para ver
+                                si acepta visita, va a confirmar por whatsapp</td>
+                        </tr>
+
+                        <tr>
+                            <td>1218</td>
+                            <td>2026-08-02 10:40:58</td>
+                            <td>37213</td>
+                            <td>OJEDA OJEDA CECIBEL DEL CISNE</td>
+                            <td>CC. Guissella Quezada</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>se indica horario de vt</td>
+                        </tr>
+
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB 5: ATENCIONES SOBRANTES EN ATLAS -->
+        <div id="tab-sobrantes-a" class="tab-content">
+            <p class="section-text">
+                Atenciones de los asesores Tati, Luis y Mateo registradas en el sistema Atlas, pero que <strong>no
+                    fueron documentadas en el reporte manual del Drive</strong>.
+            </p>
+            <div class="table-container">
+                <div class="table-header-bar">
+                    <span class="table-header-title">Atenciones en Atlas no anotadas en el Drive</span>
+                    <div class="search-box">
+                        <input type="text" placeholder="Filtrar..."
+                            onkeyup="filterTable(this, 'table-sobrantes-a-data')">
+                    </div>
+                </div>
+                <table id="table-sobrantes-a-data">
+                    <thead>
+                        <tr>
+                            <th width="10%">ID Atención</th>
+                            <th width="12%">Fecha / Hora</th>
+                            <th width="10%">Contrato</th>
+                            <th width="20%">Cliente</th>
+                            <th width="12%">Agente</th>
+                            <th width="15%">Acción</th>
+                            <th width="21%">Observación</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+
+                        <tr>
+                            <td><strong>48086</strong></td>
+                            <td>2026-07-13 12:05:02</td>
+                            <td>42763</td>
+                            <td>RENATO DAMIAN NAUTA SOLANO</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>VISITA TECNICA</td>
+                            <td>SE GENERA VT POR EQUIPO ALARMADO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48107</strong></td>
+                            <td>2026-07-13 16:00:11</td>
+                            <td>34568</td>
+                            <td>MARIA VERONICA COLLAGUAZO QUIZHPI</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>CLIENTE CONSULTO COMO PUEDE OCULTAR LA RED PERO LUEGO INDICO QUE YA LO HA HECHO, NO HAY
+                                RESPUESTA DEL CLIENTE</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48123</strong></td>
+                            <td>2026-07-13 18:16:25</td>
+                            <td>31007</td>
+                            <td>MAYRA LOURDES CALLE ROMERO</td>
+                            <td>CC. MATEO SAMANIEGO</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>SE DA INFO DE VT</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48133</strong></td>
+                            <td>2026-07-14 12:29:24</td>
+                            <td>42728</td>
+                            <td>DIEGO RAFAEL ESPINOZA VINTIMILLA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>REVISAR SENAL DE TV</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48138</strong></td>
+                            <td>2026-07-14 15:32:19</td>
+                            <td>40059</td>
+                            <td>MARCO ANTONIO YUQUILIMA PILLAJO</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>CAMBIAR AX2 CON PROBLEMAS</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48143</strong></td>
+                            <td>2026-07-14 15:59:51</td>
+                            <td>40969</td>
+                            <td>MARIA SUSANA SOLIS MUNOZ</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>VERIFICAR TEMAS DE COBERTURA, TIENE UN AX3 CON LA RED UNIFICADA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48173</strong></td>
+                            <td>2026-07-14 19:57:10</td>
+                            <td>32508</td>
+                            <td>LUIS ANDRES SIGCHI VELECELA</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE BRINDA INFORMACION, CLIENTE RECONECTADO.</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48209</strong></td>
+                            <td>2026-07-14 21:15:23</td>
+                            <td>3804</td>
+                            <td>MACHADO TAPIA JULIO ALFONSO</td>
+                            <td>CC. MATEO SAMANIEGO</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE VALIDA SERVICIO OK DESPUES DE SOPORTE</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48211</strong></td>
+                            <td>2026-07-14 21:40:12</td>
+                            <td>36492</td>
+                            <td>ANGEL NICANOR SABANDO CHICHANDA</td>
+                            <td>CC. MATEO SAMANIEGO</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE HACE RECO POR ACUERDO DE PAGOS</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48300</strong></td>
+                            <td>2026-07-15 19:33:33</td>
+                            <td>21622</td>
+                            <td>BRIONES ROMERO JOSE ANGEL</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE ENCUENTRAN CABLES MAL CONECTADOS EN EL ROUTER. SE EXPLICA A CLIENTE MODO DE CONEXION
+                                EN PUERTO WAN DEL ROUTER EX511. SE VALIDA SERVICIO, TODO CORRECTO.</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48311</strong></td>
+                            <td>2026-07-15 21:00:03</td>
+                            <td>39770</td>
+                            <td>DIEGO ESTUARDO LARRIVA LARRIVA</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE REALIZA RECONEXION DEL SERVICIO, TODO OKA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48349</strong></td>
+                            <td>2026-07-16 10:29:59</td>
+                            <td>36455</td>
+                            <td>GABRIELA ESTEFANIA BERMEO QUEZADA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>CLIENTE SE QUEDA SIN SENAL DE TV CONSTANTEMENTE, POT DE CABLE -12.4 DBM</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48351</strong></td>
+                            <td>2026-07-16 10:53:03</td>
+                            <td>28846</td>
+                            <td>EDISON JAVIER PADILLA PADILLA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>COLOCAR SWITCH</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48355</strong></td>
+                            <td>2026-07-16 11:33:42</td>
+                            <td>33570</td>
+                            <td>TANIA MARIBEL ZUNIGA LAZO</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>REVISAR NIVELES -33.97 DBM / -33.02 DBM</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48360</strong></td>
+                            <td>2026-07-16 11:54:53</td>
+                            <td>8613</td>
+                            <td>MANUEL JESUS YUMBLA BURI</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>REVISAR CONECTORES Y ACOMETIDA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48373</strong></td>
+                            <td>2026-07-16 14:27:30</td>
+                            <td>43258</td>
+                            <td>URDIALES BRITO LAURO ANDRES</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>INSTALACION NUEVA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48376</strong></td>
+                            <td>2026-07-16 14:55:48</td>
+                            <td>437</td>
+                            <td>JULIA MARTHA LEON CORONEL</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>REVISION COMPLETA, SI ES NECESARIO ACTULIZAR EQUIPOS</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48385</strong></td>
+                            <td>2026-07-16 15:34:32</td>
+                            <td>37474</td>
+                            <td>LUIS JEFFERSON ASITIMBAY BARRERA</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE ACTIVA SERVICIO CAMBIO DE ONT</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48386</strong></td>
+                            <td>2026-07-16 15:41:41</td>
+                            <td>39211</td>
+                            <td>MIKELA CRISTINA GALARZA SAMANIEGO</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>CLIENTE INDICA QUE LOS EQUIPOS ESTAN COLOCADOS EN UNA PARTE CENTRAL DEL DEPARTAMENTO
+                                PERO NO TIENE BUENA COBERTURA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48404</strong></td>
+                            <td>2026-07-16 22:14:13</td>
+                            <td>41517</td>
+                            <td>MARIA FERNANDA CALLE SALTO</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>SE BRINDA INFORMACION DE CAIDA DE EDGE UNO, SE VALIDA SERVICIO TODO OKA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48423</strong></td>
+                            <td>2026-07-16 23:56:29</td>
+                            <td>3383</td>
+                            <td>GOMEZ LOPEZ FLOR MARIA</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>CORTE INTERNO DE SERVICIO</td>
+                            <td>SE BRINDA INFORMACION DE CAIDA DE EDGE UNO, SE VALIDA SERVICIO TODO OKA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48424</strong></td>
+                            <td>2026-07-16 23:56:56</td>
+                            <td>741F</td>
+                            <td>MARIA DE LOS ANGELES LIMA NAULA</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE RECONECTA SERVICIO , ENVIA COMPROBANTE DE PAGO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48425</strong></td>
+                            <td>2026-07-16 23:57:14</td>
+                            <td>398410</td>
+                            <td>VICTOR FAUSTO QUIZHPI LOJA</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>NO HAY RESPUESTA SE CIERRA TICKET, PERO SE COMUNICO DURANTE CAIDA DE EDGEUNO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48456</strong></td>
+                            <td>2026-07-17 14:18:34</td>
+                            <td>34804</td>
+                            <td>ZAIDA ISABEL VERGARA AYLLON</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>SE REINICIA ONT + ROUTER, SE VALIDA SERVICO TODO OKIDOKI</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48459</strong></td>
+                            <td>2026-07-17 14:49:14</td>
+                            <td>35394</td>
+                            <td>ALEX JONATHAN GAONA ALVAREZ</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>CLIENTE INDICA QUE EL SERVICIO YA ESTA FUNCIONANDO DE MANERA CORRECTA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48464</strong></td>
+                            <td>2026-07-17 16:04:44</td>
+                            <td>28036</td>
+                            <td>GEOVANNA KATHERINE MEJIA BUSTOS</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>SE INDICA HORARIO DE VT</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48467</strong></td>
+                            <td>2026-07-17 16:20:00</td>
+                            <td>30109</td>
+                            <td>PINDO YUNGA WILMER MIGDONIO</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>REVISAR CONECTORES Y ACOMETIDA, ESTUVIERON RELAIZANDO TRABAJOS EN EL SECTOR, COLOCAR
+                                ROUTER COMODATO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48480</strong></td>
+                            <td>2026-07-17 19:05:58</td>
+                            <td>33197</td>
+                            <td>SAMUEL ALCIVIADES LOPEZ GOMEZ</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>SE VALIDA SERVICIO CON CLIENTE, TODO OKIDOKI</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48482</strong></td>
+                            <td>2026-07-17 19:08:23</td>
+                            <td>35796</td>
+                            <td>DIANA DE JESUS ENRIQUEZ ZARUMA</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>SE VALIUDA SERVICIO, ADICIONAL CLIENTE TIENE UN EQUIPO ROUTER CDATA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48531</strong></td>
+                            <td>2026-07-20 10:33:51</td>
+                            <td>35796</td>
+                            <td>DIANA DE JESUS ENRIQUEZ ZARUMA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>VERIFICAR QUE ROUTER TIENE ACTUALMENTE, CAMBIAR ROUTER COMODATO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48544</strong></td>
+                            <td>2026-07-20 11:47:32</td>
+                            <td>42839</td>
+                            <td>KAROLIN LUCIA VARELA SOLANO</td>
+                            <td>CC. MATEO SAMANIEGO</td>
+                            <td>ESCALAR A TECNOLOGIA</td>
+                            <td>SE SUBE TICKET AL NOC POR PUERTO SIN POTENCIA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48554</strong></td>
+                            <td>2026-07-20 13:03:16</td>
+                            <td>42919</td>
+                            <td>MALYURI VIVIANA TOSTA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>SE SUBE TICKET AL NOC POR PUERTO SIN POTENCIA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48558</strong></td>
+                            <td>2026-07-20 14:02:53</td>
+                            <td>92i</td>
+                            <td>MARIA MARGARITA MAZA OCHOA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>CLIENTE INDICA DESCONEXIONES CONSTANTES, NO CARGAN LAS PAGINAS</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48575</strong></td>
+                            <td>2026-07-20 16:20:33</td>
+                            <td>42073</td>
+                            <td>CRISTIAN PATRICIO ANDRADE CALLE</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>NO HAY RESPUESTA DEL CLIENTE. SE VERIFICA QUE CUENTE CON SERVICIO ACTIVO, SE REALIZAN
+                                PRUEBAS TODO OPERATIVO. POSIBLEMENTE EL PROBLEMA SURGIO AYER EN LA NOCHE QUE EXISTIO LA
+                                CAIDA GENERAL.</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48581</strong></td>
+                            <td>2026-07-20 17:11:04</td>
+                            <td>0000011f</td>
+                            <td>BLANCA REBECA ICAZA PESANTEZ</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>SE INTENTA POR VARIAS OCASIONES PERO NO HAY RESPUESTA POR PARTE DEL CLIENTE. SE VERIFICA
+                                QUE CATV ESTA ACTIVO. SE REINICIA EL EQUIPO.</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48599</strong></td>
+                            <td>2026-07-20 20:02:23</td>
+                            <td>38113</td>
+                            <td>MARIA MERCEDES VEINTIMILLA RAMON</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>VISITA TECNICA</td>
+                            <td>SE GENERA VISITA POR EQUIPO ALARMADO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48618</strong></td>
+                            <td>2026-07-21 12:33:50</td>
+                            <td>31388</td>
+                            <td>LUIS IGNACIO GALLEGOS COLLAGUAZO</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>CLIENTE SOLICITA REUBICACION DE FO YA QUE INDICA QUE POSTE ESTA POR CAERSE Y VA A ROMPER
+                                LA FIBRA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48624</strong></td>
+                            <td>2026-07-21 13:58:16</td>
+                            <td>41176</td>
+                            <td>JOSE RAIMUNDO VILLAVICENCIO TAPIA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>SE INFORMA HORARIO DE VT</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48629</strong></td>
+                            <td>2026-07-21 15:38:22</td>
+                            <td>43112</td>
+                            <td>MARIA CARLOTA GRANDA CALLE</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>CLIENTE CON TV DESCONFIGURADO, SE PROCEDE A SINTONIZAR NUEVAMENTE LOS CANALES. CLIENTE
+                                QUEDA CON SERVICIO OK</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48639</strong></td>
+                            <td>2026-07-21 17:01:30</td>
+                            <td>381890</td>
+                            <td>ANTONIO CONTARDO CUZCO GUAMAN</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>VISITA TECNICA</td>
+                            <td>SE GENERA VISITA TECNICA POR EQUIPO ALARMADO. CLIENTE SOLICITA PARA LAS 2:30PM</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48694</strong></td>
+                            <td>2026-07-22 12:47:04</td>
+                            <td>34450</td>
+                            <td>SEGUNDO AMBROCIO BURUHAN CHILLOGALLY</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>REVISAR CONECTORES Y ACOMETIDA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48706</strong></td>
+                            <td>2026-07-22 16:36:12</td>
+                            <td>29056</td>
+                            <td>JULIO CESAR GUACHICHULLCA MAZA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>REVISAR SERVICIO, COLOCAR SEGUNDO ROUTER DE SER NECESARIO, SE TIENE QUE COBRAR CABLEADO
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48730</strong></td>
+                            <td>2026-07-23 10:44:49</td>
+                            <td>40896</td>
+                            <td>MARCO EDUARDO VILLA LLIVICURA</td>
+                            <td>CC. MATEO SAMANIEGO</td>
+                            <td>VISITA TECNICA</td>
+                            <td>SE GENERA VT PARA INSTALAR ROUTER DE ALQUILER</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48732</strong></td>
+                            <td>2026-07-23 11:51:25</td>
+                            <td>15387</td>
+                            <td>CARMEN BEATRIZ ALBARRACIN TELLO</td>
+                            <td>CC. MATEO SAMANIEGO</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>SE COORDINA MIGRACION DE SERVICIO PARA LA TARDE</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48758</strong></td>
+                            <td>2026-07-23 20:39:11</td>
+                            <td>36207</td>
+                            <td>BLANCA MARIANA GUAMAN PAUCAR</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>REVISAR CONECTORES Y ACOMETIDA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48761</strong></td>
+                            <td>2026-07-23 21:10:59</td>
+                            <td>39347</td>
+                            <td>MARIA SUSANA ZHUNAULA GUAMAN</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>REVISAR NIVELES -33 DBM / -33.98 DBM</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48771</strong></td>
+                            <td>2026-07-24 11:35:35</td>
+                            <td>000</td>
+                            <td>CLIENTE NO ENCONTRADO EN DIRECTORIO (CONTRATO 000)</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE CORTA CUENTA DGO, SOLICITA PILAR</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48789</strong></td>
+                            <td>2026-07-24 12:31:04</td>
+                            <td>26408</td>
+                            <td>TENECORA DELGADO MARIA DEL LOURDES</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>CLIENTE INDICA QUE TODOS LOS DISPOSITIVOS SE DESCONECTAN, LOS EQUIPOS ESTAN CONECTADO EN
+                                LA APRTE CENTRICA DEL DOMICILIO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48805</strong></td>
+                            <td>2026-07-24 17:18:24</td>
+                            <td>395920</td>
+                            <td>CARMEN ROSA CUEVA TORRES</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>SE CONFIGURA CORRECTAMENTE DNS, SE REALIZA CAMBIO EN LAS CONFIGURACIONES, SE VALIDA CON
+                                CLIENTE INDICA SERVICIO CORRECTO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48806</strong></td>
+                            <td>2026-07-24 17:28:51</td>
+                            <td>37484</td>
+                            <td>JUAN GABRIEL GONZALEZ GUILLEN</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>SE INDICA HORARIO DE VT</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48808</strong></td>
+                            <td>2026-07-24 18:20:01</td>
+                            <td>445f</td>
+                            <td>GABRIELA FERNANDA GUIRACOCHA TAPIA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>SILVIA SOLICITA COLOCAR SEGUNDO ROUTER COMODATO, VT COBRADA $12,40 + EXCEDENTE</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48811</strong></td>
+                            <td>2026-07-24 19:17:41</td>
+                            <td>39347</td>
+                            <td>MARIA SUSANA ZHUNAULA GUAMAN</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>CLIENTE REAGENDA VISITA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48812</strong></td>
+                            <td>2026-07-24 19:35:12</td>
+                            <td>30266</td>
+                            <td>CRISTIAN FERNANDO BARBECHO BARRERA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>SE COLOCO EL ROUTER EL JUEVES, CLIENTE INDICA QUE SE APAGA CONSTANTEMENTE, REVISAR PUNTO
+                                ELECTRICO, O ADAPTADOR DE CORRIENTE</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48832</strong></td>
+                            <td>2026-07-25 12:11:17</td>
+                            <td>38522</td>
+                            <td>JORGE GORKI PACHECO REINOSO</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>VISITA TECNICA</td>
+                            <td>SE GENERA VT POR REVISION DEL SERVICIO. CLIENTE TIENE UN AX3 ACOMODATO V1. ADICIONAL
+                                VERIFICAR COBERTURA , CLIENTE COMENTA QUE EL DOMICILIO ES GRANDE.</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48836</strong></td>
+                            <td>2026-07-25 16:54:18</td>
+                            <td>30266</td>
+                            <td>CRISTIAN FERNANDO BARBECHO BARRERA</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>SE BRINDA INFORMACION SOBRE VT</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48840</strong></td>
+                            <td>2026-07-25 18:00:36</td>
+                            <td>40896</td>
+                            <td>MARCO EDUARDO VILLA LLIVICURA</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>CLIENTE PASA EL CONTACTO DEL INQUILINO | CHAT DE COORDINACION</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48853</strong></td>
+                            <td>2026-07-26 12:15:10</td>
+                            <td>701</td>
+                            <td>MUNOZ QUEZADA GERMAN</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>LEVE CORTE EN EL SERVICIO DE INTERNET, SE VALIDA SERVICIO CON CLIENTE FUNCIONAL</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48856</strong></td>
+                            <td>2026-07-26 15:23:31</td>
+                            <td>558d</td>
+                            <td>OSWALDO EDUARDO LITUMA AGUILAR</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE BRINDA INFORMACION SOBRE VT</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48865</strong></td>
+                            <td>2026-07-27 10:23:16</td>
+                            <td>358F</td>
+                            <td>FERNANDO MARCELO LEON COLLAHUAZO</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>VISITA TECNICA</td>
+                            <td>SE COORDINA REVISION DEL SERVICIO PARA VERIFICAR RED INTERNA, TIENE VARIAS
+                                INTERMITENCIAS, VERIFICAR ESTADO DE ONT Y ROUTER</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48875</strong></td>
+                            <td>2026-07-27 18:14:16</td>
+                            <td>7587</td>
+                            <td>VILLEGAS NUBLECILLA MARLENE</td>
+                            <td>CC. MATEO SAMANIEGO</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE HACE RECO POR ACUERDO DE PAGOS, AUTORIZA CARTERA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48891</strong></td>
+                            <td>2026-07-27 20:36:29</td>
+                            <td>21196</td>
+                            <td>WALTER FERNANDO PINTADO LAZO</td>
+                            <td>CC. MATEO SAMANIEGO</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE CORTA CUENTA DE ZAPPING, SOLICITA CARTERA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48958</strong></td>
+                            <td>2026-07-29 09:18:12</td>
+                            <td>398F</td>
+                            <td>JAIME LEONARDO QUILLI PAUTE</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>VISITA TECNICA</td>
+                            <td>REVISAR ACOMETIDA, POSIBLE CAMBIO DE FO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48983</strong></td>
+                            <td>2026-07-29 19:18:20</td>
+                            <td>42010</td>
+                            <td>ARNULFO NICANOR PANDO MARQUEZ</td>
+                            <td>CC. MATEO SAMANIEGO</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>SE DA INFO DE VT</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48991</strong></td>
+                            <td>2026-07-29 08:39:25</td>
+                            <td>5094</td>
+                            <td>RODRIGO ENRIQUE BELTRAN SACOTO</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>SE BRINDA INFORMACION SOBRE VISITA TECNICA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>48997</strong></td>
+                            <td>2026-07-29 14:18:49</td>
+                            <td>7734</td>
+                            <td>PATINO LOPEZ LILIA MARITZA</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE BRINDA INFORMACION SOBRE VT</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>49003</strong></td>
+                            <td>2026-07-30 09:22:29</td>
+                            <td>30684</td>
+                            <td>HOLGER BERNARDO BUENO TACURI</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE LLAMADA</td>
+                            <td>CLIENTE COMENTA QUE SERVICIO SE ENCUENTRA INTERMITENTE, SE REINCIIA YHAY QUE DEVOLVER
+                                LLAMADA A CLIENTE A LAS 2:00PM</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>49019</strong></td>
+                            <td>2026-07-30 14:11:00</td>
+                            <td>12934</td>
+                            <td>CALLE MOSCOSO MARIA PAULINA</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>RECO SOLICITA C. BARROS</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>49020</strong></td>
+                            <td>2026-07-30 14:13:02</td>
+                            <td>29765</td>
+                            <td>VIZOE OPTICAS VIZOE OPTICAS</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>29765</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>49042</strong></td>
+                            <td>2026-07-30 20:18:27</td>
+                            <td>32202</td>
+                            <td>DAVID DANIEL CHISAGUANO SANGURIMA</td>
+                            <td>CC. MATEO SAMANIEGO</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE HACE RECO POR PAGO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>49056</strong></td>
+                            <td>2026-07-30 14:16:14</td>
+                            <td>32206</td>
+                            <td>GLADYS VERONICA QUINDE TENECELA</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE RECONECTA SERVICIO POR PAGO MEDIANTE TRANSFERENCIA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>49058</strong></td>
+                            <td>2026-07-30 14:16:14</td>
+                            <td>12934</td>
+                            <td>CALLE MOSCOSO MARIA PAULINA</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>RECO SOLICITA C. BARROS</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>49062</strong></td>
+                            <td>2026-07-30 14:38:52</td>
+                            <td>40568</td>
+                            <td>JENNY EULALIA LOJA PAUCAR</td>
+                            <td>CC. LUIS SAENZ</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>CORTE DGO SOLCITIA COORDINACION</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>49114</strong></td>
+                            <td>2026-08-01 12:33:22</td>
+                            <td>30684</td>
+                            <td>HOLGER BERNARDO BUENO TACURI</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>CLIENTE REAGENDA VT PARA EL LUNES A PRIMERA HORA</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>49120</strong></td>
+                            <td>2026-08-01 16:02:59</td>
+                            <td>42319</td>
+                            <td>SIMON BELISARIO CARPIO CARPIO</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>VISITA TECNICA</td>
+                            <td>REVISAR CONECTORES Y ACOMETIDA CLIENTE INDICA POSIBLE CORTE A 50 MTS DEL DOMICILIO</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>49129</strong></td>
+                            <td>2026-08-02 09:14:53</td>
+                            <td>847f|</td>
+                            <td>VIZHNAY SANCHEZ BLANCA LUCIA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>SE DA INFORMACION</td>
+                            <td>CLIENTE INDICA QUE DESEA SUSPENDER EL SERVICIO DEBIDO A INTERMITENCIAS, SE OFRECE VISITA
+                                PARA ACTUALIZACION DE EQUIPOS, CLIENTE INDICA QUE VA A CONVERSAR CON EL ESPOSO PARA VER
+                                SI ACEPTA VISITA, VA A CONFIRMAR POR WHATSAPP</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>49138</strong></td>
+                            <td>2026-08-02 09:48:12</td>
+                            <td>39186</td>
+                            <td>BRYAM PAUL GUTAMA LLIVISACA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE CORTA CUENTA DGO, SOLICITA OPERACIONES</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>49139</strong></td>
+                            <td>2026-08-02 09:48:41</td>
+                            <td>225800</td>
+                            <td>SA CENEICA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE CORTA CUENTA DGO, SOLICITA OPERACIONES</td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>49140</strong></td>
+                            <td>2026-08-02 09:49:00</td>
+                            <td>225800</td>
+                            <td>SA CENEICA</td>
+                            <td>CC. GUISSELLA QUEZADA</td>
+                            <td>SOPORTE MEDIANTE MENSAJES</td>
+                            <td>SE CORTA CUENTA DGO, SOLICITA OPERACIONES</td>
+                        </tr>
+
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- CONCLUSIONS & ACTIONS -->
+        <div class="conclusions-box">
+            <h2>Puntos de Reforzamiento del Equipo</h2>
+            <ul class="conclusions-list">
+                <li>
+                    <strong>Sincronización Incompleta de Visitas (Técnicos):</strong> Hay un volumen alto de visitas
+                    marcadas como finalizadas o resueltas en el Drive que en Atlas siguen apareciendo como PENDIENTES o
+                    sin cerrar. Esto significa que los técnicos cierran la visita en papel o la informan verbalmente,
+                    pero el operador de CallCenter no la finaliza en la plataforma.
+                </li>
+                <li>
+                    <strong>Omisión de Registro de Atenciones Rápidas:</strong> Se registran muchas atenciones en el
+                    Excel manual que nunca entran a la base de datos de Atlas. Esto pasa cuando se resuelven soportes
+                    por llamada o chat rápido y el agente, por agilizar, no crea la ficha del cliente en el sistema.
+                </li>
+                <li>
+                    <strong>Asignación Incorrecta de Técnicos:</strong> Varias visitas tienen asignado un técnico
+                    distinto en el Excel vs la plataforma de Atlas. Esto revela reasignaciones verbales que no se
+                    actualizaron en el sistema, lo cual altera el historial de trabajos y el inventario de materiales
+                    entregados.
+                </li>
+                <li>
+                    <strong>Transición Segura al 100% Digital:</strong> Para poder dejar de usar el Excel de forma
+                    segura, el equipo debe obligatoriamente registrar cada llamada, mensaje de cobros y visita agendada
+                    <strong>directamente en Atlas</strong> al momento de atender, y desterrar por completo el ingreso
+                    masivo al final del día.
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function openTab(evt, tabId) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tab-content");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].classList.remove("active");
+            }
+            tablinks = document.getElementsByClassName("tab-btn");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].classList.remove("active");
+            }
+            document.getElementById(tabId).classList.add("active");
+            evt.currentTarget.classList.add("active");
+        }
+
+        function filterTable(input, tableId) {
+            var filter = input.value.toUpperCase();
+            var table = document.getElementById(tableId);
+            var tr = table.getElementsByTagName("tr");
+            for (var i = 1; i < tr.length; i++) {
+                var showRow = false;
+                var tdList = tr[i].getElementsByTagName("td");
+                for (var j = 0; j < tdList.length; j++) {
+                    if (tdList[j]) {
+                        var textVal = tdList[j].textContent || tdList[j].innerText;
+                        if (textVal.toUpperCase().indexOf(filter) > -1) {
+                            showRow = true;
+                            break;
+                        }
+                    }
+                }
+                tr[i].style.display = showRow ? "" : "none";
+            }
+        }
+    </script>
+</body>
+
+</html>

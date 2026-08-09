@@ -28,4 +28,5 @@ static/uploads/*
 # Executables and logs
 cloudflared-windows-amd64.exe
 request_debug.log
+.node-bin/
 

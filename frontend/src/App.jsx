@@ -12,7 +12,13 @@ import ControlCalidadTab from './components/ControlCalidadTab';
 import ReportesTab from './components/ReportesTab';
 import PublicoCuadroMando from './components/PublicoCuadroMando';
 import InventarioTab from './components/InventarioTab';
+import AsignacionBusetasTab from './components/AsignacionBusetasTab';
 import TecnicoPanel from './components/TecnicoPanel';
+import EncuestaCliente from './components/EncuestaCliente';
+import DescargarApp from './components/DescargarApp';
+import FirmaRemota from './components/FirmaRemota';
+import SeguimientoCliente from './components/SeguimientoCliente';
+import ToastContainer from './components/ToastContainer';
 
 function App() {
   const [token, setToken] = useState(null);
@@ -38,6 +44,38 @@ function App() {
     }
   }
 
+  // Check if client survey is accessed via URL path
+  if (pathname.startsWith('/encuesta/')) {
+    const parts = pathname.split('/encuesta/');
+    if (parts.length >= 2) {
+      initialTabFromUrl = 'encuesta-cliente';
+      publicTokenFromUrl = parts[1];
+    }
+  }
+
+  // Check if descargar app page is accessed
+  if (pathname.startsWith('/descargar')) {
+    initialTabFromUrl = 'descargar-app';
+  }
+
+  // Check if firma remota is accessed via URL path
+  if (pathname.startsWith('/firma-remota/') || pathname.startsWith('/firmar/')) {
+    const parts = pathname.split('/');
+    if (parts.length >= 2) {
+      initialTabFromUrl = 'firma-remota';
+      publicTokenFromUrl = parts[parts.length - 1];
+    }
+  }
+
+  // Check if seguimiento / rastreo is accessed via URL path
+  if (pathname.startsWith('/seguimiento/') || pathname.startsWith('/rastreo/')) {
+    const parts = pathname.split('/');
+    if (parts.length >= 2) {
+      initialTabFromUrl = 'seguimiento-cliente';
+      publicTokenFromUrl = parts[parts.length - 1];
+    }
+  }
+
   // Check if technician panel is accessed via URL path
   let initialTecnicoNombre = '';
   if (pathname.startsWith('/tecnico/')) {
@@ -52,20 +90,34 @@ function App() {
   const [activeTab, setActiveTab] = useState(initialTabFromUrl || 'visitas');
   const [activeArea, setActiveArea] = useState('SOPORTE');
   const [tecnicoNombre, setTecnicoNombre] = useState(initialTecnicoNombre);
+  const [initialVisitData, setInitialVisitData] = useState(null);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem('token');
-    const savedUser = localStorage.getItem('user');
+    let savedToken = localStorage.getItem('token') || localStorage.getItem('session_token') || 'tec-auth-token';
+    let savedUserStr = localStorage.getItem('user');
+    let parsedUser = null;
 
-    if (savedToken && savedUser) {
-      setToken(savedToken);
+    if (savedUserStr) {
       try {
-        setUser(JSON.parse(savedUser));
-      } catch (e) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        parsedUser = JSON.parse(savedUserStr);
+      } catch (e) {}
+    }
+
+    if (!parsedUser) {
+      const legacyName = localStorage.getItem('user_name');
+      const legacyRole = localStorage.getItem('user_role');
+      if (legacyName || legacyRole || initialTecnicoNombre) {
+        parsedUser = {
+          nombre: legacyName || initialTecnicoNombre || 'Técnico',
+          rol: legacyRole || 'TECNICO',
+          user_role: legacyRole || 'TECNICO'
+        };
       }
     }
+
+    if (savedToken) setToken(savedToken);
+    if (parsedUser) setUser(parsedUser);
+
     setInitialized(true);
   }, []);
 
@@ -99,7 +151,28 @@ function App() {
     setUser(newUser);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('session_token');
+    localStorage.removeItem('user_id');
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('user_name');
+    
+    if (window.AndroidBridge) {
+      try {
+        window.AndroidBridge.stopTracking();
+      } catch (e) {
+        console.error("Error stopping tracking:", e);
+      }
+    }
+    
+    try {
+      await fetch('/logout');
+    } catch (e) {
+      console.error(e);
+    }
+    
     setToken(null);
     setUser(null);
   };
@@ -117,10 +190,46 @@ function App() {
     return <PublicoCuadroMando fecha={initialFechaFromUrl} token={publicTokenFromUrl} />;
   }
 
+  // Handle Client Satisfaction Survey without demanding login
+  if (activeTab === 'encuesta-cliente') {
+    return <EncuestaCliente token={publicTokenFromUrl} />;
+  }
+
+  // Handle Descargar App Landing without demanding login
+  if (activeTab === 'descargar-app') {
+    return <DescargarApp />;
+  }
+
+  // Handle Client Signature without demanding login
+  if (activeTab === 'firma-remota') {
+    return <FirmaRemota token={publicTokenFromUrl} />;
+  }
+
+  // Handle Client Live Tracking without demanding login
+  if (activeTab === 'seguimiento-cliente') {
+    return <SeguimientoCliente token={publicTokenFromUrl} />;
+  }
+
+  // Handle Technician Panel directly without demanding admin login
+  if (activeTab === 'tecnico-panel') {
+    return <TecnicoPanel token={token} user={user} tecnicoNombreParam={tecnicoNombre} onLogout={handleLogout} />;
+  }
+
+  const handleNavigateToRegistroVisitas = (data) => {
+    setInitialVisitData(data);
+    setActiveTab('registro');
+  };
+
   // Render content depending on activeTab
   const renderTabContent = () => {
     if (activeTab === 'registro-atencion') {
-      return <AtencionesTab token={token} user={user} />;
+      return (
+        <AtencionesTab 
+          token={token} 
+          user={user} 
+          onNavigateToRegistroVisitas={handleNavigateToRegistroVisitas} 
+        />
+      );
     }
     if (activeTab === 'buscar-cliente') {
       return <BuscadorClienteTab token={token} />;
@@ -129,7 +238,15 @@ function App() {
       return <MapaTecnicosTab token={token} activeArea={activeArea} />;
     }
     if (activeTab === 'registro') {
-      return <RegistroVisitasTab token={token} user={user} activeArea={activeArea} />;
+      return (
+        <RegistroVisitasTab 
+          token={token} 
+          user={user} 
+          activeArea={activeArea} 
+          initialVisitData={initialVisitData}
+          onClearInitialData={() => setInitialVisitData(null)}
+        />
+      );
     }
     if (activeTab === 'visitas') {
       return <VisitasTab token={token} user={user} />;
@@ -149,6 +266,9 @@ function App() {
     if (activeTab === 'inventario') {
       return <InventarioTab token={token} />;
     }
+    if (activeTab === 'asignacion-busetas') {
+      return <AsignacionBusetasTab token={token} />;
+    }
     
     // Placeholder for tabs that are not migrated yet
     return (
@@ -165,27 +285,26 @@ function App() {
 
   return (
     <>
-      {token && user ? (
-        user.role === 'TECNICO' || activeTab === 'tecnico-panel' ? (
-          <TecnicoPanel token={token} user={user} tecnicoNombreParam={tecnicoNombre} />
-        ) : (
-          <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
-            {/* Barra Lateral (Sidebar) */}
-            <Sidebar
-              user={user}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              activeArea={activeArea}
-              onAreaChange={setActiveArea}
-              onLogout={handleLogout}
-            />
-            
-            {/* Contenido Principal (Main Area) */}
-            <main className="main-content" style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, height: '100%', overflow: 'hidden', background: 'var(--bg-color)' }}>
-              {renderTabContent()}
-            </main>
-          </div>
-        )
+      <ToastContainer />
+      {(user && (user.rol === 'TECNICO' || user.role === 'TECNICO' || user.user_role === 'TECNICO')) || activeTab === 'tecnico-panel' ? (
+        <TecnicoPanel token={token} user={user} tecnicoNombreParam={tecnicoNombre} onLogout={handleLogout} />
+      ) : token && user ? (
+        <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+          {/* Barra Lateral (Sidebar) */}
+          <Sidebar
+            user={user}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            activeArea={activeArea}
+            onAreaChange={setActiveArea}
+            onLogout={handleLogout}
+          />
+          
+          {/* Contenido Principal (Main Area) */}
+          <main className="main-content" style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, height: '100%', overflow: 'hidden', background: 'var(--bg-color)' }}>
+            {renderTabContent()}
+          </main>
+        </div>
       ) : (
         <Login onLoginSuccess={handleLoginSuccess} />
       )}

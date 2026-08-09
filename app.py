@@ -32,8 +32,8 @@ OFICINA_LAT = -2.896829
 OFICINA_LON = -78.975419
 
 app = Flask(__name__)
-# Configurar CORS para permitir peticiones desde React local
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173"]}})
+# Configurar CORS para permitir peticiones desde cualquier origen (React local, red local, etc.)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Pega aquí el código que generaste en la terminal:
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', '8b093e226bd1155f8527a13430d48a4048023c69e7cde5dcc37224407f0ac1c2') 
@@ -303,12 +303,11 @@ def login():
                 return redirect(url_for('tecnico.panel_tecnico', nombre_tecnico=nombre_url))
             elif rol == 'BODEGA':
                 return redirect(url_for('dashboard', tab='inventario'))
-            else:
-                return redirect(url_for('dashboard'))
         else:
             flash('Correo corporativo o contraseña incorrectos.', 'danger')
-            
-    return render_template('login.html')
+
+    from flask import send_from_directory
+    return send_from_directory('frontend/dist', 'index.html')
 
 @app.route('/logout')
 def logout():
@@ -472,260 +471,8 @@ def descargar_app():
 # --- 1. RUTA PRINCIPAL: El Dashboard ---
 @app.route('/')
 def dashboard():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-
-    rol = session.get('user_role')
-    if rol == 'TECNICO':
-        nombre_url = session.get('user_name', '').replace(' ', '_')
-        return redirect(url_for('tecnico.panel_tecnico', nombre_tecnico=nombre_url))
-
-    # Determinar la pestaña activa por defecto según el rol si no se especifica en la URL
-    tab_param = request.args.get('tab', '')
-    if not tab_param:
-        if rol == 'BODEGA':
-            active_tab = 'inventario'
-        else:
-            active_tab = 'visitas'
-    else:
-        active_tab = tab_param
-
-    # 1. Filtros de búsqueda (Fecha y Texto)
-    fecha_filtro_raw = request.args.get('fecha_filtro')
-    if fecha_filtro_raw is None:
-        # Carga inicial sin filtro especificado
-        fecha_busqueda = date.today().isoformat()
-    elif not fecha_filtro_raw.strip():
-        # Formulario enviado pero la fecha está vacía (p. ej., por fecha inválida en el navegador o campo limpio)
-        flash('Por favor seleccione o ingrese una fecha válida. Mostrando las visitas de hoy.', 'warning')
-        fecha_busqueda = date.today().isoformat()
-    else:
-        try:
-            fecha_filtro_raw = fecha_filtro_raw.strip()
-            # Validamos que la fecha tenga el formato y sea una fecha real en el calendario
-            from datetime import datetime
-            datetime.strptime(fecha_filtro_raw, '%Y-%m-%d')
-            fecha_busqueda = fecha_filtro_raw
-        except ValueError:
-            flash(f'La fecha "{fecha_filtro_raw}" no es válida. Se muestran las visitas de hoy.', 'warning')
-            fecha_busqueda = date.today().isoformat()
-    texto_busqueda = request.args.get('buscar_cliente', '').strip()
-
-    active_area = session.get('active_area', 'SOPORTE')
-    es_instalacion_val = 1 if active_area == 'INSTALACIONES' else 0
-
-    conexion = get_db_connection()
-    cursor = conexion.cursor(dictionary=True)
-
-    # 2. Consulta SQL: Traemos visitas del día (excluimos canceladas del conteo de paradas)
-    if texto_busqueda:
-        is_fibracom = texto_busqueda.upper().endswith('F')
-        if is_fibracom:
-            contrato_base = texto_busqueda[:-1]
-            query = """
-                SELECT v.*, t.placa_vehiculo AS placa_vehiculo_principal 
-                FROM visitas_tecnicas v
-                LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
-                WHERE v.fecha_programada = %s 
-                AND v.es_instalacion = %s
-                AND (v.cliente LIKE %s OR (v.contrato = %s AND v.empresa = 'FIBRACOM'))
-            """
-        else:
-            contrato_base = texto_busqueda
-            query = """
-                SELECT v.*, t.placa_vehiculo AS placa_vehiculo_principal 
-                FROM visitas_tecnicas v
-                LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
-                WHERE v.fecha_programada = %s 
-                AND v.es_instalacion = %s
-                AND (v.cliente LIKE %s OR (v.contrato = %s AND (v.empresa != 'FIBRACOM' OR v.empresa IS NULL)))
-            """
-        params = (fecha_busqueda, es_instalacion_val, f"%{texto_busqueda}%", contrato_base)
-    else:
-        query = """
-            SELECT v.*, t.placa_vehiculo AS placa_vehiculo_principal 
-            FROM visitas_tecnicas v
-            LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
-            WHERE v.fecha_programada = %s 
-            AND v.es_instalacion = %s
-        """
-        params = (fecha_busqueda, es_instalacion_val)
-
-    cursor.execute(query, params)
-    visitas = cursor.fetchall()
-    
-    # Parsear información técnica (Caja, Hilo, IP, etc.) para visualización en Call Center
-    visitas = parsear_informacion_tecnica(visitas)
-
-    # --- 3. MOTOR DE ORDENAMIENTO INTELIGENTE (OPTIMIZACIÓN GEOGRÁFICA) ---
-    visitas = optimizar_todas_las_visitas(visitas)
-
-    # --- 5. ESTADÍSTICAS DEL DÍA SELECCIONADO ---
-    cursor.execute("""
-        SELECT estado, COUNT(*) as total 
-        FROM visitas_tecnicas 
-        WHERE fecha_programada = %s 
-          AND es_instalacion = %s
-        GROUP BY estado
-    """, (fecha_busqueda, es_instalacion_val))
-    res_stats = cursor.fetchall()
-    
-    stats = {'pendientes': 0, 'finalizadas': 0, 'reagendadas': 0, 'canceladas': 0}
-    for s in res_stats:
-        est = s['estado']
-        if est == 'PENDIENTE': stats['pendientes'] += s['total']
-        elif est == 'FINALIZADA': stats['finalizadas'] += s['total']
-        elif est == 'REAGENDADA': stats['reagendadas'] += s['total']
-        elif est in ['CANCELADA', 'SOLVENTADA_REMOTA']: stats['canceladas'] += s['total']
-
-    # --- 6. DATOS PARA EL DASHBOARD GRÁFICO (ÚLTIMOS 30 DÍAS) ---
-    cursor = conexion.cursor(dictionary=True)
-    
-    # A. Gráfico de Barras: Visitas finalizadas por día
-    query_barras = """
-        SELECT DATE_FORMAT(fecha_programada, '%m-%d') as dia, COUNT(*) as total 
-        FROM visitas_tecnicas 
-        WHERE estado IN ('FINALIZADA', 'SOLVENTADA_REMOTA')
-        AND es_instalacion = %s
-        AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-        GROUP BY fecha_programada 
-        ORDER BY fecha_programada ASC
-    """
-    cursor.execute(query_barras, (es_instalacion_val,))
-    datos_barras = cursor.fetchall()
-    
-    # Convertimos a listas separadas para Chart.js
-    labels_barras = [d['dia'] for d in datos_barras]
-    valores_barras = [d['total'] for d in datos_barras]
-
-    # B. Gráfico de Anillo: Distribución por Problema/Servicio o Producto/Servicio
-    if es_instalacion_val == 1:
-        query_problemas = """
-            SELECT producto as problema, COUNT(*) as total 
-            FROM visitas_tecnicas 
-            WHERE es_instalacion = 1
-            AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-            GROUP BY producto 
-            ORDER BY total DESC LIMIT 5
-        """
-    else:
-        query_problemas = """
-            SELECT problema, COUNT(*) as total 
-            FROM visitas_tecnicas 
-            WHERE es_instalacion = 0
-            AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-            GROUP BY problema 
-            ORDER BY total DESC LIMIT 5
-        """
-    cursor.execute(query_problemas)
-    datos_anillo_prob = cursor.fetchall()
-    labels_prob = [d['problema'] for d in datos_anillo_prob]
-    valores_prob = [d['total'] for d in datos_anillo_prob]
-
-    # C. Gráfico de Anillo: Distribución por Sector
-    query_sectores = """
-        SELECT sector, COUNT(*) as total 
-        FROM visitas_tecnicas 
-        WHERE es_instalacion = %s
-        AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-        GROUP BY sector 
-        ORDER BY total DESC LIMIT 5
-    """
-    cursor.execute(query_sectores, (es_instalacion_val,))
-    datos_anillo_sec = cursor.fetchall()
-    labels_sec = [d['sector'] for d in datos_anillo_sec]
-    valores_sec = [d['total'] for d in datos_anillo_sec]
-
-    query_tiempos = """
-        SELECT solucion_tecnico, 
-               AVG(TIMESTAMPDIFF(MINUTE, hora_inicio_visita, hora_fin_visita)) as tiempo_promedio
-        FROM visitas_tecnicas 
-        WHERE estado = 'FINALIZADA' 
-        AND es_instalacion = %s
-        AND hora_inicio_visita IS NOT NULL 
-        AND hora_fin_visita IS NOT NULL
-        AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-        GROUP BY solucion_tecnico
-    """
-    cursor.execute(query_tiempos, (es_instalacion_val,))
-    datos_tiempos = cursor.fetchall()
-    
-    # Procesar listas para JS
-    labels_tiempos = [d['solucion_tecnico'] for d in datos_tiempos]
-    valores_tiempos = [float(d['tiempo_promedio'] or 0) for d in datos_tiempos]
-
-    # Consultar recordatorios y bloqueos activos para la fecha actual de búsqueda
-    cursor.execute("""
-        SELECT r.*, t.nombre as tecnico_nombre 
-        FROM recordatorios_bloqueos r
-        LEFT JOIN tecnicos t ON r.tecnico_id = t.id_tecnico
-        WHERE r.fecha = %s AND r.activo = 1
-        ORDER BY r.hora_inicio ASC
-    """, (fecha_busqueda,))
-    recordatorios_hoy = cursor.fetchall()
-    for r in recordatorios_hoy:
-        if r['hora_inicio']:
-            tot_sec = int(r['hora_inicio'].total_seconds())
-            r['hora_inicio_str'] = f"{tot_sec // 3600:02d}:{(tot_sec % 3600) // 60:02d}"
-        else:
-            r['hora_inicio_str'] = None
-        if r['hora_fin']:
-            tot_sec = int(r['hora_fin'].total_seconds())
-            r['hora_fin_str'] = f"{tot_sec // 3600:02d}:{(tot_sec % 3600) // 60:02d}"
-        else:
-            r['hora_fin_str'] = None
-
-    # Consultar cantidad de visitas pendientes específicamente del día de ayer
-    cursor.execute("""
-        SELECT COUNT(*) as total 
-        FROM visitas_tecnicas 
-        WHERE fecha_programada = DATE_SUB(CURDATE(), INTERVAL 1 DAY) 
-          AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA', 'REAGENDADA')
-          AND es_instalacion = %s
-    """, (es_instalacion_val,))
-    cant_pendientes_atrasadas = cursor.fetchone()['total'] or 0
-    ayer_fecha = (date.today() - timedelta(days=1)).isoformat()
-
-    # Verificar si el usuario actual (ADMIN o ASESOR) es también un técnico activo
-    nombre_usuario = session.get('user_name', '')
-    es_tecnico_activo = False
-    if nombre_usuario:
-        try:
-            cursor_tec = conexion.cursor()
-            cursor_tec.execute("SELECT 1 FROM tecnicos WHERE nombre = %s AND activo = 1", (nombre_usuario,))
-            if cursor_tec.fetchone():
-                es_tecnico_activo = True
-            cursor_tec.close()
-        except Exception as e:
-            print(f"Error checking if user is active tech: {e}")
-
-    # Cerrar cursor y conexión a la base de datos
-    try:
-        cursor.close()
-        conexion.close()
-    except Exception as e:
-        print(f"Error al cerrar la conexión en dashboard: {e}")
-
-    # Pasamos las nuevas variables al template
-    return render_template('index.html', 
-                           visitas=visitas, 
-                           stats=stats, 
-                           fecha_actual=fecha_busqueda,
-                           active_tab=active_tab,
-                           sectores=obtener_sectores_activos(), 
-                           tecnicos=obtener_tecnicos_activos(session.get('active_area')),
-                           problemas=obtener_problemas_activos(),
-                           asesor=session.get('user_name', 'Asesor'),
-                           recordatorios_hoy=recordatorios_hoy,
-                           es_tecnico_activo=es_tecnico_activo,
-                           cant_pendientes_atrasadas=cant_pendientes_atrasadas,
-                           ayer_fecha=ayer_fecha,
-                           # Variables para gráficos:
-                           labels_barras=labels_barras, val_barras=valores_barras,
-                           labels_prob=labels_prob, val_prob=valores_prob,
-                           labels_sec=labels_sec, val_sec=valores_sec,
-                           labels_tiempos=labels_tiempos, 
-                           valores_tiempos=valores_tiempos)
+    from flask import send_from_directory
+    return send_from_directory('frontend/dist', 'index.html')
 
 
 
@@ -819,6 +566,42 @@ def obtener_problemas_activos():
             cursor.close()
             conexion.close()
 
+
+
+# --- SERVING REACT STATIC PRODUCTION ASSETS & SPA ROUTING FALLBACK ---
+@app.route('/assets/<path:path>')
+def serve_react_assets(path):
+    from flask import send_from_directory
+    return send_from_directory('frontend/dist/assets', path)
+
+@app.route('/<path:path>')
+def serve_react_root_files(path):
+    import os
+    from flask import send_from_directory
+    dist_dir = 'frontend/dist'
+    
+    # If the file exists in React build folder, serve it directly
+    if os.path.exists(os.path.join(dist_dir, path)):
+        return send_from_directory(dist_dir, path)
+    
+    # Handle public client routes directly
+    if path.startswith('seguimiento/') or path.startswith('rastreo/'):
+        parts = path.split('/')
+        token = parts[1] if len(parts) > 1 else ''
+        from routers.cliente_router import rastreo_cliente
+        return rastreo_cliente(token)
+
+    if path.startswith('firma-remota/') or path.startswith('firmar/'):
+        parts = path.split('/')
+        token = parts[1] if len(parts) > 1 else ''
+        from routers.cliente_router import firmar_remoto
+        return firmar_remoto(token)
+
+    # If it is not a backend API/public request, fallback to index.html for React Router
+    if not path.startswith('api/') and not path.startswith('static/') and not path.startswith('publico/'):
+        return send_from_directory(dist_dir, 'index.html')
+        
+    return "Not Found", 404
 
 
 if __name__ == '__main__':

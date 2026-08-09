@@ -2,7 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 
 function ReportesTab({ token, initialSubTab, initialFecha }) {
   const Chart = window.Chart;
-  const getTodayStr = () => new Date().toISOString().split('T')[0];
+  const getTodayStr = (d = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   // Report Sub-tabs: 'calidad', 'actividades', 'dia-siguiente', 'cuadro-mando'
   const [reportSubTab, setReportSubTab] = useState(initialSubTab || 'calidad');
@@ -196,13 +201,55 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
     }
   };
 
-  const getExcelDownloadUrl = () => {
-    let typePath = 'calidad';
-    if (reportSubTab === 'actividades') typePath = 'actividades';
-    if (reportSubTab === 'dia-siguiente') typePath = 'dia_siguiente';
-    if (reportSubTab === 'cuadro-mando') typePath = 'cuadro_mando';
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
 
-    return `/admin/reportes/descargar/${typePath}?fecha=${fecha}&es_instalacion=${tipoServicio}`;
+  const handleDownloadExcel = async () => {
+    setDownloadingExcel(true);
+    try {
+      let endpoint = '';
+      let filename = `Reporte_${reportSubTab}_${fecha}.xlsx`;
+
+      if (reportSubTab === 'calidad') {
+        endpoint = `/api/admin/reporte_calidad/excel?fecha=${fecha}&es_instalacion=${tipoServicio}`;
+        filename = `Reporte_Calidad_${fecha}.xlsx`;
+      } else if (reportSubTab === 'actividades') {
+        endpoint = `/api/admin/reporte_actividades/excel?fecha=${fecha}&es_instalacion=${tipoServicio}`;
+        filename = `Reporte_Actividades_${fecha}.xlsx`;
+      } else if (reportSubTab === 'dia-siguiente') {
+        endpoint = `/api/admin/reporte_dia_siguiente/excel?fecha=${fecha}`;
+        filename = `Reporte_Dia_Siguiente_${fecha}.xlsx`;
+      } else if (reportSubTab === 'cuadro-mando') {
+        let query = `fecha=${fecha}`;
+        if (agenteA) query += `&agente_a=${encodeURIComponent(agenteA)}`;
+        if (agenteB) query += `&agente_b=${encodeURIComponent(agenteB)}`;
+        if (agenteC) query += `&agente_c=${encodeURIComponent(agenteC)}`;
+        endpoint = `/api/admin/cuadro_mando/excel?${query}`;
+        filename = `Reporte_Cuadro_Mando_${fecha}.xlsx`;
+      }
+
+      const res = await fetch(endpoint, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!res.ok) {
+        throw new Error("Error en la respuesta del servidor al generar el Excel.");
+      }
+
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Error al descargar Excel:", err);
+      alert("No se pudo descargar el archivo Excel. Por favor reintenta.");
+    } finally {
+      setDownloadingExcel(false);
+    }
   };
 
   const handleShareLink = async () => {
@@ -212,14 +259,27 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
       });
       const data = await res.json();
       if (data.status === 'ok' && data.url) {
-        await navigator.clipboard.writeText(data.url);
-        alert(`¡Enlace del Reporte Público Gerencial copiado al portapapeles! 🔗\n\n${data.url}`);
+        let copied = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(data.url);
+            copied = true;
+          }
+        } catch (clipErr) {
+          console.warn("Clipboard write failed, using prompt fallback:", clipErr);
+        }
+
+        if (copied) {
+          alert(`¡Enlace del Reporte Público Gerencial copiado al portapapeles! 🔗\n\n${data.url}`);
+        } else {
+          window.prompt("Copia el siguiente enlace del Reporte Público Gerencial:", data.url);
+        }
       } else {
         alert(data.message || "No se pudo generar el enlace público.");
       }
     } catch (err) {
       console.error("Error al compartir el enlace:", err);
-      alert("Error de conexión al obtener el enlace público.");
+      alert("No se pudo obtener el enlace público. Por favor verifica la conexión.");
     }
   };
 
@@ -366,17 +426,18 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
               </button>
             )}
 
-            <a
-              href={getExcelDownloadUrl()}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
+              disabled={downloadingExcel}
+              onClick={handleDownloadExcel}
               style={{
                 background: reportSubTab === 'calidad' ? '#16a34a' : reportSubTab === 'actividades' ? '#ea580c' : reportSubTab === 'dia-siguiente' ? '#0284c7' : '#1f497d',
-                color: 'white', padding: '11px 24px', borderRadius: '12px', fontWeight: 800, fontSize: '0.9rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+                color: 'white', border: 'none', padding: '11px 24px', borderRadius: '12px', fontWeight: 800, fontSize: '0.9rem', cursor: downloadingExcel ? 'wait' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)', opacity: downloadingExcel ? 0.7 : 1
               }}
             >
-              <i className="fa-solid fa-file-excel"></i> Descargar Reporte Excel
-            </a>
+              <i className={`fa-solid ${downloadingExcel ? 'fa-spinner fa-spin' : 'fa-file-excel'}`}></i>
+              {downloadingExcel ? 'Generando Excel...' : 'Descargar Reporte Excel'}
+            </button>
           </div>
         </div>
       </div>
@@ -796,6 +857,24 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
                                 );
                               })}
                             </tbody>
+                            {(() => {
+                              const at = dataCuadroMando.atenciones || {};
+                              const totA = (at.visitas_coordinadas?.[0] || 0) + (at.solventado_llamada?.[0] || 0) + (at.solventado_mensajes?.[0] || 0) + (at.solventado_oficina?.[0] || 0) + (soporteA || 0) + (at.otros?.[0] || 0);
+                              const totB = (at.visitas_coordinadas?.[1] || 0) + (at.solventado_llamada?.[1] || 0) + (at.solventado_mensajes?.[1] || 0) + (at.solventado_oficina?.[1] || 0) + (soporteB || 0) + (at.otros?.[1] || 0);
+                              const totC = (at.visitas_coordinadas?.[2] || 0) + (at.solventado_llamada?.[2] || 0) + (at.solventado_mensajes?.[2] || 0) + (at.solventado_oficina?.[2] || 0) + (soporteC || 0) + (at.otros?.[2] || 0);
+                              const totGeneral = totA + totB + totC;
+                              return (
+                                <tfoot>
+                                  <tr style={{ borderTop: '2px solid var(--border-color)', fontWeight: 900 }}>
+                                    <td style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 900, background: '#1f497d', color: 'white', textTransform: 'uppercase', fontSize: '0.8rem' }}>TOTAL DE GESTIONES POR ASESOR</td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#d9e1f2', color: '#1f497d', fontWeight: 900, fontSize: '1.05rem' }}>{totA}</td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#e2efda', color: '#1f497d', fontWeight: 900, fontSize: '1.05rem' }}>{totB}</td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#fce4d6', color: '#1f497d', fontWeight: 900, fontSize: '1.05rem' }}>{totC}</td>
+                                    <td style={{ padding: '10px 12px', textAlign: 'center', background: '#1f497d', color: 'white', fontWeight: 900, fontSize: '1.15rem' }}>{totGeneral}</td>
+                                  </tr>
+                                </tfoot>
+                              );
+                            })()}
                           </table>
                         </div>
                       </div>

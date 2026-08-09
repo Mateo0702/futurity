@@ -11,6 +11,7 @@ function UsuariosTab({ token, user }) {
   const [usuarios, setUsuarios] = useState([]);
   const [tecnicos, setTecnicos] = useState([]);
   const [recordatorios, setRecordatorios] = useState([]);
+  const [listaVehiculos, setListaVehiculos] = useState([]);
 
   // Search Filters
   const [searchUser, setSearchUser] = useState('');
@@ -32,9 +33,51 @@ function UsuariosTab({ token, user }) {
   const [showTecnicoModal, setShowTecnicoModal] = useState(false);
   const [editingTecnico, setEditingTecnico] = useState(null);
   const [tecnicoForm, setTecnicoForm] = useState({ nombre: '', placa_vehiculo: '', area_trabajo: 'SOPORTE', activo: 1 });
+  const [fotoPerfilFile, setFotoPerfilFile] = useState(null);
+  const [fotoVehiculoFile, setFotoVehiculoFile] = useState(null);
+
+  const getTodayLocalStr = (d = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   const [showRecordatorioModal, setShowRecordatorioModal] = useState(false);
-  const [recForm, setRecForm] = useState({ titulo: '', descripcion: '', tipo: 'BLOQUEO DE HORARIO', fecha: new Date().toISOString().split('T')[0], hora_inicio: '', hora_fin: '', tecnico_id: '' });
+  const [recForm, setRecForm] = useState({
+    titulo: '',
+    descripcion: '',
+    tipo: 'LLAMAR A CLIENTE',
+    fecha: getTodayLocalStr(),
+    hora_inicio: '',
+    hora_fin: '',
+    tecnico_id: '',
+    contrato: '',
+    cliente: '',
+    celular: ''
+  });
+
+  const handleContratoBlur = async () => {
+    if (!recForm.contrato || !recForm.contrato.trim()) return;
+    try {
+      const res = await fetch(`/api/cliente/buscar_contrato_json?contrato=${encodeURIComponent(recForm.contrato.trim())}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.status === 'success' && data.cliente) {
+        const cName = data.cliente.cliente || '';
+        const cPhone = data.cliente.telefono1 || data.cliente.telefono2 || '';
+        setRecForm(prev => ({
+          ...prev,
+          cliente: cName,
+          celular: cPhone,
+          titulo: prev.titulo || `Llamar a ${cName} (Contrato #${prev.contrato.trim()})`
+        }));
+      }
+    } catch (e) {
+      console.error("Error buscando contrato en recordatorio:", e);
+    }
+  };
 
   // Initial Fetch
   useEffect(() => {
@@ -59,6 +102,13 @@ function UsuariosTab({ token, user }) {
       });
       const tData = await tRes.json();
       if (tData.status === 'ok') setTecnicos(tData.tecnicos || []);
+
+      // Fetch Vehicles list for dropdown
+      const vRes = await fetch('/api/admin/vehiculos', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const vData = await vRes.json();
+      if (vData.status === 'ok') setListaVehiculos(vData.vehiculos || []);
 
       // Fetch Recordatorios
       const rRes = await fetch('/api/admin/recordatorios', {
@@ -154,6 +204,8 @@ function UsuariosTab({ token, user }) {
   const handleOpenCreateTecnico = () => {
     setEditingTecnico(null);
     setTecnicoForm({ nombre: '', placa_vehiculo: '', area_trabajo: 'SOPORTE', activo: 1 });
+    setFotoPerfilFile(null);
+    setFotoVehiculoFile(null);
     setShowTecnicoModal(true);
   };
 
@@ -164,6 +216,12 @@ function UsuariosTab({ token, user }) {
     formData.append('placa_vehiculo', tecnicoForm.placa_vehiculo);
     formData.append('area_trabajo', tecnicoForm.area_trabajo);
     formData.append('activo', tecnicoForm.activo);
+    if (fotoPerfilFile) {
+      formData.append('foto_perfil', fotoPerfilFile);
+    }
+    if (fotoVehiculoFile) {
+      formData.append('foto_vehiculo', fotoVehiculoFile);
+    }
 
     const endpoint = editingTecnico ? `/api/admin/tecnicos/${editingTecnico.id_tecnico}` : '/api/admin/tecnicos';
 
@@ -177,6 +235,8 @@ function UsuariosTab({ token, user }) {
       if (data.status === 'ok') {
         alert(data.message);
         setShowTecnicoModal(false);
+        setFotoPerfilFile(null);
+        setFotoVehiculoFile(null);
         loadAllData();
       } else {
         alert(data.message);
@@ -216,7 +276,7 @@ function UsuariosTab({ token, user }) {
       if (data.status === 'ok') {
         alert("Recordatorio/Bloqueo creado con éxito.");
         setShowRecordatorioModal(false);
-        setRecForm({ titulo: '', descripcion: '', tipo: 'BLOQUEO DE HORARIO', fecha: new Date().toISOString().split('T')[0], hora_inicio: '', hora_fin: '', tecnico_id: '' });
+        setRecForm({ titulo: '', descripcion: '', tipo: 'BLOQUEO DE HORARIO', fecha: getTodayLocalStr(), hora_inicio: '', hora_fin: '', tecnico_id: '' });
         loadAllData();
       } else {
         alert(data.message);
@@ -472,7 +532,18 @@ function UsuariosTab({ token, user }) {
                       {filteredTecnicos.map((t) => (
                         <tr key={t.id_tecnico} style={{ borderBottom: '1px solid var(--border-color)' }}>
                           <td style={{ padding: '16px 20px', fontWeight: 800, color: 'var(--text-main)' }}>
-                            <i className="fa-solid fa-user-gear" style={{ marginRight: '8px', color: 'var(--primary)' }}></i>
+                            {t.foto_perfil && t.foto_perfil !== 'default_avatar.png' ? (
+                              <img 
+                                src={`/static/uploads/${t.foto_perfil}`} 
+                                alt={t.nombre} 
+                                onError={(e) => { e.target.style.display = 'none'; }}
+                                style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', marginRight: '10px', verticalAlign: 'middle', border: '1px solid var(--border-color)' }} 
+                              />
+                            ) : (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', color: 'white', fontWeight: 900, fontSize: '0.85rem', marginRight: '10px', verticalAlign: 'middle' }}>
+                                {t.nombre ? t.nombre.trim().charAt(0).toUpperCase() : 'T'}
+                              </span>
+                            )}
                             {t.nombre}
                           </td>
                           <td style={{ padding: '16px 20px', fontWeight: 700, color: '#6366f1' }}>
@@ -494,7 +565,7 @@ function UsuariosTab({ token, user }) {
                                 <button
                                   type="button"
                                   title="Editar Técnico"
-                                  onClick={() => { setEditingTecnico(t); setTecnicoForm({ nombre: t.nombre, placa_vehiculo: t.placa_vehiculo || '', area_trabajo: t.area_trabajo || 'SOPORTE', activo: t.activo ? 1 : 0 }); setShowTecnicoModal(true); }}
+                                  onClick={() => { setEditingTecnico(t); setTecnicoForm({ nombre: t.nombre, placa_vehiculo: t.placa_vehiculo || '', area_trabajo: t.area_trabajo || 'SOPORTE', activo: t.activo ? 1 : 0 }); setFotoPerfilFile(null); setFotoVehiculoFile(null); setShowTecnicoModal(true); }}
                                   style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', color: 'var(--primary)', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}
                                 >
                                   <i className="fa-solid fa-pen"></i>
@@ -715,14 +786,19 @@ function UsuariosTab({ token, user }) {
                 />
               </div>
               <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Placa del Vehículo:</label>
-                <input
-                  type="text"
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Placa Titular del Vehículo / Buseta:</label>
+                <select
                   value={tecnicoForm.placa_vehiculo}
                   onChange={(e) => setTecnicoForm({ ...tecnicoForm, placa_vehiculo: e.target.value })}
-                  placeholder="Ej. ABC-1234"
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)' }}
-                />
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
+                >
+                  <option value="">-- Seleccionar Placa de la Flota --</option>
+                  {listaVehiculos.filter(v => v.activo === 1).map((v, idx) => (
+                    <option key={idx} value={v.placa}>
+                      🚘 {v.placa} ({v.descripcion || 'Buseta de flota'})
+                    </option>
+                  ))}
+                </select>
               </div>
               <div style={{ marginBottom: '15px' }}>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Área de Trabajo:</label>
@@ -735,6 +811,40 @@ function UsuariosTab({ token, user }) {
                   <option value="INSTALACIONES">INSTALACIONES</option>
                 </select>
               </div>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Foto de Perfil (Opcional):</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setFotoPerfilFile(e.target.files[0] || null)}
+                  style={{ width: '100%', fontSize: '0.85rem', color: 'var(--text-main)' }}
+                />
+              </div>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Foto del Vehículo (Opcional):</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setFotoVehiculoFile(e.target.files[0] || null)}
+                  style={{ width: '100%', fontSize: '0.85rem', color: 'var(--text-main)' }}
+                />
+              </div>
+              {editingTecnico && (editingTecnico.foto_perfil || editingTecnico.foto_vehiculo) && (
+                <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
+                  {editingTecnico.foto_perfil && (
+                    <div>
+                      <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--sidebar-text)', marginBottom: '2px' }}>Perfil Actual:</span>
+                      <img src={`/static/uploads/${editingTecnico.foto_perfil}`} alt="Perfil" style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border-color)' }} />
+                    </div>
+                  )}
+                  {editingTecnico.foto_vehiculo && (
+                    <div>
+                      <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--sidebar-text)', marginBottom: '2px' }}>Vehículo Actual:</span>
+                      <img src={`/static/uploads/${editingTecnico.foto_vehiculo}`} alt="Vehículo" style={{ width: '70px', height: '50px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--border-color)' }} />
+                    </div>
+                  )}
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '25px' }}>
                 <button type="button" onClick={() => setShowTecnicoModal(false)} style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', padding: '10px 18px', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}>
                   Cancelar
@@ -757,59 +867,94 @@ function UsuariosTab({ token, user }) {
             </h3>
             <form onSubmit={handleSaveRecordatorio}>
               <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Título:</label>
-                <input
-                  type="text"
-                  required
-                  value={recForm.titulo}
-                  onChange={(e) => setRecForm({ ...recForm, titulo: e.target.value })}
-                  placeholder="Ej. Reunión de Equipo / Conteo Bodega"
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)' }}
-                />
-              </div>
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Tipo de Bloqueo:</label>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Tipo de Recordatorio / Bloqueo:</label>
                 <select
                   value={recForm.tipo}
                   onChange={(e) => setRecForm({ ...recForm, tipo: e.target.value })}
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
                 >
-                  <option value="BLOQUEO DE HORARIO">BLOQUEO DE HORARIO</option>
-                  <option value="REUNIÓN">REUNIÓN DE EQUIPO</option>
-                  <option value="INVENTARIO">INVENTARIO / BODEGA</option>
-                  <option value="RECORDATORIO INDIVIDUAL">RECORDATORIO INDIVIDUAL</option>
+                  <option value="LLAMAR A CLIENTE">📞 LLAMAR A CLIENTE</option>
+                  <option value="BLOQUEO DE HORARIO">🚫 BLOQUEO DE HORARIO</option>
+                  <option value="REUNIÓN">👥 REUNIÓN DE EQUIPO</option>
+                  <option value="INVENTARIO">📦 INVENTARIO / BODEGA</option>
+                  <option value="RECORDATORIO INDIVIDUAL">📌 RECORDATORIO INDIVIDUAL</option>
                 </select>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '15px' }}>
+
+              {/* Si es LLAMAR A CLIENTE: mostrar campos de Contrato, Cliente y Celular */}
+              {recForm.tipo === 'LLAMAR A CLIENTE' && (
+                <div style={{ background: 'rgba(37, 99, 235, 0.06)', border: '1px solid rgba(37, 99, 235, 0.2)', padding: '14px', borderRadius: '12px', marginBottom: '15px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '10px', marginBottom: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>📄 Nº Contrato:</label>
+                      <input
+                        type="text"
+                        value={recForm.contrato}
+                        onChange={(e) => setRecForm({ ...recForm, contrato: e.target.value })}
+                        onBlur={handleContratoBlur}
+                        placeholder="Ej. 1234 (Enter / Tab para autocompletar)"
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontWeight: 700 }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>👤 Nombre del Cliente:</label>
+                      <input
+                        type="text"
+                        value={recForm.cliente}
+                        onChange={(e) => setRecForm({ ...recForm, cliente: e.target.value })}
+                        placeholder="Se autocompleta con el contrato"
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontWeight: 600 }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>📱 Celular / Teléfono:</label>
+                    <input
+                      type="text"
+                      value={recForm.celular}
+                      onChange={(e) => setRecForm({ ...recForm, celular: e.target.value })}
+                      placeholder="Ej. 0991234567"
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontWeight: 700, color: '#2563eb' }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Título / Asunto:</label>
+                <input
+                  type="text"
+                  required
+                  value={recForm.titulo}
+                  onChange={(e) => setRecForm({ ...recForm, titulo: e.target.value })}
+                  placeholder="Ej. Llamar a Cliente / Confirmar Disponibilidad"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Fecha:</label>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>📅 Fecha:</label>
                   <input
                     type="date"
                     required
                     value={recForm.fecha}
                     onChange={(e) => setRecForm({ ...recForm, fecha: e.target.value })}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', fontWeight: 700 }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Desde:</label>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>⏰ Hora de la Llamada / Bloqueo:</label>
                   <input
                     type="time"
                     value={recForm.hora_inicio}
                     onChange={(e) => setRecForm({ ...recForm, hora_inicio: e.target.value })}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Hasta:</label>
-                  <input
-                    type="time"
-                    value={recForm.hora_fin}
-                    onChange={(e) => setRecForm({ ...recForm, hora_fin: e.target.value })}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', fontWeight: 700 }}
                   />
                 </div>
               </div>
+
               <div style={{ marginBottom: '15px' }}>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Técnico Afectado (Opcional):</label>
                 <select
@@ -817,28 +962,30 @@ function UsuariosTab({ token, user }) {
                   onChange={(e) => setRecForm({ ...recForm, tecnico_id: e.target.value })}
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)' }}
                 >
-                  <option value="">-- Todos los Técnicos --</option>
+                  <option value="">-- Todos los Técnicos / Asesores --</option>
                   {tecnicos.map((t) => (
                     <option key={t.id_tecnico} value={t.id_tecnico}>{t.nombre}</option>
                   ))}
                 </select>
               </div>
+
               <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Descripción / Nota:</label>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Comentario / Nota Adicional:</label>
                 <textarea
                   rows="2"
                   value={recForm.descripcion}
                   onChange={(e) => setRecForm({ ...recForm, descripcion: e.target.value })}
-                  placeholder="Detalles sobre el bloqueo..."
+                  placeholder="Detalles sobre el motivo de la llamada o recordatorio..."
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', resize: 'vertical' }}
                 />
               </div>
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
                 <button type="button" onClick={() => setShowRecordatorioModal(false)} style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', padding: '10px 18px', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}>
                   Cancelar
                 </button>
                 <button type="submit" style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}>
-                  Crear Bloqueo
+                  Guardar Recordatorio
                 </button>
               </div>
             </form>

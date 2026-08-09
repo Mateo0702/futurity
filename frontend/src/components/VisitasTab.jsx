@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 
 function VisitasTab({ token, user }) {
-  const getTodayLocal = () => {
-    const hoy = new Date();
-    const offset = hoy.getTimezoneOffset();
-    const hoyLocal = new Date(hoy.getTime() - (offset * 60 * 1000));
-    return hoyLocal.toISOString().split('T')[0];
+  const getTodayLocal = (d = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   // Main state
@@ -125,7 +125,7 @@ function VisitasTab({ token, user }) {
   const abrirModalCambioFO = (v) => {
     const manana = new Date();
     manana.setDate(manana.getDate() + 1);
-    const mananaStr = manana.toISOString().split('T')[0];
+    const mananaStr = getTodayLocal(manana);
 
     setModalFO({
       isOpen: true,
@@ -151,6 +151,7 @@ function VisitasTab({ token, user }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Bearer ${token}`
         },
         body: new URLSearchParams({
           id_visita_origen: modalFO.idVisitaOrigen,
@@ -192,6 +193,7 @@ function VisitasTab({ token, user }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Bearer ${token}`
         },
         body: new URLSearchParams({
           nueva_fecha: data.fecha,
@@ -224,6 +226,7 @@ function VisitasTab({ token, user }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Bearer ${token}`
         },
         body: new URLSearchParams({
           tecnico_principal: data.tecnico,
@@ -255,6 +258,7 @@ function VisitasTab({ token, user }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Bearer ${token}`
         },
         body: new URLSearchParams({
           motivo: data.motivo,
@@ -302,6 +306,8 @@ function VisitasTab({ token, user }) {
       infoVlan: v.info_vlan || '',
       infoUsr: v.info_usr || '',
       infoPas: v.info_pas || '',
+      tecnicoPrincipal: v.tecnico_principal || '',
+      tecnicoApoyo: v.tecnico_apoyo || '',
       estado: v.estado || 'PENDIENTE'
     });
   };
@@ -313,6 +319,7 @@ function VisitasTab({ token, user }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Bearer ${token}`
         },
         body: new URLSearchParams({
           cliente: modalEditar.cliente,
@@ -334,6 +341,8 @@ function VisitasTab({ token, user }) {
           info_vlan: modalEditar.infoVlan,
           info_usr: modalEditar.infoUsr,
           info_pas: modalEditar.infoPas,
+          tecnico_principal: modalEditar.tecnicoPrincipal,
+          tecnico_apoyo: modalEditar.tecnicoApoyo,
           estado: modalEditar.estado
         })
       });
@@ -396,13 +405,21 @@ function VisitasTab({ token, user }) {
 
     const tipoVisita = visita.es_instalacion ? 'INSTALACIÓN DE SERVICIO' : 'VISITA TÉCNICA DE SOPORTE';
     const horarioPref = visita.preferencia_horaria || 'En el transcurso del día';
-    const tecnico = visita.tecnico_principal || 'Cuadrilla asignada';
+    let tecnicoDisplay = 'Cuadrilla asignada';
+    if (visita.tecnico_principal && visita.tecnico_principal !== 'SIN ASIGNAR' && visita.tecnico_principal !== 'Auto' && visita.tecnico_principal.trim() !== '') {
+      if (visita.tecnico_apoyo && visita.tecnico_apoyo !== 'SIN ASIGNAR' && visita.tecnico_apoyo.trim() !== '') {
+        tecnicoDisplay = `${visita.tecnico_principal} y ${visita.tecnico_apoyo}`;
+      } else {
+        tecnicoDisplay = visita.tecnico_principal;
+      }
+    }
+
     const placa = visita.placa_vehiculo_principal ? ` (Vehículo: ${visita.placa_vehiculo_principal})` : '';
 
     const msg = `Estimado/a *${visita.cliente}*,\nLe saludamos de *Futurity Telecomunicaciones*.\n\n` +
       `Le informamos que su *${tipoVisita}* se encuentra programada para el día *${visita.fecha_programada}*.\n` +
       `⏰ Horario estimado: *${horarioPref}*\n` +
-      `👤 Técnico asignado: *${tecnico}*${placa}\n\n` +
+      `👤 Técnico asignado: *${tecnicoDisplay}*${placa}\n\n` +
       `Por favor, asegúrese de estar en el domicilio para recibir al personal técnico. ¡Gracias por preferirnos!`;
 
     const waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`;
@@ -675,7 +692,7 @@ function VisitasTab({ token, user }) {
                     if (estado === 'REAGENDADA' || solucion.includes('REAGENDADA')) {
                       return 'fila-celeste';
                     }
-                    if (solucion.includes('CAMBIO DE FO')) {
+                    if (solucion.includes('GENERAR CAMBIO DE FO') || solucion.includes('REQUIERE CAMBIO DE FO')) {
                       return 'fila-naranja';
                     }
                     if (solucion.includes('SOLUCIÓN PARCIAL') || solucion.includes('SOLUCION PARCIAL') || solucion.includes('GESTIONAR ARREGLO')) {
@@ -684,7 +701,7 @@ function VisitasTab({ token, user }) {
                     if (solucion.includes('NOC')) {
                       return 'fila-amarilla';
                     }
-                    if (solucion.includes('SATURACIÓN')) {
+                    if (solucion.includes('SATURACIÓN') || solucion.includes('SATURACION')) {
                       return 'fila-blanca';
                     }
                     if (estado === 'FINALIZADA' || estado === 'SOLVENTADA_REMOTA') {
@@ -694,7 +711,9 @@ function VisitasTab({ token, user }) {
                   };
 
                   const colorClass = getFilaColorClass(v);
-                  const isFOSolicitado = (v.solucion_tecnico || '').toUpperCase().includes('CAMBIO DE FO') || (v.observacion_tecnico || '').toUpperCase().includes('CAMBIO DE FO');
+                  const solUpper = (v.solucion_tecnico || '').toUpperCase();
+                  const obsUpper = (v.observacion_tecnico || '').toUpperCase();
+                  const isFOSolicitado = solUpper.includes('GENERAR CAMBIO DE FO') || solUpper.includes('REQUIERE CAMBIO DE FO') || obsUpper.includes('GENERAR CAMBIO DE FO');
 
                   return (
                     <React.Fragment key={v.id_visita}>
@@ -1175,7 +1194,8 @@ function VisitasTab({ token, user }) {
                                               onChange={e => setFormReasignar(prev => ({ ...prev, [v.id_visita]: { ...prev[v.id_visita], tecnico: e.target.value } }))}
                                             >
                                               <option value="">-- Selecciona Técnico --</option>
-                                              {tecnicos.map(t => (
+                                              <option value="NO TECNICO">NO TECNICO (Sin Asignar)</option>
+                                              {tecnicos.filter(t => t.nombre !== 'NO TECNICO').map(t => (
                                                 <option key={t.id_tecnico} value={t.nombre}>{t.nombre}</option>
                                               ))}
                                             </select>
@@ -1188,7 +1208,8 @@ function VisitasTab({ token, user }) {
                                               onChange={e => setFormReasignar(prev => ({ ...prev, [v.id_visita]: { ...prev[v.id_visita], apoyo: e.target.value } }))}
                                             >
                                               <option value="">-- Sin Apoyo --</option>
-                                              {tecnicos.map(t => (
+                                              <option value="NO TECNICO">NO TECNICO</option>
+                                              {tecnicos.filter(t => t.nombre !== 'NO TECNICO').map(t => (
                                                 <option key={t.id_tecnico} value={t.nombre}>{t.nombre}</option>
                                               ))}
                                             </select>
@@ -1467,6 +1488,34 @@ function VisitasTab({ token, user }) {
                     onChange={e => setModalEditar(prev => ({ ...prev, preferenciaHoraria: e.target.value }))}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
                   />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Técnico Principal:</label>
+                  <select 
+                    value={modalEditar.tecnicoPrincipal} 
+                    onChange={e => setModalEditar(prev => ({ ...prev, tecnicoPrincipal: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                  >
+                    <option value="">-- Sin Asignar --</option>
+                    <option value="NO TECNICO">NO TECNICO (Sin Asignar / Por Coordinar)</option>
+                    {tecnicos.filter(t => t.nombre !== 'NO TECNICO').map(t => (
+                      <option key={t.id_tecnico} value={t.nombre}>{t.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Técnico Apoyo (Cuadrilla):</label>
+                  <select 
+                    value={modalEditar.tecnicoApoyo} 
+                    onChange={e => setModalEditar(prev => ({ ...prev, tecnicoApoyo: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                  >
+                    <option value="">-- Sin Apoyo --</option>
+                    <option value="NO TECNICO">NO TECNICO</option>
+                    {tecnicos.filter(t => t.nombre !== 'NO TECNICO').map(t => (
+                      <option key={t.id_tecnico} value={t.nombre}>{t.nombre}</option>
+                    ))}
+                  </select>
                 </div>
                 {activeArea === 'INSTALACIONES' ? (
                   <>
