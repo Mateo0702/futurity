@@ -782,17 +782,32 @@ def obtener_historial_cliente(nombre_cliente):
     cursor = conexion.cursor(dictionary=True)
     
     try:
+        contrato_param = request.args.get('contrato', '').strip()
         # Buscamos visitas del cliente en los últimos 3 meses (90 días)
         # Filtramos para que traiga principalmente las FINALIZADAS o CANCELADAS para ver el desenlace.
-        # Soporta nombres invertidos (ej: "RAUL MOISES ORTIZ TENORIO" y "ORTIZ TENORIO RAUL MOISES") dividiendo la búsqueda por palabras.
+        # Soporta nombres invertidos dividiendo la búsqueda por palabras o por número de contrato.
         palabras = [p.strip() for p in nombre_cliente.split() if p.strip()]
-        if palabras:
-            condiciones = " AND ".join(["cliente LIKE %s" for _ in palabras])
-            valores = [f"%{p}%" for p in palabras]
+        
+        if palabras or contrato_param:
+            condiciones_list = []
+            valores = []
+            
+            if palabras:
+                cond_palabras = " AND ".join(["cliente LIKE %s" for _ in palabras])
+                condiciones_list.append(f"({cond_palabras})")
+                for p in palabras:
+                    valores.append(f"%{p}%")
+                    
+            if contrato_param:
+                condiciones_list.append("(contrato = %s OR contrato = %s)")
+                valores.append(contrato_param)
+                valores.append(contrato_param.lstrip('0'))
+                
+            cond_final = " OR ".join(condiciones_list)
             query = f"""
                 SELECT fecha_programada, problema, solucion_tecnico, observacion_tecnico, tecnico_principal, estado
                 FROM visitas_tecnicas
-                WHERE ({condiciones}) AND estado IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
+                WHERE ({cond_final}) AND estado IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
                 AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
                 ORDER BY fecha_programada DESC
             """
@@ -810,6 +825,7 @@ def obtener_historial_cliente(nombre_cliente):
         historial = cursor.fetchall()
         
         return jsonify({"status": "ok", "historial": historial})
+
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:

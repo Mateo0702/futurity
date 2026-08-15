@@ -377,10 +377,12 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
     }
     setModalHistorial({ isOpen: true, loading: true, cliente: cliente.trim(), lista: [] });
     try {
-      const res = await fetch(`/api/cliente/historial/${encodeURIComponent(cliente.trim())}`, {
+      const res = await fetch(`/api/cliente/historial/${encodeURIComponent(cliente.trim())}?contrato=${encodeURIComponent(contrato || '')}`, {
+
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
+
       if (data.status === 'ok') {
         setModalHistorial(prev => ({ ...prev, loading: false, lista: data.historial || [] }));
       } else {

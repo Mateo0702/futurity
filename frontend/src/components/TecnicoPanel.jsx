@@ -490,16 +490,20 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   };
 
   // --- Customer historical visits ---
-  const consultarHistorialCliente = async (nombreCliente) => {
+  const consultarHistorialCliente = async (nombreCliente, contrato = '') => {
     setNombreClienteHistorial(nombreCliente);
     setLoadingHistorial(true);
     setShowHistorialModal(true);
     setHistorialCliente([]);
     try {
-      const res = await fetch(`/api/cliente/historial/${encodeURIComponent(nombreCliente)}`, {
+      const url = contrato 
+        ? `/api/cliente/historial/${encodeURIComponent(nombreCliente)}?contrato=${encodeURIComponent(contrato)}`
+        : `/api/cliente/historial/${encodeURIComponent(nombreCliente)}`;
+      const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
+
       if (res.ok && data.status === 'ok') {
         setHistorialCliente(data.historial || []);
       } else {
@@ -1299,11 +1303,12 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                     </div>
                     <button 
                       type="button" 
-                      onClick={() => consultarHistorialCliente(activeVisita.cliente)} 
+                      onClick={() => consultarHistorialCliente(activeVisita.cliente, activeVisita.contrato)} 
                       style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '0.78rem', border: '1px solid #475569', background: 'transparent', color: '#38bdf8', cursor: 'pointer', fontWeight: 700 }}
                     >
                       <i className="fa-solid fa-clock-rotate-left"></i> Historial
                     </button>
+
                   </div>
 
                   <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px', flexWrap: 'wrap', gap: '6px' }}>
