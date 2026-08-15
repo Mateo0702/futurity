@@ -115,7 +115,8 @@ def api_v2_login():
                 "usuario": {
                     "id": usuario['id_usuario'],
                     "nombre": usuario['nombre'],
-                    "rol": usuario['rol']
+                    "rol": usuario['rol'],
+                    "primer_ingreso": usuario.get('primer_ingreso', 0)
                 }
             })
         else:
@@ -128,6 +129,58 @@ def api_v2_login():
             "status": "error",
             "message": f"Error del servidor: {str(ex)}"
         }), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@api_v2_bp.route('/api/v2/cambiar_password_primer_ingreso', methods=['POST'])
+def cambiar_password_primer_ingreso():
+    token = request.headers.get('Authorization')
+    if not token or not token.startswith("Bearer "):
+        return jsonify({"status": "error", "message": "Token de autenticación requerido"}), 401
+        
+    from utils_jwt import verify_token
+    user_info = verify_token(token)
+    if not user_info:
+        return jsonify({"status": "error", "message": "Sesión inválida o expirada"}), 401
+
+    data = request.json or {}
+    new_password = data.get('new_password', '').strip()
+
+    if not new_password or len(new_password) < 4:
+        return jsonify({"status": "error", "message": "La nueva contraseña debe tener al menos 4 caracteres."}), 400
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        from werkzeug.security import generate_password_hash
+        pass_hash = generate_password_hash(new_password, method='scrypt')
+        
+        user_id_val = user_info.get('sub') or user_info.get('user_id') or user_info.get('id_usuario') or user_info.get('id')
+        if not user_id_val:
+            return jsonify({"status": "error", "message": "ID de usuario no encontrado en el token"}), 400
+
+        cursor.execute("""
+            UPDATE usuarios_callcenter
+            SET password_hash = %s, primer_ingreso = 0
+            WHERE id_usuario = %s
+        """, (pass_hash, user_id_val))
+        conexion.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({"status": "error", "message": "No se encontró el registro de usuario a actualizar."}), 404
+
+        return jsonify({
+            "status": "success",
+            "message": "Contraseña actualizada exitosamente por primer ingreso."
+        })
+    except Exception as ex:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": f"Error del servidor: {str(ex)}"}), 500
     finally:
         cursor.close()
         conexion.close()

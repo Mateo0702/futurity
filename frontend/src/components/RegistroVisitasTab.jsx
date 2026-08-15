@@ -55,6 +55,11 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
   const [showRecomendados, setShowRecomendados] = useState(false);
   const [conflictos, setConflictos] = useState([]);
   
+  // Multi-contract selector state & Plan metadata
+  const [multiContratosList, setMultiContratosList] = useState([]);
+  const [showMultiContratoModal, setShowMultiContratoModal] = useState(false);
+  const [clientPlanInfo, setClientPlanInfo] = useState(null);
+
   // Client history modal state
   const [modalHistorial, setModalHistorial] = useState({
     isOpen: false,
@@ -94,6 +99,64 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
     setServicio(activeArea === 'INSTALACIONES' ? 'INSTALACIÓN NUEVA' : '');
     setProblema(activeArea === 'INSTALACIONES' ? 'INSTALACIÓN NUEVA' : '');
   }, [activeArea]);
+
+  // Apply client details & auto-fill service, speed, IP, ONU series
+  const aplicarDatosCliente = (data) => {
+    setContratoOk(true);
+    if (data.contrato) setContrato(data.contrato);
+    if (data.empresa) setEmpresa(data.empresa);
+    if (data.cliente) setCliente(data.cliente);
+    if (data.telefonos) setTelefonos(data.telefonos);
+    if (data.direccion) setDireccion(data.direccion);
+
+    // Save enriched plan metadata for UI display
+    setClientPlanInfo({
+      producto: data.producto || '',
+      velocidad_mbps: data.velocidad_mbps || null,
+      ip_cliente: data.ip_cliente || '',
+      ip_nodo: data.ip_nodo || '',
+      numero_serie: data.numero_serie || '',
+      cedula: data.cedula || ''
+    });
+
+    // Auto-select Sector and geolocate map marker
+    if (data.zona_excel) {
+      const matchedSector = sectores.find(s => s.nombre_sector.toUpperCase() === data.zona_excel.trim().toUpperCase());
+      if (matchedSector) {
+        setSector(matchedSector.nombre_sector);
+        setLatitud(matchedSector.latitud_defecto || '');
+        setLongitud(matchedSector.longitud_defecto || '');
+        updateMapMarker(matchedSector.latitud_defecto, matchedSector.longitud_defecto, 15);
+      } else {
+        setSector(data.zona_excel);
+      }
+    }
+
+    // Cargar Plan / Paquete comercial completo directo en Servicio
+    if (activeArea !== 'INSTALACIONES') {
+      setServicio(data.producto || 'SERVICIO TÉCNICO');
+    }
+
+    // Auto-populate Speed in Mbps (0 if no speed plan / only cable)
+    if (data.velocidad_mbps !== undefined && data.velocidad_mbps !== null) {
+      setVelocidadMbps(data.velocidad_mbps);
+    } else {
+      setVelocidadMbps(0);
+    }
+
+    // Auto-populate IP address
+    if (data.ip_cliente) {
+      setInfoIp(data.ip_cliente);
+    }
+
+
+    // Auto-populate Vendor if present
+    if (data.vendedor) {
+      setVendedor(data.vendedor);
+    }
+
+    setShowMultiContratoModal(false);
+  };
 
   // Initial Leaflet Map Setup
   useEffect(() => {
@@ -188,7 +251,7 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
     }
   };
 
-  // Autocomplete client details by contract
+  // Autocomplete client details by contract or cedula
   const handleContratoBlur = async () => {
     if (!contrato.trim()) return;
     setLoadingContrato(true);
@@ -201,25 +264,17 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
       });
       if (res.ok) {
         const data = await res.json();
-        setContratoOk(true);
-        setCliente(data.cliente || '');
-        setTelefonos(data.telefonos || '');
-        setDireccion(data.direccion || '');
-
-        if (data.zona_excel) {
-          const matchedSector = sectores.find(s => s.nombre_sector.toUpperCase() === data.zona_excel.trim().toUpperCase());
-          if (matchedSector) {
-            setSector(matchedSector.nombre_sector);
-            setLatitud(matchedSector.latitud_defecto || '');
-            setLongitud(matchedSector.longitud_defecto || '');
-            updateMapMarker(matchedSector.latitud_defecto, matchedSector.longitud_defecto, 15);
-          } else {
-            setSector(data.zona_excel);
-          }
+        if (data.status === 'multi_contrato' && data.contratos && data.contratos.length > 1) {
+          // Multiple contracts found for this Cedula
+          setMultiContratosList(data.contratos);
+          setShowMultiContratoModal(true);
+        } else {
+          // Single match
+          aplicarDatosCliente(data);
         }
       }
     } catch (e) {
-      console.error("Error buscando contrato en directorio:", e);
+      console.error("Error buscando cliente/contrato en directorio:", e);
     } finally {
       setLoadingContrato(false);
     }
@@ -449,7 +504,7 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
             </h3>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '25px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '15px' }}>
             {/* Empresa */}
             <div>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>Empresa:</label>
@@ -464,16 +519,19 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
               </select>
             </div>
 
-            {/* Contrato */}
+            {/* Cédula o Contrato */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>Contrato:</label>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>
+                Cédula o Contrato:
+              </label>
               <div style={{ position: 'relative' }}>
                 <input
                   type="text"
                   value={contrato}
                   onChange={(e) => setContrato(e.target.value)}
                   onBlur={handleContratoBlur}
-                  placeholder="Ej: 47d"
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleContratoBlur(); } }}
+                  placeholder="Ej: Cédula (010...) o Contrato (47d, 10F)"
                   className="form-control"
                   style={{ width: '100%', padding: '10px 36px 10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
                 />
@@ -520,6 +578,43 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
               />
             </div>
           </div>
+
+          {/* Banner de Información Comercial / Plan / Velocidad / ONU */}
+          {clientPlanInfo && (clientPlanInfo.producto || clientPlanInfo.velocidad_mbps || clientPlanInfo.ip_cliente || clientPlanInfo.ip_nodo) && (
+            <div style={{ background: 'rgba(2, 132, 199, 0.08)', border: '1px solid rgba(2, 132, 199, 0.25)', borderRadius: '12px', padding: '10px 16px', marginBottom: '25px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '14px', fontSize: '0.82rem' }}>
+              {clientPlanInfo.cedula && (
+                <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>
+                  🪪 <strong>Cédula:</strong> {clientPlanInfo.cedula}
+                </span>
+              )}
+              {clientPlanInfo.producto && (
+                <span style={{ color: '#0284c7', fontWeight: 700 }}>
+                  📦 <strong>Plan:</strong> {clientPlanInfo.producto}
+                </span>
+              )}
+              {clientPlanInfo.velocidad_mbps !== null && clientPlanInfo.velocidad_mbps !== undefined && (
+                <span style={{ background: '#0284c7', color: 'white', padding: '2px 8px', borderRadius: '6px', fontWeight: 800 }}>
+                  ⚡ {clientPlanInfo.velocidad_mbps} Mbps
+                </span>
+              )}
+              {clientPlanInfo.ip_cliente && (
+                <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>
+                  🌐 <strong>IP:</strong> {clientPlanInfo.ip_cliente}
+                </span>
+              )}
+              {clientPlanInfo.ip_nodo && (
+                <span style={{ color: '#0284c7', fontWeight: 600 }}>
+                  🏢 <strong>IP Nodo:</strong> {clientPlanInfo.ip_nodo}
+                </span>
+              )}
+              {clientPlanInfo.numero_serie && (
+                <span style={{ color: '#d97706', fontWeight: 700 }}>
+                  🏷️ <strong>ONU SN:</strong> {clientPlanInfo.numero_serie}
+                </span>
+              )}
+            </div>
+          )}
+
 
           {/* SECCIÓN 2: Datos de Asignación de Ruta */}
           <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '20px', marginTop: '30px' }}>
@@ -846,23 +941,18 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '25px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>Servicio:</label>
-                <select
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>
+                  Plan / Paquete Contratado:
+                </label>
+                <input
+                  type="text"
                   value={servicio}
                   onChange={(e) => setServicio(e.target.value)}
+                  placeholder="Ej. INTERNET GPON 400 MEGAS, CABLE..."
                   required
                   className="form-control"
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
-                >
-                  <option value="">-- Seleccionar --</option>
-                  <option value="CABLE">CABLE</option>
-                  <option value="CABLE_GPON">CABLE_GPON</option>
-                  <option value="COMBO_GPON">COMBO_GPON</option>
-                  <option value="INTERNET_GPON">INTERNET_GPON</option>
-                  <option value="RADIO">RADIO</option>
-                  <option value="INTERNET_UTP">INTERNET_UTP</option>
-                  <option value="SMART HOME">SMART HOME</option>
-                </select>
+                />
               </div>
 
               <div>
@@ -871,11 +961,12 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
                   type="number"
                   value={velocidadMbps}
                   onChange={(e) => setVelocidadMbps(e.target.value)}
-                  placeholder="Ej. 500"
+                  placeholder="0"
                   className="form-control"
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)' }}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
                 />
               </div>
+
 
               <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>Problema Reportado:</label>
@@ -1115,8 +1206,155 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
           </div>
         </div>
       )}
+
+      {/* Modal Selector Multi-Contrato para Cédula con varios servicios */}
+      {showMultiContratoModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(5px)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '24px', width: '92%', maxWidth: '680px', padding: '26px', boxShadow: '0 25px 60px -12px rgba(0, 0, 0, 0.35)', maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            
+            {/* Header Modal */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1.5px solid var(--border-color)', paddingBottom: '14px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ background: 'rgba(2, 132, 199, 0.12)', color: '#0284c7', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
+                  <i className="fa-solid fa-address-card"></i>
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.15rem', fontWeight: 800 }}>
+                    Cliente con Múltiples Contratos
+                  </h3>
+                  <p style={{ margin: 0, color: 'var(--sidebar-text)', fontSize: '0.82rem' }}>
+                    Esta identificación tiene {multiContratosList.length} servicios registrados. Selecciona cuál deseas atender:
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setShowMultiContratoModal(false)} 
+                style={{ background: 'none', border: 'none', fontSize: '1.6rem', color: 'var(--sidebar-text)', cursor: 'pointer', padding: '0 6px' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Subheader info cliente */}
+            {multiContratosList.length > 0 && (
+              <div style={{ background: 'var(--profile-bg)', padding: '10px 14px', borderRadius: '12px', marginBottom: '16px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                  👤 {multiContratosList[0].cliente}
+                </span>
+                {multiContratosList[0].cedula && (
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--sidebar-text)' }}>
+                    🪪 Cédula: <strong>{multiContratosList[0].cedula}</strong>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Listado de Contratos */}
+            <div style={{ flexGrow: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', paddingRight: '4px' }}>
+              {multiContratosList.map((item, idx) => (
+                <div 
+                  key={idx}
+                  onClick={() => aplicarDatosCliente(item)}
+                  style={{
+                    background: 'var(--card-bg)',
+                    border: '1.5px solid var(--border-color)',
+                    borderRadius: '16px',
+                    padding: '16px 18px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#0284c7';
+                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(2, 132, 199, 0.15)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--border-color)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ background: 'rgba(2, 132, 199, 0.15)', color: '#0284c7', fontWeight: 900, fontSize: '0.92rem', padding: '4px 10px', borderRadius: '8px' }}>
+                        Contrato: {item.contrato}
+                      </span>
+                      <span style={{ background: item.empresa === 'FIBRACOM' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(59, 130, 246, 0.15)', color: item.empresa === 'FIBRACOM' ? '#a855f7' : '#2563eb', fontWeight: 800, fontSize: '0.75rem', padding: '3px 8px', borderRadius: '6px' }}>
+                        {item.empresa || 'SERVICABLE'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); aplicarDatosCliente(item); }}
+                      style={{
+                        background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                        color: 'white',
+                        border: 'none',
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        fontWeight: 800,
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <i className="fa-solid fa-check"></i> Seleccionar
+                    </button>
+                  </div>
+
+                  <div style={{ fontSize: '0.84rem', color: 'var(--text-main)', display: 'grid', gridTemplateColumns: '1fr', gap: '4px', marginTop: '4px' }}>
+                    <div>
+                      <strong style={{ color: 'var(--sidebar-text)' }}>📍 Dirección: </strong>
+                      <span>{item.direccion || 'Sin dirección registrada'}</span>
+                      {item.zona_excel && <span style={{ color: '#0284c7', fontWeight: 700 }}> ({item.zona_excel})</span>}
+                    </div>
+                    {item.producto && (
+                      <div>
+                        <strong style={{ color: 'var(--sidebar-text)' }}>📦 Plan: </strong>
+                        <span>{item.producto}</span>
+                        {item.velocidad_mbps && (
+                          <span style={{ marginLeft: '8px', background: 'rgba(16, 185, 129, 0.12)', color: '#059669', padding: '1px 6px', borderRadius: '4px', fontWeight: 800, fontSize: '0.75rem' }}>
+                            ⚡ {item.velocidad_mbps} Mbps
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {(item.ip_cliente || item.ip_nodo || item.numero_serie) && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', fontSize: '0.78rem', color: 'var(--sidebar-text)', marginTop: '4px' }}>
+                        {item.ip_cliente && <span>🌐 IP: <strong style={{ color: 'var(--text-main)' }}>{item.ip_cliente}</strong></span>}
+                        {item.ip_nodo && <span>🏢 IP Nodo: <strong style={{ color: '#0284c7' }}>{item.ip_nodo}</strong></span>}
+                        {item.numero_serie && <span>🏷️ SN: <strong style={{ color: '#d97706' }}>{item.numero_serie}</strong></span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div style={{ borderTop: '1.5px solid var(--border-color)', paddingTop: '14px', marginTop: '14px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button 
+                type="button" 
+                onClick={() => setShowMultiContratoModal(false)} 
+                style={{ padding: '8px 18px', background: 'var(--profile-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export default RegistroVisitasTab;
+

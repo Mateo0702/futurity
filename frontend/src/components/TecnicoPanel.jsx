@@ -241,7 +241,10 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     });
   };
 
+  const activeFormState = activeVisita ? getFormState(activeVisita.id_visita) : defaultFormState;
+
   // GPS Auto-Ping
+
   const enviarPingGeolocalizacion = () => {
     if (estadoActividad === 'En Descanso') {
       console.log("El técnico está en descanso. Saltando ping.");
@@ -768,7 +771,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   };
 
   const startSignatureDrawing = (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -784,7 +787,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
   const drawSignatureLine = (e) => {
     if (!isDrawing) return;
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -794,9 +797,41 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     ctx.stroke();
   };
 
-  const stopSignatureDrawing = () => {
+  const stopSignatureDrawing = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     setIsDrawing(false);
   };
+
+  // Registrar listeners nativos con passive: false para bloquear gestos del navegador al firmar
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleTouchStart = (e) => {
+      e.preventDefault();
+      startSignatureDrawing(e);
+    };
+    const handleTouchMove = (e) => {
+      e.preventDefault();
+      drawSignatureLine(e);
+    };
+    const handleTouchEnd = (e) => {
+      e.preventDefault();
+      stopSignatureDrawing(e);
+    };
+
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+    canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    return () => {
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchmove', handleTouchMove);
+      canvas.removeEventListener('touchend', handleTouchEnd);
+      canvas.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [activeFormState?.metodo_firma, activeVisita?.id_visita, isDrawing]);
 
   const limpiarCanvasFirma = (visitaId) => {
     const canvas = canvasRef.current;
@@ -845,10 +880,14 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     }
   };
 
+  const getPublicDomain = () => {
+    return 'http://atlas.futurity.com.ec:7565';
+  };
+
   const enviarLinkFirmaWhatsApp = (telefonos, tecnico, tokenRastreo) => {
     if (!telefonos) return;
     const cleanTel = telefonos.split('/')[0].trim().replace(/[^\d+]/g, '');
-    const msg = `Hola! Soy ${tecnico}, tu técnico asignado. Por favor, ingresa a este enlace para firmar tu conformidad del trabajo: ${window.location.origin}/firma-remota/${tokenRastreo}`;
+    const msg = `Hola! Soy ${tecnico}, tu técnico asignado. Por favor, ingresa a este enlace para firmar tu conformidad del trabajo: ${getPublicDomain()}/firma-remota/${tokenRastreo}`;
     window.open(`https://wa.me/${cleanTel}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -887,7 +926,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   const abrirWhatsApp = (telefonos, tecnico, tokenRastreo) => {
     if (!telefonos) return;
     const cleanTel = telefonos.split('/')[0].trim().replace(/[^\d+]/g, '');
-    const msg = `Estimado cliente, le saluda ${tecnico}. Le informo que ya voy en camino a su domicilio para realizar el trabajo. Puede seguir mi trayecto en tiempo real ingresando aquí: ${window.location.origin}/seguimiento/${tokenRastreo}`;
+    const msg = `Estimado cliente, le saluda ${tecnico}. Le informo que ya voy en camino a su domicilio para realizar el trabajo. Puede seguir mi trayecto en tiempo real ingresando aquí: ${getPublicDomain()}/seguimiento/${tokenRastreo}`;
     window.open(`https://wa.me/${cleanTel}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -976,10 +1015,9 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     }
   };
 
-  const activeFormState = activeVisita ? getFormState(activeVisita.id_visita) : {};
-
   return (
-    <div className="panel-container" style={{ padding: '16px', maxWidth: '800px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+
+    <div className="panel-container tecnico-scroll-container" style={{ padding: '16px', maxWidth: '800px', margin: '0 auto', width: '100%', boxSizing: 'border-box', overscrollBehaviorY: 'none', overscrollBehavior: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}>
       
       {/* Clean Top Header (100% Mobile Responsive) */}
       <div style={{
@@ -1055,51 +1093,67 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
             style={{
               padding: '8px 12px',
               borderRadius: '12px',
-              background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              color: '#ffffff',
+              border: '1px solid var(--border-color)',
+              background: 'var(--profile-bg)',
+              color: 'var(--profile-text)',
               fontWeight: 800,
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
-              flexShrink: 0
-            }}
-          >
-            <i className="fa-solid fa-bars" style={{ color: '#38bdf8' }}></i>
-            <span>Menú</span>
-          </button>
-        </div>
-
-        {/* Sub-bar: Visitas Count + Refresh Button */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
-          <span style={{ fontSize: '0.78rem', color: 'var(--sidebar-text)', fontWeight: 700 }}>
-            📅 Visitas de hoy: <strong style={{ color: 'var(--text-main)', fontSize: '0.88rem' }}>{visitas.length}</strong>
-          </span>
-
-          <button
-            type="button"
-            onClick={cargarDatosPanel}
-            style={{
-              padding: '6px 12px',
-              borderRadius: '10px',
-              background: 'rgba(59, 130, 246, 0.12)',
-              border: '1px solid rgba(59, 130, 246, 0.3)',
-              color: '#60a5fa',
-              fontWeight: 800,
-              fontSize: '0.78rem',
+              fontSize: '0.82rem',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '6px'
             }}
           >
+            <i className="fa-solid fa-gear"></i>
+            <span>Menú</span>
+          </button>
+        </div>
+
+        {/* Status indicator bar & area toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '10px', gap: '12px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
+            <span style={{
+              display: 'inline-block',
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              background: estadoActividad === 'En Descanso' ? '#f59e0b' : '#10b981',
+              flexShrink: 0
+            }}></span>
+            <span style={{ 
+              fontSize: '0.8rem', 
+              fontWeight: 800, 
+              color: estadoActividad === 'En Descanso' ? '#f59e0b' : '#10b981',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              minWidth: 0
+            }} title={estadoActividad}>
+              {estadoActividad}
+            </span>
+          </div>
+
+          <button 
+            type="button" 
+            onClick={cargarDatosPanel} 
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--primary)',
+              fontWeight: 800,
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              flexShrink: 0
+            }}
+          >
             <i className="fa-solid fa-arrows-rotate"></i>
             <span>Actualizar</span>
           </button>
         </div>
+
       </div>
 
       {/* Main Content Area */}
@@ -1182,7 +1236,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
       {/* FULLSCREEN VISIT DETAILS OVERLAY */}
       {activeVisita && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: '#0f172a', zIndex: 99999, display: 'flex', flexDirection: 'column', color: '#f8fafc' }}>
+        <div className="tecnico-scroll-container" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: '#0f172a', zIndex: 99999, display: 'flex', flexDirection: 'column', color: '#f8fafc', overscrollBehaviorY: 'contain', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
           
           {/* Header */}
           <div style={{ background: '#1e293b', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
@@ -1228,7 +1282,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
           </div>
 
           {/* Details body */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', background: '#0f172a' }}>
+          <div className="tecnico-overlay-content" style={{ flex: 1, overflowY: 'auto', overscrollBehaviorY: 'contain', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', padding: '20px', background: '#0f172a' }}>
             
             {/* SUB TAB 1: CLIENTE */}
             {activeSubTab === 'tab-cliente' && (
@@ -1252,15 +1306,34 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                     </button>
                   </div>
 
-                  <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '3px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
-                    <strong style={{ color: '#64748b', fontSize: '0.75rem' }}>Contrato / Referencia</strong>
-                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#f8fafc' }}>
-                      Contrato: {activeVisita.contrato || 'N/A'} | Ref: #VT-{activeVisita.id_visita}
-                    </span>
+                  <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px', flexWrap: 'wrap', gap: '6px' }}>
+                    <div>
+                      <strong style={{ color: '#64748b', fontSize: '0.75rem', display: 'block' }}>Contrato / Referencia</strong>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#f8fafc' }}>
+                        Contrato: {activeVisita.contrato || 'N/A'} | Ref: #VT-{activeVisita.id_visita}
+                      </span>
+                    </div>
+                    {activeVisita.cedula && (
+                      <span style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontSize: '0.78rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px' }}>
+                        🪪 {activeVisita.cedula}
+                      </span>
+                    )}
                   </div>
 
                   {/* Commercial & Technical Summary Grid */}
                   <div style={{ marginTop: '12px', background: 'rgba(15, 23, 42, 0.6)', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.2)', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>📦 Plan Contratado</span>
+                      <strong style={{ color: '#f8fafc', fontSize: '0.85rem', fontWeight: 800, lineHeight: 1.3 }}>
+                        {activeVisita.servicio || activeVisita.producto || 'N/D'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>⚡ Velocidad Plan</span>
+                      <strong style={{ color: '#38bdf8', fontSize: '0.9rem', fontWeight: 900 }}>
+                        {activeVisita.velocidad_mbps !== undefined && activeVisita.velocidad_mbps !== null ? `${activeVisita.velocidad_mbps} Mbps` : (activeVisita.velocidad || 'N/D')}
+                      </strong>
+                    </div>
                     <div>
                       <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>💵 Pago Mensual</span>
                       <strong style={{ color: '#10b981', fontSize: '0.9rem', fontWeight: 800 }}>
@@ -1268,9 +1341,9 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                       </strong>
                     </div>
                     <div>
-                      <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>⚡ Velocidad Plan</span>
-                      <strong style={{ color: '#38bdf8', fontSize: '0.9rem', fontWeight: 900 }}>
-                        {activeVisita.velocidad_mbps ? `${activeVisita.velocidad_mbps} Mbps` : (activeVisita.velocidad || 'N/D')}
+                      <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>⌛ Antigüedad Cliente</span>
+                      <strong style={{ color: '#38bdf8', fontSize: '0.85rem', fontWeight: 800 }}>
+                        {activeVisita.antiguedad_fmt || 'N/D'}
                       </strong>
                     </div>
                     <div>
@@ -1279,9 +1352,9 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                         {activeVisita.creado_por || activeVisita.agente || 'Call Center'}
                       </strong>
                     </div>
-                    <div>
-                      <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>🏷️ Serie ONU</span>
-                      <strong style={{ color: '#f59e0b', fontSize: '0.78rem', fontWeight: 700, wordBreak: 'break-all' }}>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>🏷️ Serie ONU (SN)</span>
+                      <strong style={{ color: '#f59e0b', fontSize: '0.82rem', fontWeight: 700, wordBreak: 'break-all' }}>
                         {activeVisita.numero_serie || 'S/N'}
                       </strong>
                     </div>
@@ -1372,6 +1445,29 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                   </div>
                 )}
 
+                {/* Comentario de Resolución / Cancelación / Solución Remota en Panel Técnico */}
+                {activeVisita.resolucion_final && (
+                  <div style={{
+                    background: activeVisita.estado === 'SOLVENTADA_REMOTA' ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(5, 150, 105, 0.28) 100%)' : activeVisita.estado === 'CANCELADA' ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.18) 0%, rgba(185, 28, 28, 0.28) 100%)' : 'linear-gradient(135deg, rgba(59, 130, 246, 0.18) 0%, rgba(29, 78, 216, 0.28) 100%)',
+                    border: activeVisita.estado === 'SOLVENTADA_REMOTA' ? '1px solid rgba(16, 185, 129, 0.5)' : activeVisita.estado === 'CANCELADA' ? '1px solid rgba(239, 68, 68, 0.5)' : '1px solid rgba(59, 130, 246, 0.5)',
+                    borderLeft: activeVisita.estado === 'SOLVENTADA_REMOTA' ? '6px solid #10b981' : activeVisita.estado === 'CANCELADA' ? '6px solid #ef4444' : '6px solid #3b82f6',
+                    borderRadius: '16px',
+                    padding: '16px 20px',
+                    boxShadow: '0 6px 20px rgba(0,0,0,0.2)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 900, color: activeVisita.estado === 'SOLVENTADA_REMOTA' ? '#6ee7b7' : activeVisita.estado === 'CANCELADA' ? '#fca5a5' : '#93c5fd', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <i className={`fa-solid ${activeVisita.estado === 'SOLVENTADA_REMOTA' ? 'fa-laptop-code' : activeVisita.estado === 'CANCELADA' ? 'fa-ban' : 'fa-clipboard-check'}`} style={{ fontSize: '1rem' }}></i>
+                      {activeVisita.estado === 'SOLVENTADA_REMOTA' ? 'SOLUCIÓN REMOTA / CIERRE' : activeVisita.estado === 'CANCELADA' ? 'MOTIVO DE CANCELACIÓN' : 'RESOLUCIÓN / NOTA DE CIERRE'}
+                    </span>
+                    <p style={{ margin: 0, fontSize: '0.96rem', color: '#ffffff', fontWeight: 700, lineHeight: 1.5 }}>
+                      "{activeVisita.resolucion_final}"
+                    </p>
+                  </div>
+                )}
+
               </div>
             )}
 
@@ -1392,8 +1488,12 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                     <strong style={{ color: '#f8fafc', fontSize: '0.9rem' }}>{activeVisita.info_hilo || 'No registrado'}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
-                    <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>IP Fija:</span>
+                    <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>IP Fija / Cliente:</span>
                     <strong style={{ color: '#f8fafc', fontSize: '0.9rem' }}>{activeVisita.info_ip || 'No asignada'}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>IP Nodo:</span>
+                    <strong style={{ color: '#38bdf8', fontSize: '0.9rem' }}>{activeVisita.ip_nodo || 'No asignada'}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
                     <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>VLAN:</span>
@@ -1786,7 +1886,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Dibuje la firma del cliente abajo:</span>
                           
-                          <div style={{ background: '#fafafa', borderRadius: '8px', border: '1px solid #cbd5e1', overflow: 'hidden' }}>
+                          <div className="firma-canvas-container" style={{ background: '#fafafa', borderRadius: '8px', border: '1px solid #cbd5e1', overflow: 'hidden', touchAction: 'none', overscrollBehavior: 'none' }}>
                             <canvas 
                               ref={canvasRef} 
                               width={320} 
@@ -1795,10 +1895,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                               onMouseMove={drawSignatureLine}
                               onMouseUp={stopSignatureDrawing}
                               onMouseLeave={stopSignatureDrawing}
-                              onTouchStart={startSignatureDrawing}
-                              onTouchMove={drawSignatureLine}
-                              onTouchEnd={stopSignatureDrawing}
-                              style={{ display: 'block', width: '100%', height: '150px', cursor: 'crosshair', touchAction: 'none' }}
+                              style={{ display: 'block', width: '100%', height: '150px', cursor: 'crosshair', touchAction: 'none', overscrollBehavior: 'none' }}
                             />
                           </div>
                           
@@ -2061,7 +2158,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
               
               <div style={{ background: 'white', padding: '15px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.2)' }}>
                 <img 
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`${window.location.origin}/firma-remota/${qrToken}`)}`} 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`${getPublicDomain()}/firma-remota/${qrToken}`)}`} 
                   style={{ width: '180px', height: '180px', display: 'block' }} 
                   alt="QR Code" 
                 />

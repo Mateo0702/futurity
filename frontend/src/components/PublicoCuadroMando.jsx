@@ -162,7 +162,7 @@ function PublicoCuadroMando({ fecha, token }) {
     <div 
       id="publico-cuadro-mando-container" 
       style={{ 
-        height: '100vh', 
+        minHeight: '100vh', 
         width: '100vw', 
         background: 'linear-gradient(135deg, #07090e 0%, #0f172a 100%)', 
         color: '#f1f5f9', 
@@ -175,7 +175,7 @@ function PublicoCuadroMando({ fecha, token }) {
         boxSizing: 'border-box'
       }}
     >
-      {/* LOCAL STYLES TO OVERRIDE APP GLOBAL STYLESHEET TABLE COLORS */}
+      {/* LOCAL STYLES TO OVERRIDE APP GLOBAL STYLESHEET TABLE COLORS AND ENSURE MOBILE RESPONSIVENESS */}
       <style dangerouslySetInnerHTML={{__html: `
         #publico-cuadro-mando-container table,
         #publico-cuadro-mando-container tr,
@@ -201,15 +201,47 @@ function PublicoCuadroMando({ fecha, token }) {
           background-color: rgba(52, 211, 153, 0.04) !important;
           color: #34d399 !important;
         }
+        @media (max-width: 768px) {
+          #publico-cuadro-mando-container {
+            padding: 10px !important;
+          }
+          .cmd-grid-responsive {
+            grid-template-columns: 1fr !important;
+          }
+          .cmd-header-box {
+            flex-direction: column !important;
+            align-items: center !important;
+            text-align: center !important;
+            gap: 12px !important;
+          }
+          .cmd-header-title {
+            flex-direction: column !important;
+            align-items: center !important;
+            text-align: center !important;
+          }
+          .cmd-tab-bar {
+            overflow-x: auto !important;
+            padding: 4px !important;
+          }
+          .cmd-tab-button {
+            font-size: 0.78rem !important;
+            padding: 10px 8px !important;
+            white-space: nowrap !important;
+          }
+          .cmd-table-cell {
+            padding: 8px 6px !important;
+            font-size: 0.78rem !important;
+          }
+        }
       `}} />
 
       <div style={{ width: '100%', maxWidth: '950px', display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '60px' }}>
         
         {/* HEADER */}
-        <div style={{ background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '24px', padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '15px', flexWrap: 'wrap', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.4)', position: 'relative', overflow: 'hidden' }}>
+        <div className="cmd-header-box" style={{ background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '24px', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '15px', flexWrap: 'wrap', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.4)', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '2px', background: 'linear-gradient(90deg, #dc2626, #6366f1, #10b981)' }} />
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div className="cmd-header-title" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <div style={{ width: '48px', height: '48px', background: 'linear-gradient(135deg, #dc2626 0%, #7f1d1d 100%)', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(220, 38, 38, 0.3)', border: '1px solid rgba(255,255,255,0.1)' }}>
               <i className="fa-solid fa-gauge-high" style={{ fontSize: '1.4rem', color: 'white' }}></i>
             </div>
@@ -223,34 +255,37 @@ function PublicoCuadroMando({ fecha, token }) {
             </div>
           </div>
 
-          <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '10px 18px', borderRadius: '14px', fontSize: '0.9rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '8px 16px', borderRadius: '14px', fontSize: '0.88rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i className="fa-regular fa-calendar-days" style={{ color: '#38bdf8' }}></i>
             <span>{data?.fecha || fecha}</span>
           </div>
         </div>
 
         {/* PREMIUM TAB BAR */}
-        <div style={{ display: 'flex', background: 'rgba(15, 23, 42, 0.8)', padding: '6px', borderRadius: '18px', border: '1px solid rgba(255, 255, 255, 0.05)', gap: '4px' }}>
+        <div className="cmd-tab-bar" style={{ display: 'flex', background: 'rgba(15, 23, 42, 0.8)', padding: '6px', borderRadius: '18px', border: '1px solid rgba(255, 255, 255, 0.05)', gap: '4px' }}>
           <button
             type="button"
+            className="cmd-tab-button"
             onClick={() => setActiveTab('tab-general')}
-            style={{ flex: 1, padding: '12px 8px', borderRadius: '14px', border: activeTab === 'tab-general' ? '1px solid rgba(255, 255, 255, 0.08)' : 'none', background: activeTab === 'tab-general' ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' : 'transparent', color: activeTab === 'tab-general' ? '#ffffff' : '#94a3b8', fontWeight: 700, cursor: 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+            style={{ flex: 1, padding: '12px 8px', borderRadius: '14px', border: activeTab === 'tab-general' ? '1px solid rgba(255, 255, 255, 0.08)' : 'none', background: activeTab === 'tab-general' ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' : 'transparent', color: activeTab === 'tab-general' ? '#ffffff' : '#94a3b8', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
           >
-            📊 Cuadro de Mando
+            📊 Cuadro Mando
           </button>
 
           <button
             type="button"
+            className="cmd-tab-button"
             onClick={() => setActiveTab('tab-manana')}
-            style={{ flex: 1, padding: '12px 8px', borderRadius: '14px', border: activeTab === 'tab-manana' ? '1px solid rgba(255, 255, 255, 0.08)' : 'none', background: activeTab === 'tab-manana' ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' : 'transparent', color: activeTab === 'tab-manana' ? '#ffffff' : '#94a3b8', fontWeight: 700, cursor: 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+            style={{ flex: 1, padding: '12px 8px', borderRadius: '14px', border: activeTab === 'tab-manana' ? '1px solid rgba(255, 255, 255, 0.08)' : 'none', background: activeTab === 'tab-manana' ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' : 'transparent', color: activeTab === 'tab-manana' ? '#ffffff' : '#94a3b8', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
           >
             📅 Visitas Mañana ({visitasManana.length})
           </button>
 
           <button
             type="button"
+            className="cmd-tab-button"
             onClick={() => setActiveTab('tab-actividades')}
-            style={{ flex: 1, padding: '12px 8px', borderRadius: '14px', border: activeTab === 'tab-actividades' ? '1px solid rgba(255, 255, 255, 0.08)' : 'none', background: activeTab === 'tab-actividades' ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' : 'transparent', color: activeTab === 'tab-actividades' ? '#ffffff' : '#94a3b8', fontWeight: 700, cursor: 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+            style={{ flex: 1, padding: '12px 8px', borderRadius: '14px', border: activeTab === 'tab-actividades' ? '1px solid rgba(255, 255, 255, 0.08)' : 'none', background: activeTab === 'tab-actividades' ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' : 'transparent', color: activeTab === 'tab-actividades' ? '#ffffff' : '#94a3b8', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
           >
             🛠️ Actividades ({actividadesTecnicos.length})
           </button>
@@ -261,7 +296,7 @@ function PublicoCuadroMando({ fecha, token }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
             {/* MAIN TABLES GRID */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }}>
+            <div className="cmd-grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }}>
               
               {/* Call Center Card */}
               <div style={{ background: 'rgba(15, 23, 42, 0.45)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 15px 30px rgba(0, 0, 0, 0.25)', display: 'flex', flexDirection: 'column' }}>
@@ -343,7 +378,8 @@ function PublicoCuadroMando({ fecha, token }) {
             </div>
 
             {/* PROBLEMS AND SOLUTIONS EXPANSIONS */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div className="cmd-grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+
               {/* Today's Solutions */}
               <div style={{ background: 'rgba(15, 23, 42, 0.45)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 15px 30px rgba(0, 0, 0, 0.25)', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ padding: '10px 16px', fontSize: '0.82rem', fontWeight: 800, textTransform: 'uppercase', textAlign: 'center', color: 'white', background: '#1e3a8a', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
@@ -396,7 +432,7 @@ function PublicoCuadroMando({ fecha, token }) {
             </div>
 
             {/* CHARTS SECTION */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div className="cmd-grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
               <div style={{ background: 'rgba(15, 23, 42, 0.45)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '24px', padding: '24px', boxShadow: '0 15px 30px rgba(0, 0, 0, 0.25)', textAlign: 'center' }}>
                 <h3 style={{ fontSize: '0.88rem', fontWeight: 800, textTransform: 'uppercase', color: '#94a3b8', marginBottom: '20px', letterSpacing: '0.06em' }}>Gestión por Agente</h3>
                 <div style={{ height: '230px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

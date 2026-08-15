@@ -23,19 +23,72 @@
   --profile-avatar-text: #ffffff;
 }
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 * {
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
   font-family: 'Inter', sans-serif;
 }
 
-body {
+/* Grid Item & Form Input Overflow Prevention */
+input, select, textarea, button, .form-control, .form-select {
+  box-sizing: border-box !important;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Fix CSS Grid column overflow & overlapping */
+[style*="grid"] > * {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+html, body {
   background-color: var(--bg-color);
   color: var(--text-main);
+  overscroll-behavior-y: none !important;
+  overscroll-behavior-x: none !important;
+  overscroll-behavior: none !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
   display: flex;
   height: 100vh;
   overflow: hidden;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  overscroll-behavior-y: none !important;
+  overscroll-behavior-x: none !important;
+  overscroll-behavior: none !important;
+}
+
+/* Anti Pull-to-Refresh y Scroll Control en Dispositivos Móviles Android/iOS */
+.tecnico-scroll-container,
+.tecnico-overlay-content,
+.modal-scrollable-content,
+.panel-container,
+.modal-body {
+  overscroll-behavior-y: none !important;
+  overscroll-behavior-x: none !important;
+  overscroll-behavior: none !important;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+/* Evitar cualquier gesto de recarga o arrastre en el canvas de firma */
+.firma-canvas-container,
+canvas {
+  touch-action: none !important;
+  overscroll-behavior: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
 }
 
 /* Sidebar */

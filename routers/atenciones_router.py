@@ -7,10 +7,19 @@ atenciones_bp = Blueprint('atenciones', __name__)
 @atenciones_bp.route('/api/cliente/buscar_contrato_json', methods=['GET'])
 def buscar_contrato_json():
     if 'user_id' not in session:
-        return jsonify({"status": "error", "message": "No autorizado"}), 401
-    contrato = request.args.get('contrato', '').strip()
+        token = request.headers.get('Authorization')
+        if token and token.startswith("Bearer "):
+            from utils_jwt import verify_token
+            payload = verify_token(token)
+            if not payload:
+                return jsonify({"status": "error", "message": "No autorizado"}), 401
+        else:
+            return jsonify({"status": "error", "message": "No autorizado"}), 401
+
+    contrato = request.args.get('contrato', '') or request.args.get('q', '') or request.args.get('cedula', '')
+    contrato = contrato.strip()
     if not contrato:
-        return jsonify({"status": "error", "message": "Contrato vacío"}), 400
+        return jsonify({"status": "error", "message": "Parámetro de búsqueda vacío"}), 400
         
     conn = get_db_connection()
     if not conn:
@@ -18,21 +27,30 @@ def buscar_contrato_json():
         
     cursor = conn.cursor(dictionary=True)
     try:
-        # Buscar en directorio_clientes el contrato exacto (con F para Fibracom, sin F para Servicable)
         from utils import format_antiguedad
+        query_contrato_f = contrato if contrato.upper().endswith('F') else (contrato + 'F')
+        query_contrato_plain = contrato[:-1] if contrato.upper().endswith('F') else contrato
+
         query = """
-            SELECT nombre_cliente AS cliente, zona AS sector, telefono1, telefono2, fecha_instalacion,
-                   total_mensual, antiguedad, numero_serie 
+            SELECT contrato, cedula, empresa, nombre_cliente AS cliente, zona AS sector, 
+                   telefono1, telefono2, telefono3, fecha_instalacion,
+                   total_mensual, antiguedad, numero_serie, producto, direccion, forma_pago,
+                   velocidad_mbps, ip_cliente, ip_nodo, vendedor, email
             FROM directorio_clientes 
-            WHERE contrato = %s
+            WHERE contrato = %s 
+               OR contrato = %s 
+               OR contrato = %s 
+               OR cedula = %s
         """
-        cursor.execute(query, (contrato,))
-        cliente = cursor.fetchone()
+        cursor.execute(query, (contrato, query_contrato_f, query_contrato_plain, contrato))
+        rows = cursor.fetchall()
         
-        if cliente:
+        def format_cliente_dict(cliente):
             cliente['antiguedad_fmt'] = format_antiguedad(cliente.get('antiguedad'), cliente.get('fecha_instalacion'))
             cliente['total_mensual'] = float(cliente['total_mensual']) if cliente.get('total_mensual') is not None else None
             cliente['numero_serie'] = cliente.get('numero_serie') or 'S/N'
+            cliente['cedula'] = cliente.get('cedula') or ''
+            cliente['empresa'] = cliente.get('empresa') or 'SERVICABLE'
 
             # Formatear fecha si existe
             if isinstance(cliente['fecha_instalacion'], (datetime, date)):
@@ -41,8 +59,8 @@ def buscar_contrato_json():
                 cliente['fecha_instalacion'] = cliente['fecha_instalacion'][:10]
             
             # Limpiar formatos flotantes (.0) si existieran
-            for k in ['telefono1', 'telefono2']:
-                val = cliente[k]
+            for k in ['telefono1', 'telefono2', 'telefono3']:
+                val = cliente.get(k)
                 if val:
                     val_str = str(val).strip()
                     if val_str.endswith('.0') or val_str.endswith(',0'):
@@ -50,11 +68,21 @@ def buscar_contrato_json():
                     cliente[k] = val_str
 
             # Combinar teléfonos de forma limpia
-            tels = []
-            if cliente['telefono1']: tels.append(cliente['telefono1'])
-            if cliente['telefono2']: tels.append(cliente['telefono2'])
-            cliente['telefonos'] = ", ".join(tels)
-            
+            tels = [cliente.get('telefono1'), cliente.get('telefono2'), cliente.get('telefono3')]
+            tels = [t for t in tels if t and t.lower() not in ['nan', 'none']]
+            cliente['telefonos'] = " / ".join(dict.fromkeys(tels))
+            return cliente
+
+        if len(rows) > 1:
+            contratos_list = [format_cliente_dict(r) for r in rows]
+            return jsonify({
+                "status": "multi_contrato",
+                "total": len(contratos_list),
+                "contratos": contratos_list,
+                "cliente": contratos_list[0]
+            })
+        elif len(rows) == 1:
+            cliente = format_cliente_dict(rows[0])
             return jsonify({"status": "success", "cliente": cliente})
         else:
             return jsonify({"status": "error", "message": "Cliente no encontrado en el directorio"}), 404
@@ -65,6 +93,7 @@ def buscar_contrato_json():
         conn.close()
 
 def obtener_usuario_actual(req):
+
     auth_header = req.headers.get('Authorization')
     if auth_header and auth_header.startswith("Bearer "):
         from utils_jwt import verify_token
@@ -582,21 +611,25 @@ def buscar_completo_json():
     cursor = conn.cursor(dictionary=True)
     try:
         from utils import format_antiguedad
-        # Búsqueda parcial por contrato, nombre, teléfono o identificación
+        # Búsqueda parcial por contrato, cédula, nombre, teléfono o identificación o IP
         query = """
-            SELECT contrato, nombre_cliente AS cliente, zona AS sector, 
+            SELECT contrato, cedula, empresa, nombre_cliente AS cliente, zona AS sector, 
                    telefono1, telefono2, telefono3, fecha_instalacion,
-                   total_mensual, antiguedad, numero_serie, producto, direccion, forma_pago
+                   total_mensual, antiguedad, numero_serie, producto, direccion, forma_pago,
+                   velocidad_mbps, ip_cliente, ip_nodo, vendedor, email
             FROM directorio_clientes 
             WHERE contrato LIKE %s 
+               OR cedula LIKE %s
                OR nombre_cliente LIKE %s 
                OR telefono1 LIKE %s 
                OR telefono2 LIKE %s 
                OR telefono3 LIKE %s
-            LIMIT 15
+               OR numero_serie LIKE %s
+               OR ip_cliente LIKE %s
+            LIMIT 25
         """
         like_q = f"%{q}%"
-        cursor.execute(query, (like_q, like_q, like_q, like_q, like_q))
+        cursor.execute(query, (like_q, like_q, like_q, like_q, like_q, like_q, like_q, like_q))
         rows = cursor.fetchall()
         
         clientes = []
@@ -618,10 +651,12 @@ def buscar_completo_json():
                         val_str = val_str[:-2]
                     if val_str and val_str not in tels:
                         tels.append(val_str)
-            telefonos_str = ", ".join(tels)
+            telefonos_str = " / ".join(tels)
             
             clientes.append({
                 "contrato": row['contrato'],
+                "cedula": row.get('cedula') or "",
+                "empresa": row.get('empresa') or "SERVICABLE",
                 "cliente": row['cliente'],
                 "sector": row['sector'] or "N/D",
                 "direccion": row['direccion'] or "N/D",
@@ -631,10 +666,15 @@ def buscar_completo_json():
                 "antiguedad_fmt": format_antiguedad(row.get('antiguedad'), row.get('fecha_instalacion')),
                 "numero_serie": row.get('numero_serie') or "S/N",
                 "producto": row.get('producto') or "N/D",
+                "velocidad_mbps": row.get('velocidad_mbps'),
+                "ip_cliente": row.get('ip_cliente') or "",
+                "ip_nodo": row.get('ip_nodo') or "",
+                "vendedor": row.get('vendedor') or "",
                 "forma_pago": row.get('forma_pago') or "N/D"
             })
             
         return jsonify({"status": "success", "clientes": clientes})
+
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:

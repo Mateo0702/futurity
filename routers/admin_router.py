@@ -2313,13 +2313,12 @@ def get_cuadro_mando_share_link():
     secret = current_app.secret_key or "fallback_secret_salt_futurity_2026"
     token = hashlib.sha256(f"{fecha}_{secret}".encode('utf-8')).hexdigest()[:16]
     
-    # Determinar el dominio base del enlace público
-    base_url = request.host_url
+    # Determinar el dominio base del enlace público (SIEMPRE dominio atlas.futurity.com.ec:7565)
+    public_base = os.getenv('PUBLIC_BASE_URL', 'http://atlas.futurity.com.ec:7565').strip()
+    if not public_base.endswith("/"):
+        public_base += "/"
         
-    if not base_url.endswith("/"):
-        base_url += "/"
-        
-    public_url = f"{base_url}publico/cuadro_mando/{fecha}/{token}"
+    public_url = f"{public_base}publico/cuadro_mando/{fecha}/{token}"
         
     return jsonify({
         "status": "ok",

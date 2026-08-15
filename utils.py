@@ -150,25 +150,37 @@ def parsear_informacion_tecnica(visitas):
                     elif line.upper().startswith('PAS:'):
                         v['info_pas'] = line[4:].strip()
 
-            # Enriquecer con datos comerciales del cliente (Mensualidad, Antigüedad, SN)
+            # Enriquecer con datos comerciales del cliente (Cédula, Mensualidad, Antigüedad, SN, IP Nodo, IP Cliente, Velocidad)
             if cursor and v.get('contrato'):
                 c_val = str(v['contrato']).strip().upper()
                 c_clean = c_val.lstrip('0')
                 cursor.execute("""
-                    SELECT total_mensual, antiguedad, fecha_instalacion, numero_serie
+                    SELECT cedula, total_mensual, antiguedad, fecha_instalacion, numero_serie,
+                           ip_cliente, ip_nodo, velocidad_mbps, producto, vendedor
                     FROM directorio_clientes
                     WHERE UPPER(contrato) = %s OR UPPER(contrato) = %s
                     LIMIT 1
                 """, (c_val, c_clean))
                 cli_info = cursor.fetchone()
                 if cli_info:
+                    v['cedula'] = cli_info.get('cedula') or v.get('cedula')
                     v['total_mensual'] = float(cli_info['total_mensual']) if cli_info.get('total_mensual') is not None else None
-                    v['numero_serie'] = cli_info.get('numero_serie') or 'S/N'
+                    v['numero_serie'] = cli_info.get('numero_serie') or v.get('numero_serie') or 'S/N'
                     v['antiguedad_fmt'] = format_antiguedad(cli_info.get('antiguedad'), cli_info.get('fecha_instalacion'))
+                    v['ip_nodo'] = cli_info.get('ip_nodo')
+                    if not v.get('info_ip') and cli_info.get('ip_cliente'):
+                        v['info_ip'] = cli_info.get('ip_cliente')
+                    if v.get('velocidad_mbps') is None and cli_info.get('velocidad_mbps') is not None:
+                        v['velocidad_mbps'] = cli_info.get('velocidad_mbps')
+                    if not v.get('producto') and cli_info.get('producto'):
+                        v['producto'] = cli_info.get('producto')
+                    if not v.get('vendedor') and cli_info.get('vendedor'):
+                        v['vendedor'] = cli_info.get('vendedor')
                 else:
                     v['total_mensual'] = None
-                    v['numero_serie'] = 'S/N'
+                    v['numero_serie'] = v.get('numero_serie') or 'S/N'
                     v['antiguedad_fmt'] = 'N/D'
+
     except Exception as e:
         print(f"Error enriqueciendo visitas con datos de cliente: {e}")
     finally:

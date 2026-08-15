@@ -180,7 +180,7 @@ def registrar_visita():
             cursor.close()
             conexion.close()
 
-# Dejamos aquí tu ruta de búsqueda de cliente para el autocompletado
+# Dejamos aquí tu ruta de búsqueda de cliente para el autocompletado (Soporta Cédula y Contrato)
 @visitas_bp.route('/api/cliente/<contrato>', methods=['GET'])
 def buscar_cliente(contrato):
     conexion = get_db_connection()
@@ -189,65 +189,89 @@ def buscar_cliente(contrato):
         
     try:
         cursor = conexion.cursor(dictionary=True)
-        # Determinar el contrato correcto según la empresa
-        contrato_clean = contrato.strip()
+        query_val = contrato.strip()
         empresa = request.args.get('empresa', '').strip().upper()
 
-        if empresa == 'FIBRACOM':
-            query_contrato = contrato_clean if contrato_clean.upper().endswith('F') else (contrato_clean + 'F')
-        elif empresa == 'SERVICABLE':
-            query_contrato = contrato_clean[:-1] if contrato_clean.upper().endswith('F') else contrato_clean
-        else:
-            query_contrato = contrato_clean
+        query_contrato_f = query_val if query_val.upper().endswith('F') else (query_val + 'F')
+        query_contrato_plain = query_val[:-1] if query_val.upper().endswith('F') else query_val
 
-        query = "SELECT nombre_cliente, zona, telefono1, telefono2, telefono3, COALESCE(direccion, '') AS direccion FROM directorio_clientes WHERE contrato = %s"
-        cursor.execute(query, (query_contrato,))
-        cliente = cursor.fetchone()
+        # Buscar por Contrato directo, Cédula o Contrato Fibracom
+        query = """
+            SELECT contrato, cedula, empresa, nombre_cliente, zona, telefono1, telefono2, telefono3,
+                   COALESCE(direccion, '') AS direccion, producto, velocidad_mbps, ip_cliente, ip_nodo,
+                   numero_serie, estado, forma_pago, total_mensual, antiguedad, fecha_instalacion
+            FROM directorio_clientes 
+            WHERE contrato = %s 
+               OR contrato = %s 
+               OR contrato = %s 
+               OR cedula = %s
+        """
+        cursor.execute(query, (query_val, query_contrato_f, query_contrato_plain, query_val))
+        rows = cursor.fetchall()
         
-        if cliente:
-            tel1 = str(cliente['telefono1']).strip() if cliente['telefono1'] else ""
-            if tel1.endswith('.0') or tel1.endswith(',0'):
-                tel1 = tel1[:-2]
-            if tel1.lower() in ['nan', 'none']:
-                tel1 = ""
+        # Si se filtró por empresa en el frontend, priorizar/filtrar si aplica
+        if empresa and len(rows) > 1:
+            empresa_rows = [r for r in rows if (r.get('empresa') or '').upper() == empresa]
+            if empresa_rows:
+                rows = empresa_rows
 
-            tel2 = str(cliente['telefono2']).strip() if cliente['telefono2'] else ""
-            if tel2.endswith('.0') or tel2.endswith(',0'):
-                tel2 = tel2[:-2]
-            if tel2.lower() in ['nan', 'none']:
-                tel2 = ""
+        def format_cliente_payload(row):
+            tel1 = str(row['telefono1']).strip() if row.get('telefono1') else ""
+            if tel1.endswith('.0') or tel1.endswith(',0'): tel1 = tel1[:-2]
+            if tel1.lower() in ['nan', 'none']: tel1 = ""
 
-            tel3 = str(cliente['telefono3']).strip() if cliente['telefono3'] else ""
-            if tel3.endswith('.0') or tel3.endswith(',0'):
-                tel3 = tel3[:-2]
-            if tel3.lower() in ['nan', 'none']:
-                tel3 = ""
+            tel2 = str(row['telefono2']).strip() if row.get('telefono2') else ""
+            if tel2.endswith('.0') or tel2.endswith(',0'): tel2 = tel2[:-2]
+            if tel2.lower() in ['nan', 'none']: tel2 = ""
 
-            telefonos = tel1
-            if tel2 and tel2 != tel1:
-                if telefonos:
-                    telefonos += f" / {tel2}"
-                else:
-                    telefonos = tel2
-            if tel3 and tel3 != tel2 and tel3 != tel1:
-                if telefonos:
-                    telefonos += f" / {tel3}"
-                else:
-                    telefonos = tel3
+            tel3 = str(row['telefono3']).strip() if row.get('telefono3') else ""
+            if tel3.endswith('.0') or tel3.endswith(',0'): tel3 = tel3[:-2]
+            if tel3.lower() in ['nan', 'none']: tel3 = ""
 
-            return jsonify({
-                "cliente": cliente['nombre_cliente'],
-                "zona_excel": cliente['zona'],
+            tels = [t for t in [tel1, tel2, tel3] if t]
+            telefonos = " / ".join(dict.fromkeys(tels))
+
+            return {
+                "contrato": row['contrato'],
+                "cedula": row.get('cedula') or "",
+                "empresa": row.get('empresa') or "SERVICABLE",
+                "cliente": row['nombre_cliente'],
+                "zona_excel": row['zona'] or "",
                 "telefonos": telefonos,
-                "direccion": cliente['direccion']
+                "direccion": row['direccion'] or "",
+                "producto": row.get('producto') or "",
+                "velocidad_mbps": row.get('velocidad_mbps'),
+                "ip_cliente": row.get('ip_cliente') or "",
+                "ip_nodo": row.get('ip_nodo') or "",
+                "numero_serie": row.get('numero_serie') or "",
+                "estado": row.get('estado') or "Activo",
+                "total_mensual": float(row['total_mensual']) if row.get('total_mensual') is not None else None
+            }
+
+        if len(rows) > 1:
+            # Multi-contrato detectado para esta Cédula
+            contratos_list = [format_cliente_payload(r) for r in rows]
+            return jsonify({
+                "status": "multi_contrato",
+                "total": len(contratos_list),
+                "contratos": contratos_list,
+                "cliente": contratos_list[0]['cliente'],
+                "zona_excel": contratos_list[0]['zona_excel'],
+                "telefonos": contratos_list[0]['telefonos'],
+                "direccion": contratos_list[0]['direccion']
             })
+        elif len(rows) == 1:
+            payload = format_cliente_payload(rows[0])
+            payload["status"] = "success"
+            return jsonify(payload)
         else:
-            return jsonify({"error": "No encontrado"}), 404
+            return jsonify({"status": "not_found", "error": "No encontrado"}), 404
             
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"status": "error", "error": str(e)}), 500
     finally:
         if 'conexion' in locals() and conexion.is_connected():
+
             cursor.close()
 
 @visitas_bp.route('/api/visitas/reagendar/<int:id_visita>', methods=['POST'])

@@ -58,6 +58,8 @@ public class MainActivity extends AppCompatActivity {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
         swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout);
+        // Deshabilitar pull-to-refresh para evitar que el gesto de scroll hacia arriba o la firma del cliente recargue la página y borre formularios
+        swipeRefreshLayout.setEnabled(false);
         swipeRefreshLayout.setOnRefreshListener(() -> webView.reload());
 
         setupWebView();
@@ -121,12 +123,16 @@ public class MainActivity extends AppCompatActivity {
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
         
-        // Ensure cookies work correctly
+        // Ensure cookies and mixed content work correctly across all Android versions
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        }
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             cookieManager.setAcceptThirdPartyCookies(webView, true);
         }
+
 
         // WebApp client to ensure links stay in app
         webView.setWebViewClient(new WebViewClient() {
@@ -171,12 +177,8 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Disable pull-to-refresh when WebView is scrolled down
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            webView.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
-                swipeRefreshLayout.setEnabled(scrollY == 0);
-            });
-        }
+        // Mantener pull-to-refresh desactivado para prevenir recargas accidentales
+        swipeRefreshLayout.setEnabled(false);
 
         // Enable Geolocation inside WebView
         settings.setGeolocationEnabled(true);

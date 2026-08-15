@@ -93,30 +93,35 @@ function App() {
   const [initialVisitData, setInitialVisitData] = useState(null);
 
   useEffect(() => {
-    let savedToken = localStorage.getItem('token') || localStorage.getItem('session_token') || 'tec-auth-token';
+    let savedToken = localStorage.getItem('token') || localStorage.getItem('session_token');
     let savedUserStr = localStorage.getItem('user');
     let parsedUser = null;
 
-    if (savedUserStr) {
+    if (savedToken && savedUserStr) {
       try {
         parsedUser = JSON.parse(savedUserStr);
       } catch (e) {}
     }
 
-    if (!parsedUser) {
+    if (savedToken && !parsedUser) {
       const legacyName = localStorage.getItem('user_name');
       const legacyRole = localStorage.getItem('user_role');
-      if (legacyName || legacyRole || initialTecnicoNombre) {
+      if (legacyName || legacyRole) {
         parsedUser = {
-          nombre: legacyName || initialTecnicoNombre || 'Técnico',
-          rol: legacyRole || 'TECNICO',
-          user_role: legacyRole || 'TECNICO'
+          nombre: legacyName || 'Usuario',
+          rol: legacyRole || 'ADMIN',
+          user_role: legacyRole || 'ADMIN'
         };
       }
     }
 
-    if (savedToken) setToken(savedToken);
-    if (parsedUser) setUser(parsedUser);
+    if (savedToken) {
+      setToken(savedToken);
+      if (parsedUser) setUser(parsedUser);
+    } else {
+      setToken(null);
+      setUser(null);
+    }
 
     setInitialized(true);
   }, []);
@@ -151,14 +156,9 @@ function App() {
     setUser(newUser);
   };
 
-  const handleLogout = async () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('session_token');
-    localStorage.removeItem('user_id');
-    localStorage.removeItem('user_role');
-    localStorage.removeItem('user_name');
-    
+  const handleLogout = () => {
+    localStorage.clear();
+    sessionStorage.clear();
     if (window.AndroidBridge) {
       try {
         window.AndroidBridge.stopTracking();
@@ -166,15 +166,7 @@ function App() {
         console.error("Error stopping tracking:", e);
       }
     }
-    
-    try {
-      await fetch('/logout');
-    } catch (e) {
-      console.error(e);
-    }
-    
-    setToken(null);
-    setUser(null);
+    window.location.href = '/';
   };
 
   if (!initialized) {
@@ -211,7 +203,7 @@ function App() {
   }
 
   // Handle Technician Panel directly without demanding admin login
-  if (activeTab === 'tecnico-panel') {
+  if (activeTab === 'tecnico-panel' && token && user) {
     return <TecnicoPanel token={token} user={user} tecnicoNombreParam={tecnicoNombre} onLogout={handleLogout} />;
   }
 
@@ -255,7 +247,7 @@ function App() {
       return <MetricasTab token={token} />;
     }
     if (activeTab === 'reportes') {
-      return <ReportesTab token={token} initialSubTab={initialSubTabFromUrl} initialFecha={initialFechaFromUrl} />;
+      return <ReportesTab token={token} user={user} initialSubTab={initialSubTabFromUrl} initialFecha={initialFechaFromUrl} />;
     }
     if (activeTab === 'control-calidad') {
       return <ControlCalidadTab token={token} />;
@@ -264,7 +256,7 @@ function App() {
       return <UsuariosTab token={token} user={user} />;
     }
     if (activeTab === 'inventario') {
-      return <InventarioTab token={token} />;
+      return <InventarioTab token={token} user={user} />;
     }
     if (activeTab === 'asignacion-busetas') {
       return <AsignacionBusetasTab token={token} />;
@@ -286,7 +278,7 @@ function App() {
   return (
     <>
       <ToastContainer />
-      {(user && (user.rol === 'TECNICO' || user.role === 'TECNICO' || user.user_role === 'TECNICO')) || activeTab === 'tecnico-panel' ? (
+      {token && user && ((user.rol === 'TECNICO' || user.role === 'TECNICO' || user.user_role === 'TECNICO') || activeTab === 'tecnico-panel') ? (
         <TecnicoPanel token={token} user={user} tecnicoNombreParam={tecnicoNombre} onLogout={handleLogout} />
       ) : token && user ? (
         <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>

@@ -117,8 +117,8 @@ def create_usuario():
         pass_hash = generate_password_hash(password, method='scrypt')
 
         cursor.execute("""
-            INSERT INTO usuarios_callcenter (nombre, email, password_hash, rol, activo)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO usuarios_callcenter (nombre, email, password_hash, rol, activo, primer_ingreso)
+            VALUES (%s, %s, %s, %s, %s, 1)
         """, (nombre, email, pass_hash, rol, activo))
         conn.commit()
 
@@ -247,6 +247,43 @@ def toggle_usuario(id_usuario):
 
         estado_txt = "activado" if nuevo_estado else "desactivado"
         return jsonify({"status": "ok", "message": f"Usuario {estado_txt} con éxito."})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@usuarios_bp.route('/api/admin/usuarios/<int:id_usuario>/password', methods=['POST'])
+def cambiar_password_usuario(id_usuario):
+    is_admin, response, status = check_admin_privileges()
+    if not is_admin:
+        return response, status
+
+    data = request.json or {}
+    password = data.get('password', '').strip()
+
+    if not password:
+        return jsonify({"status": "error", "message": "La nueva contraseña no puede estar vacía."}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+
+    cursor = conn.cursor(dictionary=True)
+    try:
+        pass_hash = generate_password_hash(password, method='scrypt')
+        cursor.execute("""
+            UPDATE usuarios_callcenter
+            SET password_hash = %s, primer_ingreso = 1
+            WHERE id_usuario = %s
+        """, (pass_hash, id_usuario))
+        conn.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({"status": "error", "message": "Usuario no encontrado."}), 404
+
+        return jsonify({"status": "ok", "message": "Contraseña actualizada exitosamente."})
     except Exception as e:
         conn.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -7,7 +7,34 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>Futurity Central - React SPA</title>
+    <title>Futurity Central - Atlas</title>
+    
+    <!-- Script de Respaldo ante Errores Globales en WebViews Antiguos / PDAs -->
+    <script>
+      (function() {
+        window.__hasAppMounted = false;
+        window.addEventListener('error', function(e) {
+          console.error('[Global Error]', e.message, e.filename, e.lineno);
+          setTimeout(function() {
+            var root = document.getElementById('root');
+            if (root && (!root.children || root.children.length === 0) && !window.__hasAppMounted) {
+              root.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#0f172a;color:#f8fafc;padding:24px;box-sizing:border-box;font-family:sans-serif;text-align:center;">' +
+                '<div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:28px 24px;max-width:480px;width:100%;box-shadow:0 10px 25px rgba(0,0,0,0.5);">' +
+                '<div style="font-size:32px;margin-bottom:12px;">⚠️</div>' +
+                '<h2 style="margin:0 0 10px 0;font-size:1.2rem;color:#ffffff;">Problema de Carga en Dispositivo</h2>' +
+                '<p style="font-size:0.85rem;color:#94a3b8;margin:0 0 20px 0;line-height:1.5;">La aplicación no pudo inicializar en este navegador. Puedes intentar recargar o limpiar la sesión.</p>' +
+                '<button onclick="location.reload()" style="width:100%;padding:12px;border-radius:10px;background:#2563eb;color:#fff;border:none;font-weight:bold;font-size:0.95rem;cursor:pointer;margin-bottom:10px;">🔄 Recargar Aplicación</button>' +
+                '<button onclick="try{localStorage.clear();sessionStorage.clear();}catch(x){}location.href=\'/\';" style="width:100%;padding:12px;border-radius:10px;background:#334155;color:#e2e8f0;border:1px solid #475569;font-weight:bold;font-size:0.9rem;cursor:pointer;">🧹 Limpiar Sesión y Reiniciar</button>' +
+                '<div style="margin-top:16px;text-align:left;background:#090d16;padding:10px;border-radius:8px;border:1px solid #1e293b;font-size:0.72rem;color:#f87171;word-break:break-all;">' +
+                'Error: ' + (e.message || 'Error desconocido') + '<br>Línea: ' + (e.lineno || 'N/D') +
+                '</div>' +
+                '</div></div>';
+            }
+          }, 2000);
+        });
+      })();
+    </script>
+
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <!-- Leaflet Maps CSS -->

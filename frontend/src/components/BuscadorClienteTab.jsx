@@ -204,13 +204,27 @@ function BuscadorClienteTab({ token }) {
           {/* Ficha Comercial (Izquierda) */}
           <div style={{ background: 'var(--card-bg)', borderRadius: '24px', border: '1px solid var(--border-color)', padding: '26px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ borderBottom: '2px solid var(--border-color)', paddingBottom: '16px', marginBottom: '20px' }}>
-                <span style={{ background: 'rgba(2, 132, 199, 0.12)', color: '#0284c7', fontWeight: 800, fontSize: '0.85rem', padding: '4px 12px', borderRadius: '8px', display: 'inline-block', marginBottom: '10px' }}>
-                  CONTRATO: {selectedClient.contrato}
-                </span>
-                <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.4rem', fontWeight: 850, letterSpacing: '-0.01em' }}>
-                  {selectedClient.cliente}
-                </h3>
+              <div style={{ borderBottom: '2px solid var(--border-color)', paddingBottom: '16px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+                    <span style={{ background: 'rgba(2, 132, 199, 0.12)', color: '#0284c7', fontWeight: 800, fontSize: '0.85rem', padding: '4px 12px', borderRadius: '8px', display: 'inline-block' }}>
+                      CONTRATO: {selectedClient.contrato}
+                    </span>
+                    {selectedClient.empresa && (
+                      <span style={{ background: selectedClient.empresa === 'FIBRACOM' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(59, 130, 246, 0.15)', color: selectedClient.empresa === 'FIBRACOM' ? '#a855f7' : '#2563eb', fontWeight: 800, fontSize: '0.75rem', padding: '4px 10px', borderRadius: '8px' }}>
+                        {selectedClient.empresa}
+                      </span>
+                    )}
+                  </div>
+                  <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.35rem', fontWeight: 850, letterSpacing: '-0.01em' }}>
+                    {selectedClient.cliente}
+                  </h3>
+                </div>
+                {selectedClient.cedula && (
+                  <span style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', fontWeight: 800, fontSize: '0.82rem', padding: '5px 12px', borderRadius: '10px' }}>
+                    🪪 {selectedClient.cedula}
+                  </span>
+                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 20px' }}>
@@ -221,15 +235,9 @@ function BuscadorClienteTab({ token }) {
                   </span>
                 </div>
                 <div>
-                  <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>⏳ Antigüedad</strong>
-                  <span style={{ color: '#0284c7', fontSize: '1rem', fontWeight: 700 }}>
-                    {selectedClient.antiguedad_fmt || 'N/D'}
-                  </span>
-                </div>
-                <div style={{ gridColumn: 'span 2' }}>
-                  <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>💳 Forma de Pago</strong>
-                  <span style={{ color: '#6366f1', fontSize: '1rem', fontWeight: 700 }}>
-                    {selectedClient.forma_pago || 'N/D'}
+                  <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>⚡ Velocidad Plan</strong>
+                  <span style={{ color: '#0284c7', fontSize: '1.1rem', fontWeight: 800 }}>
+                    {selectedClient.velocidad_mbps ? `${selectedClient.velocidad_mbps} Mbps` : 'N/D'}
                   </span>
                 </div>
                 <div style={{ gridColumn: 'span 2' }}>
@@ -239,9 +247,15 @@ function BuscadorClienteTab({ token }) {
                   </span>
                 </div>
                 <div>
-                  <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>📅 Fecha Instalación</strong>
-                  <span style={{ color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: 600 }}>
-                    {selectedClient.fecha_instalacion || 'N/D'}
+                  <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>🌐 IP Cliente</strong>
+                  <span style={{ color: 'var(--text-main)', fontSize: '0.92rem', fontWeight: 700 }}>
+                    {selectedClient.ip_cliente || 'N/D'}
+                  </span>
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>🏢 IP Nodo</strong>
+                  <span style={{ color: '#0284c7', fontSize: '0.92rem', fontWeight: 700 }}>
+                    {selectedClient.ip_nodo || 'N/D'}
                   </span>
                 </div>
                 <div>
@@ -250,6 +264,27 @@ function BuscadorClienteTab({ token }) {
                     {selectedClient.numero_serie || 'S/N'}
                   </span>
                 </div>
+                <div>
+                  <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>💳 Forma de Pago</strong>
+                  <span style={{ color: '#6366f1', fontSize: '0.92rem', fontWeight: 700 }}>
+                    {selectedClient.forma_pago || 'N/D'}
+                  </span>
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>⏳ Antigüedad</strong>
+                  <span style={{ color: '#0284c7', fontSize: '0.92rem', fontWeight: 700 }}>
+                    {selectedClient.antiguedad_fmt || 'N/D'}
+                  </span>
+                </div>
+
+                {selectedClient.vendedor && (
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>👤 Vendedor Asignado</strong>
+                    <span style={{ color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 600 }}>
+                      {selectedClient.vendedor}
+                    </span>
+                  </div>
+                )}
                 <div style={{ gridColumn: 'span 2', borderTop: '1px solid var(--border-color)', paddingTop: '14px', marginTop: '4px' }}>
                   <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>📍 Dirección y Sector</strong>
                   <span style={{ color: 'var(--text-main)', fontSize: '0.92rem', fontWeight: 600, lineHeight: 1.4, display: 'block' }}>
@@ -260,6 +295,7 @@ function BuscadorClienteTab({ token }) {
                   </span>
                 </div>
               </div>
+
             </div>
 
             {/* Teléfonos de contacto con botón de llamada en vivo */}

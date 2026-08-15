@@ -938,6 +938,41 @@ function VisitasTab({ token, user }) {
                                   </div>
                                 </div>
 
+                                {/* Motivo / Resolución según el estado */}
+                                {v.resolucion_final && (
+                                  <div>
+                                    {v.estado === 'SOLVENTADA_REMOTA' ? (
+                                      <>
+                                        <strong style={{ color: '#059669' }}>💻 Solución Remota / Cierre:</strong>
+                                        <div className="pro-obs-box" style={{ maxWidth: '100%', whiteSpace: 'normal', marginTop: '4px', background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: '8px', padding: '8px', fontWeight: 600 }}>
+                                          {v.resolucion_final}
+                                        </div>
+                                      </>
+                                    ) : v.estado === 'CANCELADA' ? (
+                                      <>
+                                        <strong style={{ color: '#dc2626' }}>🚫 Motivo de Cancelación:</strong>
+                                        <div className="pro-obs-box" style={{ maxWidth: '100%', whiteSpace: 'normal', marginTop: '4px', background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: '8px', padding: '8px', fontWeight: 600 }}>
+                                          {v.resolucion_final}
+                                        </div>
+                                      </>
+                                    ) : v.estado === 'REAGENDADA' ? (
+                                      <>
+                                        <strong style={{ color: '#d97706' }}>🗓️ Motivo Reagendado:</strong>
+                                        <div className="pro-obs-box" style={{ maxWidth: '100%', whiteSpace: 'normal', marginTop: '4px', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: '8px', padding: '8px', fontWeight: 600 }}>
+                                          {v.resolucion_final}
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <strong>📋 Resolución Final:</strong>
+                                        <div className="pro-obs-box" style={{ maxWidth: '100%', whiteSpace: 'normal', marginTop: '4px', background: 'var(--profile-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px' }}>
+                                          {v.resolucion_final}
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+
                                 {v.solucion_tecnico && (
                                   <div>
                                     <strong>🛠️ Solución Aplicada:</strong> <span style={{ color: 'var(--primary)', fontWeight: 'bold', marginLeft: '6px' }}>{v.solucion_tecnico}</span>
