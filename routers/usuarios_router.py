@@ -254,6 +254,43 @@ def toggle_usuario(id_usuario):
         cursor.close()
         conn.close()
 
+@usuarios_bp.route('/api/admin/usuarios/<int:id_usuario>/password', methods=['POST'])
+def cambiar_password_usuario(id_usuario):
+    is_admin, response, status = check_admin_privileges()
+    if not is_admin:
+        return response, status
+
+    data = request.json or {}
+    password = data.get('password', '').strip()
+
+    if not password:
+        return jsonify({"status": "error", "message": "La nueva contraseña no puede estar vacía."}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+
+    cursor = conn.cursor(dictionary=True)
+    try:
+        pass_hash = generate_password_hash(password, method='scrypt')
+        cursor.execute("""
+            UPDATE usuarios_callcenter
+            SET password_hash = %s, primer_ingreso = 1
+            WHERE id_usuario = %s
+        """, (pass_hash, id_usuario))
+        conn.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({"status": "error", "message": "Usuario no encontrado."}), 404
+
+        return jsonify({"status": "ok", "message": "Contraseña actualizada exitosamente."})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 # ==========================================
 # APIS PARA GESTIÓN DE TÉCNICOS
 # ==========================================
