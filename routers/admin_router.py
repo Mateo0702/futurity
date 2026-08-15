@@ -2922,7 +2922,12 @@ def api_obtener_inventario():
         cursor = conexion.cursor(dictionary=True)
         
         # 1. Obtener catálogo de materiales con stock en bodega
-        cursor.execute("SELECT id_material, nombre_material, unidad_medida, stock_bodega FROM materiales ORDER BY nombre_material ASC")
+        cursor.execute("""
+            SELECT id_material, codigo_material, nombre_material, unidad_medida, categoria, stock_bodega, stock_minimo, activo 
+            FROM materiales 
+            WHERE activo = 1 
+            ORDER BY codigo_material ASC, nombre_material ASC
+        """)
         materiales = cursor.fetchall()
         
         # 2. Obtener lista detallada de técnicos y sus placas de vehículos
@@ -3165,6 +3170,150 @@ def api_tecnico_devolucion():
     finally:
         cursor.close()
         conexion.close()
+
+
+@admin_bp.route('/api/admin/materiales', methods=['POST'])
+def api_crear_material():
+    token = request.headers.get('Authorization')
+    user = None
+    role = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+        if user:
+            role = user.get('role')
+    elif 'user_id' in session:
+        user = {'sub': session['user_id']}
+        role = session.get('user_role')
+
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if role not in ['ADMIN', 'BODEGA']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para crear productos."}), 403
+
+    datos = request.get_json() or {}
+    codigo = (datos.get('codigo_material') or '').strip().upper()
+    nombre = (datos.get('nombre_material') or '').strip().upper()
+    unidad = (datos.get('unidad_medida') or 'UNIDADES').strip().upper()
+    categoria = (datos.get('categoria') or 'GENERAL').strip().upper()
+    stock_bodega = int(datos.get('stock_bodega') or 0)
+    stock_minimo = int(datos.get('stock_minimo') or 0)
+
+    if not codigo or not nombre:
+        return jsonify({"status": "error", "message": "El código y el nombre del producto son requeridos."}), 400
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+
+    try:
+        cursor = conexion.cursor()
+        # Verificar duplicados por codigo
+        cursor.execute("SELECT id_material FROM materiales WHERE codigo_material = %s", (codigo,))
+        if cursor.fetchone():
+            return jsonify({"status": "error", "message": f"Ya existe un producto con el código '{codigo}'."}), 400
+
+        cursor.execute("""
+            INSERT INTO materiales (codigo_material, nombre_material, unidad_medida, categoria, stock_bodega, stock_minimo, activo)
+            VALUES (%s, %s, %s, %s, %s, %s, 1)
+        """, (codigo, nombre, unidad, categoria, stock_bodega, stock_minimo))
+        conexion.commit()
+        return jsonify({"status": "ok", "message": "Producto creado con éxito", "id_material": cursor.lastrowid})
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@admin_bp.route('/api/admin/materiales/<int:id_material>', methods=['PUT'])
+def api_actualizar_material(id_material):
+    token = request.headers.get('Authorization')
+    user = None
+    role = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+        if user:
+            role = user.get('role')
+    elif 'user_id' in session:
+        user = {'sub': session['user_id']}
+        role = session.get('user_role')
+
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if role not in ['ADMIN', 'BODEGA']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para editar productos."}), 403
+
+    datos = request.get_json() or {}
+    codigo = (datos.get('codigo_material') or '').strip().upper()
+    nombre = (datos.get('nombre_material') or '').strip().upper()
+    unidad = (datos.get('unidad_medida') or 'UNIDADES').strip().upper()
+    categoria = (datos.get('categoria') or 'GENERAL').strip().upper()
+    stock_bodega = int(datos.get('stock_bodega') if datos.get('stock_bodega') is not None else 0)
+    stock_minimo = int(datos.get('stock_minimo') if datos.get('stock_minimo') is not None else 0)
+
+    if not codigo or not nombre:
+        return jsonify({"status": "error", "message": "El código y nombre del producto no pueden estar vacíos."}), 400
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+
+    try:
+        cursor = conexion.cursor()
+        cursor.execute("""
+            UPDATE materiales 
+            SET codigo_material = %s, nombre_material = %s, unidad_medida = %s, categoria = %s, stock_bodega = %s, stock_minimo = %s
+            WHERE id_material = %s
+        """, (codigo, nombre, unidad, categoria, stock_bodega, stock_minimo, id_material))
+        conexion.commit()
+        return jsonify({"status": "ok", "message": "Producto actualizado con éxito"})
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@admin_bp.route('/api/admin/materiales/<int:id_material>', methods=['DELETE'])
+def api_eliminar_material(id_material):
+    token = request.headers.get('Authorization')
+    user = None
+    role = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+        if user:
+            role = user.get('role')
+    elif 'user_id' in session:
+        user = {'sub': session['user_id']}
+        role = session.get('user_role')
+
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if role not in ['ADMIN', 'BODEGA']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para desactivar productos."}), 403
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+
+    try:
+        cursor = conexion.cursor()
+        # Soft delete: set activo = 0
+        cursor.execute("UPDATE materiales SET activo = 0 WHERE id_material = %s", (id_material,))
+        conexion.commit()
+        return jsonify({"status": "ok", "message": "Producto desactivado del catálogo con éxito"})
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
 
 
 @admin_bp.route('/api/admin/tecnicos/mas_cercano', methods=['GET'])

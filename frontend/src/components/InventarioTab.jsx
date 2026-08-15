@@ -12,7 +12,22 @@ function InventarioTab({ token }) {
   const [traspasosHistorial, setTraspasosHistorial] = useState([]);
   
   // Navigation Subtabs
-  const [invSubTab, setInvSubTab] = useState('matriz'); // 'matriz' | 'vehiculos' | 'traspasos'
+  const [invSubTab, setInvSubTab] = useState('matriz'); // 'matriz' | 'catalogo' | 'vehiculos' | 'traspasos'
+
+  // Catalog State & Filters
+  const [searchProducto, setSearchProducto] = useState('');
+  const [filtroCategoria, setFiltroCategoria] = useState('TODAS');
+  const [showProductoModal, setShowProductoModal] = useState(false);
+  const [isEditProductoMode, setIsEditProductoMode] = useState(false);
+  const [formProducto, setFormProducto] = useState({
+    id_material: null,
+    codigo_material: '',
+    nombre_material: '',
+    unidad_medida: 'UNIDADES',
+    categoria: 'GENERAL',
+    stock_bodega: 0,
+    stock_minimo: 0
+  });
 
   // Reassignment Form Modal
   const [showReasignarModal, setShowReasignarModal] = useState(false);
@@ -41,6 +56,61 @@ function InventarioTab({ token }) {
     cargarInventario();
     cargarTraspasosHistorial();
   }, []);
+
+  const handleGuardarProductoSubmit = async (e) => {
+    e.preventDefault();
+    if (!formProducto.codigo_material || !formProducto.nombre_material) {
+      alert("Código y nombre son obligatorios.");
+      return;
+    }
+
+    try {
+      const url = isEditProductoMode 
+        ? `/api/admin/materiales/${formProducto.id_material}` 
+        : '/api/admin/materiales';
+      const method = isEditProductoMode ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(formProducto)
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        alert(data.message || 'Producto guardado con éxito');
+        setShowProductoModal(false);
+        await cargarInventario();
+      } else {
+        alert(data.message || 'Error al guardar el producto.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error de conexión al guardar producto.');
+    }
+  };
+
+  const handleDesactivarProducto = async (idMat, nombre) => {
+    if (!window.confirm(`¿Está seguro de desactivar del catálogo el producto "${nombre}"?`)) return;
+    try {
+      const res = await fetch(`/api/admin/materiales/${idMat}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        alert(data.message);
+        await cargarInventario();
+      } else {
+        alert(data.message || 'Error al desactivar producto');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Error de conexión');
+    }
+  };
 
   const cargarTraspasosHistorial = async () => {
     try {
@@ -258,9 +328,75 @@ function InventarioTab({ token }) {
             Control de Inventario y Bodega
           </h1>
           <p style={{ margin: '4px 0 0 0', color: 'var(--sidebar-text)', fontSize: '0.9rem', fontWeight: 500 }}>
-            Administración de stock en bodega principal y control de materiales en custodia de técnicos.
+            Administración de stock en bodega principal, gestión del catálogo de productos y custodia por vehículo.
           </p>
         </div>
+      </div>
+
+      {/* Subtab Navigation Bar */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '25px', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setInvSubTab('matriz')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '12px',
+            border: 'none',
+            fontWeight: 800,
+            cursor: 'pointer',
+            background: invSubTab === 'matriz' ? '#1f497d' : 'var(--card-bg)',
+            color: invSubTab === 'matriz' ? 'white' : 'var(--text-main)',
+            boxShadow: invSubTab === 'matriz' ? '0 4px 12px rgba(31, 73, 125, 0.2)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontSize: '0.9rem',
+            transition: 'all 0.2s'
+          }}
+        >
+          <i className="fa-solid fa-boxes-stacked"></i> Stock y Bodega
+        </button>
+
+        <button
+          onClick={() => setInvSubTab('catalogo')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '12px',
+            border: 'none',
+            fontWeight: 800,
+            cursor: 'pointer',
+            background: invSubTab === 'catalogo' ? '#1f497d' : 'var(--card-bg)',
+            color: invSubTab === 'catalogo' ? 'white' : 'var(--text-main)',
+            boxShadow: invSubTab === 'catalogo' ? '0 4px 12px rgba(31, 73, 125, 0.2)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontSize: '0.9rem',
+            transition: 'all 0.2s'
+          }}
+        >
+          <i className="fa-solid fa-box-open"></i> Catálogo de Productos ({materiales.length})
+        </button>
+
+        <button
+          onClick={() => setInvSubTab('traspasos')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '12px',
+            border: 'none',
+            fontWeight: 800,
+            cursor: 'pointer',
+            background: invSubTab === 'traspasos' ? '#1f497d' : 'var(--card-bg)',
+            color: invSubTab === 'traspasos' ? 'white' : 'var(--text-main)',
+            boxShadow: invSubTab === 'traspasos' ? '0 4px 12px rgba(31, 73, 125, 0.2)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontSize: '0.9rem',
+            transition: 'all 0.2s'
+          }}
+        >
+          <i className="fa-solid fa-arrow-right-arrow-left"></i> Historial Traspasos ({traspasosHistorial.length})
+        </button>
       </div>
 
       {loading ? (
@@ -276,156 +412,356 @@ function InventarioTab({ token }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
           
-          {/* KPIs Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
-            <div style={{ background: 'var(--card-bg)', padding: '20px', borderRadius: '20px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: 'var(--shadow-sm)' }}>
-              <div style={{ background: 'rgba(31, 73, 125, 0.1)', color: '#1f497d', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>
-                <i className="fa-solid fa-warehouse"></i>
-              </div>
-              <div>
-                <h3 style={{ fontSize: '1.8rem', fontWeight: 900, margin: 0, color: 'var(--text-main)' }}>{kpiBodega}</h3>
-                <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase' }}>Stock en Bodega</p>
-              </div>
-            </div>
-            
-            <div style={{ background: 'var(--card-bg)', padding: '20px', borderRadius: '20px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: 'var(--shadow-sm)' }}>
-              <div style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>
-                <i className="fa-solid fa-people-carry-box"></i>
-              </div>
-              <div>
-                <h3 style={{ fontSize: '1.8rem', fontWeight: 900, margin: 0, color: 'var(--text-main)' }}>{kpiCustodia}</h3>
-                <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase' }}>Custodia por Placa</p>
-              </div>
-            </div>
-            
-            <div style={{ background: 'var(--card-bg)', padding: '20px', borderRadius: '20px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: 'var(--shadow-sm)' }}>
-              <div style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>
-                <i className="fa-solid fa-wrench"></i>
-              </div>
-              <div>
-                <h3 style={{ fontSize: '1.8rem', fontWeight: 900, margin: 0, color: 'var(--text-main)' }}>{kpiConsumo}</h3>
-                <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase' }}>Consumo Total</p>
-              </div>
-            </div>
-          </div>
-          {/* Columns Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '25px' }}>
-            
-            {/* Bodega Principal Card */}
-            <div style={{ padding: '25px', background: 'var(--card-bg)', borderRadius: '20px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 850, color: '#1f497d', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <i className="fa-solid fa-boxes-stacked"></i> Stock en Bodega Principal
-                </h3>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    if (materiales.length > 0) {
-                      setFormIngreso({ id_material: materiales[0].id_material.toString(), cantidad: '' });
-                    }
-                    setShowIngresoModal(true);
-                  }} 
-                  style={{ padding: '8px 15px', fontSize: '0.85rem', background: '#1f497d', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <i className="fa-solid fa-plus"></i> Ingresar Material
-                </button>
-              </div>
-
-              <div style={{ border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--profile-bg)', borderBottom: '1px solid var(--border-color)', fontWeight: 800 }}>
-                      <th style={{ padding: '12px 15px' }}>Material</th>
-                      <th style={{ padding: '12px 15px', textAlign: 'center' }}>U. Medida</th>
-                      <th style={{ padding: '12px 15px', textAlign: 'center' }}>Disponible</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {materiales.map((m, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                        <td style={{ padding: '12px 15px', fontWeight: 800, color: 'var(--text-main)' }}>{m.nombre_material}</td>
-                        <td style={{ padding: '12px 15px', textAlign: 'center', color: 'var(--sidebar-text)', fontWeight: 700 }}>{m.unidad_medida}</td>
-                        <td style={{ padding: '12px 15px', textAlign: 'center', fontWeight: 900, color: '#1f497d', fontSize: '1rem' }}>{m.stock_bodega}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Asignación y Custodia por Placa Card */}
-            <div style={{ padding: '25px', background: 'var(--card-bg)', borderRadius: '20px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 850, color: '#6366f1', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <i className="fa-solid fa-people-carry-box"></i> Custodia por Placa de Vehículo
-                </h3>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      if (tecnicos.length > 0 && materiales.length > 0) {
-                        setFormEntrega({ tecnico_nombre: tecnicos[0], id_material: materiales[0].id_material.toString(), cantidad: '' });
-                      }
-                      setShowEntregaModal(true);
-                    }} 
-                    style={{ padding: '8px 14px', fontSize: '0.82rem', background: '#6366f1', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <i className="fa-solid fa-truck-ramp-box"></i> Entregar
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      if (tecnicos.length > 0 && materiales.length > 0) {
-                        setFormDevolucion({ tecnico_nombre: tecnicos[0], id_material: materiales[0].id_material.toString(), cantidad: '' });
-                      }
-                      setShowDevolucionModal(true);
-                    }} 
-                    style={{ padding: '8px 14px', fontSize: '0.82rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <i className="fa-solid fa-rotate-left"></i> Devolución
-                  </button>
+          {/* VIEW 1: MATRIZ DE STOCK Y CUSTODIAS */}
+          {invSubTab === 'matriz' && (
+            <>
+              {/* KPIs Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+                <div style={{ background: 'var(--card-bg)', padding: '20px', borderRadius: '20px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: 'var(--shadow-sm)' }}>
+                  <div style={{ background: 'rgba(31, 73, 125, 0.1)', color: '#1f497d', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>
+                    <i className="fa-solid fa-warehouse"></i>
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '1.8rem', fontWeight: 900, margin: 0, color: 'var(--text-main)' }}>{kpiBodega}</h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase' }}>Stock en Bodega</p>
+                  </div>
+                </div>
+                
+                <div style={{ background: 'var(--card-bg)', padding: '20px', borderRadius: '20px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: 'var(--shadow-sm)' }}>
+                  <div style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>
+                    <i className="fa-solid fa-people-carry-box"></i>
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '1.8rem', fontWeight: 900, margin: 0, color: 'var(--text-main)' }}>{kpiCustodia}</h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase' }}>Custodia por Placa</p>
+                  </div>
+                </div>
+                
+                <div style={{ background: 'var(--card-bg)', padding: '20px', borderRadius: '20px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: 'var(--shadow-sm)' }}>
+                  <div style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>
+                    <i className="fa-solid fa-wrench"></i>
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '1.8rem', fontWeight: 900, margin: 0, color: 'var(--text-main)' }}>{kpiConsumo}</h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase' }}>Consumo Total</p>
+                  </div>
                 </div>
               </div>
 
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.82rem', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Filtrar por Placa de Vehículo:</label>
-                <select 
-                  value={filtroTecnico} 
-                  onChange={(e) => setFiltroTecnico(e.target.value)} 
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 700, outline: 'none' }}
+              {/* Columns Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '25px' }}>
+                
+                {/* Bodega Principal Card */}
+                <div style={{ padding: '25px', background: 'var(--card-bg)', borderRadius: '20px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 850, color: '#1f497d', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <i className="fa-solid fa-boxes-stacked"></i> Stock en Bodega Principal
+                    </h3>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        if (materiales.length > 0) {
+                          setFormIngreso({ id_material: materiales[0].id_material.toString(), cantidad: '' });
+                        }
+                        setShowIngresoModal(true);
+                      }} 
+                      style={{ padding: '8px 15px', fontSize: '0.85rem', background: '#1f497d', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <i className="fa-solid fa-plus"></i> Ingresar Material
+                    </button>
+                  </div>
+
+                  <div style={{ border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--profile-bg)', borderBottom: '1px solid var(--border-color)', fontWeight: 800 }}>
+                          <th style={{ padding: '12px 15px' }}>Código / Material</th>
+                          <th style={{ padding: '12px 15px', textAlign: 'center' }}>U. Medida</th>
+                          <th style={{ padding: '12px 15px', textAlign: 'center' }}>Disponible</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {materiales.map((m, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '12px 15px', fontWeight: 800, color: 'var(--text-main)' }}>
+                              <span style={{ display: 'inline-block', padding: '2px 6px', background: 'rgba(31, 73, 125, 0.08)', color: '#1f497d', borderRadius: '6px', fontSize: '0.75rem', marginRight: '8px', fontFamily: 'monospace' }}>
+                                {m.codigo_material || 'N/A'}
+                              </span>
+                              {m.nombre_material}
+                            </td>
+                            <td style={{ padding: '12px 15px', textAlign: 'center', color: 'var(--sidebar-text)', fontWeight: 700 }}>{m.unidad_medida}</td>
+                            <td style={{ padding: '12px 15px', textAlign: 'center', fontWeight: 900, color: m.stock_bodega <= (m.stock_minimo || 0) ? '#ef4444' : '#1f497d', fontSize: '1rem' }}>{m.stock_bodega}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Asignación y Custodia por Placa Card */}
+                <div style={{ padding: '25px', background: 'var(--card-bg)', borderRadius: '20px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 850, color: '#6366f1', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <i className="fa-solid fa-people-carry-box"></i> Custodia por Placa de Vehículo
+                    </h3>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          if (tecnicos.length > 0 && materiales.length > 0) {
+                            setFormEntrega({ tecnico_nombre: tecnicos[0], id_material: materiales[0].id_material.toString(), cantidad: '' });
+                          }
+                          setShowEntregaModal(true);
+                        }} 
+                        style={{ padding: '8px 14px', fontSize: '0.82rem', background: '#6366f1', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <i className="fa-solid fa-truck-ramp-box"></i> Entregar
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          if (tecnicos.length > 0 && materiales.length > 0) {
+                            setFormDevolucion({ tecnico_nombre: tecnicos[0], id_material: materiales[0].id_material.toString(), cantidad: '' });
+                          }
+                          setShowDevolucionModal(true);
+                        }} 
+                        style={{ padding: '8px 14px', fontSize: '0.82rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <i className="fa-solid fa-rotate-left"></i> Devolución
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: '15px' }}>
+                    <label style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.82rem', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Filtrar por Placa de Vehículo:</label>
+                    <select 
+                      value={filtroTecnico} 
+                      onChange={(e) => setFiltroTecnico(e.target.value)} 
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 700, outline: 'none' }}
+                    >
+                      {tecnicos.map((t, idx) => <option key={idx} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+
+                  <div style={{ border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--profile-bg)', borderBottom: '1px solid var(--border-color)', fontWeight: 800 }}>
+                          <th style={{ padding: '12px 15px' }}>Material</th>
+                          <th style={{ padding: '12px 15px', textAlign: 'center' }}>U. Medida</th>
+                          <th style={{ padding: '12px 15px', textAlign: 'center' }}>En Custodia</th>
+                          <th style={{ padding: '12px 15px', textAlign: 'center' }}>Consumido</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {materiales.map((m, i) => {
+                          const info = tecInventoryDetails[m.id_material.toString()] || { cantidad_disponible: 0, total_usado: 0 };
+                          return (
+                            <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '12px 15px', fontWeight: 800, color: 'var(--text-main)' }}>{m.nombre_material}</td>
+                              <td style={{ padding: '12px 15px', textAlign: 'center', color: 'var(--sidebar-text)', fontWeight: 700 }}>{m.unidad_medida}</td>
+                              <td style={{ padding: '12px 15px', textAlign: 'center', fontWeight: 900, color: '#6366f1', fontSize: '1rem' }}>{info.cantidad_disponible}</td>
+                              <td style={{ padding: '12px 15px', textAlign: 'center', fontWeight: 800, color: '#10b981', fontSize: '1rem' }}>{info.total_usado}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            </>
+          )}
+
+          {/* VIEW 2: CATÁLOGO DE PRODUCTOS */}
+          {invSubTab === 'catalogo' && (
+            <div style={{ padding: '25px', background: 'var(--card-bg)', borderRadius: '20px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
+              
+              {/* Header Controls */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 850, color: '#1f497d', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <i className="fa-solid fa-box-open"></i> Catálogo Maestro de Productos
+                  </h3>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--sidebar-text)' }}>
+                    Administra el inventario de ítems con sus códigos, categorías y niveles mínimos.
+                  </p>
+                </div>
+
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setIsEditProductoMode(false);
+                    setFormProducto({
+                      id_material: null,
+                      codigo_material: '',
+                      nombre_material: '',
+                      unidad_medida: 'UNIDADES',
+                      categoria: 'GENERAL',
+                      stock_bodega: 0,
+                      stock_minimo: 10
+                    });
+                    setShowProductoModal(true);
+                  }} 
+                  style={{ padding: '10px 18px', background: '#1f497d', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
-                  {tecnicos.map((t, idx) => <option key={idx} value={t}>{t}</option>)}
-                </select>
+                  <i className="fa-solid fa-plus"></i> Crear Nuevo Producto
+                </button>
               </div>
 
-              <div style={{ border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
+              {/* Filters & Search */}
+              <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '220px' }}>
+                  <input
+                    type="text"
+                    placeholder="🔍 Buscar por código o descripción..."
+                    value={searchProducto}
+                    onChange={(e) => setSearchProducto(e.target.value)}
+                    style={{ width: '100%', padding: '11px 16px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontWeight: 600, outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div style={{ width: '220px' }}>
+                  <select
+                    value={filtroCategoria}
+                    onChange={(e) => setFiltroCategoria(e.target.value)}
+                    style={{ width: '100%', padding: '11px 16px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontWeight: 700, outline: 'none' }}
+                  >
+                    {['TODAS', ...Array.from(new Set(materiales.map(m => m.categoria || 'GENERAL'))).sort()].map((cat, idx) => (
+                      <option key={idx} value={cat}>{cat === 'TODAS' ? '📁 Todas las Categorías' : `🏷️ ${cat}`}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div style={{ border: '1px solid var(--border-color)', borderRadius: '14px', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
                   <thead>
                     <tr style={{ background: 'var(--profile-bg)', borderBottom: '1px solid var(--border-color)', fontWeight: 800 }}>
-                      <th style={{ padding: '12px 15px' }}>Material</th>
-                      <th style={{ padding: '12px 15px', textAlign: 'center' }}>U. Medida</th>
-                      <th style={{ padding: '12px 15px', textAlign: 'center' }}>En Custodia</th>
-                      <th style={{ padding: '12px 15px', textAlign: 'center' }}>Consumido</th>
+                      <th style={{ padding: '14px 16px' }}>Código</th>
+                      <th style={{ padding: '14px 16px' }}>Descripción / Producto</th>
+                      <th style={{ padding: '14px 16px' }}>Categoría</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'center' }}>U. Medida</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'center' }}>Stock Bodega</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'center' }}>Stock Mínimo</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'center' }}>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {materiales.map((m, i) => {
-                      const info = tecInventoryDetails[m.id_material.toString()] || { cantidad_disponible: 0, total_usado: 0 };
-                      return (
-                        <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                          <td style={{ padding: '12px 15px', fontWeight: 800, color: 'var(--text-main)' }}>{m.nombre_material}</td>
-                          <td style={{ padding: '12px 15px', textAlign: 'center', color: 'var(--sidebar-text)', fontWeight: 700 }}>{m.unidad_medida}</td>
-                          <td style={{ padding: '12px 15px', textAlign: 'center', fontWeight: 900, color: '#6366f1', fontSize: '1rem' }}>{info.cantidad_disponible}</td>
-                          <td style={{ padding: '12px 15px', textAlign: 'center', fontWeight: 800, color: '#10b981', fontSize: '1rem' }}>{info.total_usado}</td>
+                    {materiales
+                      .filter(m => {
+                        const matchSearch = (m.codigo_material || '').toLowerCase().includes(searchProducto.toLowerCase()) ||
+                                            (m.nombre_material || '').toLowerCase().includes(searchProducto.toLowerCase());
+                        const matchCat = filtroCategoria === 'TODAS' || (m.categoria || 'GENERAL') === filtroCategoria;
+                        return matchSearch && matchCat;
+                      })
+                      .map((m, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--border-color)', background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
+                          <td style={{ padding: '12px 16px', fontWeight: 900, fontFamily: 'monospace', color: '#1f497d', fontSize: '0.9rem' }}>
+                            {m.codigo_material || 'S/C'}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontWeight: 800, color: 'var(--text-main)' }}>
+                            {m.nombre_material}
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <span style={{ padding: '3px 8px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', fontWeight: 700, fontSize: '0.75rem' }}>
+                              {m.categoria || 'GENERAL'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--sidebar-text)' }}>
+                            {m.unidad_medida}
+                          </td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 900, fontSize: '0.95rem', color: m.stock_bodega <= (m.stock_minimo || 0) ? '#ef4444' : '#10b981' }}>
+                            {m.stock_bodega} {m.stock_bodega <= (m.stock_minimo || 0) && <span title="¡Alerta de Stock Mínimo!" style={{ marginLeft: '4px' }}>⚠️</span>}
+                          </td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--sidebar-text)' }}>
+                            {m.stock_minimo || 0}
+                          </td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                              <button
+                                onClick={() => {
+                                  setIsEditProductoMode(true);
+                                  setFormProducto({
+                                    id_material: m.id_material,
+                                    codigo_material: m.codigo_material || '',
+                                    nombre_material: m.nombre_material || '',
+                                    unidad_medida: m.unidad_medida || 'UNIDADES',
+                                    categoria: m.categoria || 'GENERAL',
+                                    stock_bodega: m.stock_bodega || 0,
+                                    stock_minimo: m.stock_minimo || 0
+                                  });
+                                  setShowProductoModal(true);
+                                }}
+                                title="Editar producto"
+                                style={{ padding: '6px 10px', background: 'rgba(31, 73, 125, 0.1)', color: '#1f497d', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}
+                              >
+                                <i className="fa-solid fa-pen-to-square"></i>
+                              </button>
+                              <button
+                                onClick={() => handleDesactivarProducto(m.id_material, m.nombre_material)}
+                                title="Desactivar producto"
+                                style={{ padding: '6px 10px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}
+                              >
+                                <i className="fa-solid fa-trash-can"></i>
+                              </button>
+                            </div>
+                          </td>
                         </tr>
-                      );
-                    })}
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+            </div>
+          )}
+
+          {/* VIEW 3: HISTORIAL DE TRASPASOS */}
+          {invSubTab === 'traspasos' && (
+            <div style={{ padding: '25px', background: 'var(--card-bg)', borderRadius: '20px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: '1.2rem', fontWeight: 850, color: '#1f497d', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="fa-solid fa-arrow-right-arrow-left"></i> Historial de Traspasos entre Vehículos / Técnicos
+              </h3>
+
+              <div style={{ border: '1px solid var(--border-color)', borderRadius: '14px', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--profile-bg)', borderBottom: '1px solid var(--border-color)', fontWeight: 800 }}>
+                      <th style={{ padding: '12px 15px' }}>Fecha</th>
+                      <th style={{ padding: '12px 15px' }}>Origen</th>
+                      <th style={{ padding: '12px 15px' }}>Destino</th>
+                      <th style={{ padding: '12px 15px' }}>Material</th>
+                      <th style={{ padding: '12px 15px', textAlign: 'center' }}>Cantidad</th>
+                      <th style={{ padding: '12px 15px' }}>Registrado por</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {traspasosHistorial.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" style={{ padding: '30px', textAlign: 'center', color: 'var(--sidebar-text)', fontWeight: 600 }}>
+                          No hay registros de traspasos.
+                        </td>
+                      </tr>
+                    ) : (
+                      traspasosHistorial.map((t, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: '12px 15px', fontWeight: 700, color: 'var(--sidebar-text)' }}>{t.fecha_hora}</td>
+                          <td style={{ padding: '12px 15px', fontWeight: 800, color: 'var(--text-main)' }}>{t.tecnico_origen} ({t.placa_origen})</td>
+                          <td style={{ padding: '12px 15px', fontWeight: 800, color: '#6366f1' }}>{t.tecnico_destino} ({t.placa_destino})</td>
+                          <td style={{ padding: '12px 15px', fontWeight: 800 }}>{t.nombre_material}</td>
+                          <td style={{ padding: '12px 15px', textAlign: 'center', fontWeight: 900, color: '#1f497d' }}>{t.cantidad}</td>
+                          <td style={{ padding: '12px 15px', color: 'var(--sidebar-text)' }}>{t.agente_registro}</td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
+          )}
 
-          </div>
         </div>
       )}
 
@@ -580,8 +916,110 @@ function InventarioTab({ token }) {
         </div>
       )}
 
+      {/* MODAL 4: CREAR / EDITAR PRODUCTO */}
+      {showProductoModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
+          <div style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', width: '100%', maxWidth: '520px', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 25px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--profile-bg)' }}>
+              <h5 style={{ margin: 0, color: '#1f497d', fontSize: '1.05rem', fontWeight: 850, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="fa-solid fa-box"></i> {isEditProductoMode ? 'Editar Producto del Catálogo' : 'Crear Nuevo Producto en Catálogo'}
+              </h5>
+              <button type="button" onClick={() => setShowProductoModal(false)} style={{ background: 'none', border: 'none', color: 'var(--sidebar-text)', fontSize: '1.6rem', cursor: 'pointer', padding: 0, lineHeight: 1 }}>&times;</button>
+            </div>
+            <div style={{ padding: '20px' }}>
+              <form onSubmit={handleGuardarProductoSubmit}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                  <div>
+                    <label style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.78rem', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Código SKU / Item:</label>
+                    <input 
+                      type="text" 
+                      value={formProducto.codigo_material} 
+                      onChange={(e) => setFormProducto({ ...formProducto, codigo_material: e.target.value.toUpperCase() })} 
+                      placeholder="Ej. AMA0001" 
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 700, fontFamily: 'monospace', boxSizing: 'border-box' }}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.78rem', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Categoría:</label>
+                    <input 
+                      type="text" 
+                      value={formProducto.categoria} 
+                      onChange={(e) => setFormProducto({ ...formProducto, categoria: e.target.value.toUpperCase() })} 
+                      placeholder="Ej. CABLES, CONECTORES" 
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 700, boxSizing: 'border-box' }}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.78rem', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Descripción / Nombre del Producto:</label>
+                  <input 
+                    type="text" 
+                    value={formProducto.nombre_material} 
+                    onChange={(e) => setFormProducto({ ...formProducto, nombre_material: e.target.value.toUpperCase() })} 
+                    placeholder="Ej. AMARRAS INSTALACIONES" 
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 700, boxSizing: 'border-box' }}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                  <div>
+                    <label style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.75rem', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Unidad Medida:</label>
+                    <select 
+                      value={formProducto.unidad_medida} 
+                      onChange={(e) => setFormProducto({ ...formProducto, unidad_medida: e.target.value })} 
+                      style={{ width: '100%', padding: '10px 8px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 700, fontSize: '0.85rem' }}
+                    >
+                      <option value="UNIDADES">UNIDADES</option>
+                      <option value="METROS">METROS</option>
+                      <option value="ROLLOS">ROLLOS</option>
+                      <option value="CAJAS">CAJAS</option>
+                      <option value="PAQUETES">PAQUETES</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.75rem', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Stock Bodega:</label>
+                    <input 
+                      type="number" 
+                      value={formProducto.stock_bodega} 
+                      onChange={(e) => setFormProducto({ ...formProducto, stock_bodega: parseInt(e.target.value) || 0 })} 
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 700, boxSizing: 'border-box' }}
+                      min="0"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.75rem', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Stock Mínimo:</label>
+                    <input 
+                      type="number" 
+                      value={formProducto.stock_minimo} 
+                      onChange={(e) => setFormProducto({ ...formProducto, stock_minimo: parseInt(e.target.value) || 0 })} 
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 700, boxSizing: 'border-box' }}
+                      min="0"
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button type="button" onClick={() => setShowProductoModal(false)} style={{ padding: '10px 18px', background: 'var(--profile-bg)', color: 'var(--text-main)', border: '1px solid var(--border-color)', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}>Cancelar</button>
+                  <button type="submit" style={{ padding: '10px 20px', background: '#1f497d', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}>
+                    {isEditProductoMode ? 'Guardar Cambios' : 'Crear Producto'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
+
 }
 
 export default InventarioTab;
