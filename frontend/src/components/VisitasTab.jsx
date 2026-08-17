@@ -645,7 +645,7 @@ function VisitasTab({ token, user }) {
           <table className="historial-reciente-table" style={{ width: '100%' }}>
             <thead>
               <tr>
-                <th style={{ textCenter: 'center', width: '90px' }}>#Parada</th>
+                <th style={{ textAlign: 'center', width: '90px' }}>#Ticket</th>
                 <th>Cliente / Horario</th>
                 <th>Sector</th>
                 <th>Técnico Asignado</th>
@@ -719,13 +719,14 @@ function VisitasTab({ token, user }) {
                     <React.Fragment key={v.id_visita}>
                       <tr className={colorClass} style={{ background: isExpanded ? 'rgba(99, 102, 241, 0.05)' : undefined, transition: 'background 0.2s' }}>
                         
-                        {/* Parada & ID */}
+                        {/* Ticket & ID */}
                         <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                           <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '6px' }}>
-                            <div style={{ fontSize: '0.65rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase' }}>Parada</div>
+                            <div style={{ fontSize: '0.65rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase' }}>Ticket</div>
                             <div style={{ fontSize: '1.25rem', fontWeight: 900, color: 'var(--primary)', lineHeight: 1 }}>#{v.numero_parada || 0}</div>
                             <div style={{ fontSize: '0.65rem', color: 'var(--sidebar-text)', marginTop: '3px', fontWeight: 700 }}>VT-{v.id_visita}</div>
                           </div>
+
                           {v.prioridad && (
                             <div style={{ marginTop: '6px' }}>
                               <span style={{

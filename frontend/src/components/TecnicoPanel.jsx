@@ -1260,7 +1260,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingRight: '25px' }}>
                     <div>
                       <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 850, color: 'var(--text-main)' }}>
-                        {v.es_instalacion === 1 ? `🔌 Instalación #${v.numero_parada}` : `📍 Parada #${v.numero_parada}`}
+                        {v.es_instalacion === 1 ? `🔌 Instalación #${v.numero_parada}` : `🎫 Ticket #${v.numero_parada}`}
                       </h4>
                       <small style={{ color: 'var(--sidebar-text)', fontWeight: 600 }}>Ref: #VT-{v.id_visita}</small>
                     </div>
@@ -1314,8 +1314,9 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
               <i className="fa-solid fa-chevron-left"></i> Volver
             </button>
             <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#f8fafc' }}>
-              {activeVisita.es_instalacion === 1 ? `🔌 Inst. #${activeVisita.numero_parada}` : `📍 Parada #${activeVisita.numero_parada}`}
+              {activeVisita.es_instalacion === 1 ? `🔌 Inst. #${activeVisita.numero_parada}` : `🎫 Ticket #${activeVisita.numero_parada}`}
             </span>
+
             <div style={{ width: '70px' }}></div>
           </div>
 
