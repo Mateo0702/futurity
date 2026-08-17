@@ -866,26 +866,29 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
       ]);
       const codeReader = new BrowserMultiFormatReader(hints);
 
-      // Probar en 4 ángulos de orientación: 0°, 90°, 270°, 180° (para fotos tomadas de lado o verticales)
+      // Probar en 4 orientaciones: 0°, 90°, 270°, 180°
       const angles = [0, 90, 270, 180];
-      let decodedCandidates = [];
+      const foundSet = new Set();
+      const pad = 35; // Quiet zone blanca para permitir lectura de fotos recortadas
 
       for (const angle of angles) {
+        const rawW = (angle === 90 || angle === 270) ? img.height : img.width;
+        const rawH = (angle === 90 || angle === 270) ? img.width : img.height;
+
         const canvas = document.createElement('canvas');
+        canvas.width = rawW + pad * 2;
+        canvas.height = rawH + pad * 2;
         const ctx = canvas.getContext('2d');
-        if (angle === 90 || angle === 270) {
-          canvas.width = img.height;
-          canvas.height = img.width;
-        } else {
-          canvas.width = img.width;
-          canvas.height = img.height;
-        }
+
+        // Fondo blanco (Quiet Zone indispensable para códigos 1D como Code 128)
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate((angle * Math.PI) / 180);
         ctx.drawImage(img, -img.width / 2, -img.height / 2);
 
-        // A) Intentar con BarcodeDetector nativo si el WebView lo soporta
+        // A) BarcodeDetector nativo (detecta múltiples códigos a la vez en la etiqueta)
         if ('BarcodeDetector' in window) {
           try {
             const detector = new window.BarcodeDetector({
@@ -894,49 +897,60 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
             const barcodes = await detector.detect(canvas);
             if (barcodes && barcodes.length > 0) {
               barcodes.forEach(b => {
-                if (b.rawValue) decodedCandidates.push(b.rawValue);
+                if (b.rawValue && b.rawValue.trim()) foundSet.add(b.rawValue.trim());
               });
             }
           } catch (e) {}
         }
 
-        // B) Intentar con ZXing decodeFromImageUrl sobre el canvas rotado
+        // B) ZXing decode del canvas completo
         try {
           const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
           const result = await codeReader.decodeFromImageUrl(dataUrl);
           if (result && result.getText()) {
-            decodedCandidates.push(result.getText());
+            foundSet.add(result.getText().trim());
           }
         } catch (e) {}
 
-        if (decodedCandidates.length > 0) {
-          if (isGpon) {
-            const gponCand = decodedCandidates.find(c => {
-              const cleaned = c.replace(/^(SN|S\/N|GPON)[:\s\-_]*/i, '').trim();
-              return cleaned.length === 16 || cleaned.length === 12 || /^(48575443|43444B54|54504C47|5A544547|HWTC|CDKT|TPLG|ZTEG)/i.test(cleaned);
-            });
-            if (gponCand) {
-              decodedCandidates = [gponCand];
-              break;
+        // C) ZXing escaneo por franjas horizontales (Top, Middle, Bottom) para separar códigos apilados
+        const slices = [
+          { y1: 0, y2: Math.floor(canvas.height * 0.45) },
+          { y1: Math.floor(canvas.height * 0.28), y2: Math.floor(canvas.height * 0.72) },
+          { y1: Math.floor(canvas.height * 0.55), y2: canvas.height }
+        ];
+
+        for (const s of slices) {
+          try {
+            const sCanvas = document.createElement('canvas');
+            sCanvas.width = canvas.width;
+            sCanvas.height = (s.y2 - s.y1) + 40;
+            const sCtx = sCanvas.getContext('2d');
+            sCtx.fillStyle = '#ffffff';
+            sCtx.fillRect(0, 0, sCanvas.width, sCanvas.height);
+            sCtx.drawImage(canvas, 0, s.y1, canvas.width, s.y2 - s.y1, 0, 20, canvas.width, s.y2 - s.y1);
+
+            const sDataUrl = sCanvas.toDataURL('image/jpeg', 0.95);
+            const sRes = await codeReader.decodeFromImageUrl(sDataUrl);
+            if (sRes && sRes.getText()) {
+              foundSet.add(sRes.getText().trim());
             }
-          } else {
-            break;
-          }
+          } catch (e) {}
         }
       }
 
-      // Si no encontró, intentar con filtro de contraste en ángulos rotados
-      if (decodedCandidates.length === 0) {
-        for (const angle of [90, 270, 0]) {
+      // Si aún no encontró, intentar con binarización/aumento de contraste y padding
+      if (foundSet.size === 0) {
+        for (const angle of [90, 270, 0, 180]) {
+          const rawW = (angle === 90 || angle === 270) ? img.height : img.width;
+          const rawH = (angle === 90 || angle === 270) ? img.width : img.height;
+
           const canvas = document.createElement('canvas');
+          canvas.width = rawW + pad * 2;
+          canvas.height = rawH + pad * 2;
           const ctx = canvas.getContext('2d');
-          if (angle === 90 || angle === 270) {
-            canvas.width = img.height;
-            canvas.height = img.width;
-          } else {
-            canvas.width = img.width;
-            canvas.height = img.height;
-          }
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
           ctx.translate(canvas.width / 2, canvas.height / 2);
           ctx.rotate((angle * Math.PI) / 180);
           ctx.drawImage(img, -img.width / 2, -img.height / 2);
@@ -945,7 +959,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
           const d = imgData.data;
           for (let i = 0; i < d.length; i += 4) {
             const gray = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
-            const v = gray > 125 ? 255 : 0;
+            const v = gray > 130 ? 255 : 0;
             d[i] = v; d[i+1] = v; d[i+2] = v;
           }
           ctx.putImageData(imgData, 0, 0);
@@ -954,22 +968,52 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
             const dataUrl = canvas.toDataURL('image/png');
             const result = await codeReader.decodeFromImageUrl(dataUrl);
             if (result && result.getText()) {
-              decodedCandidates.push(result.getText());
+              foundSet.add(result.getText().trim());
               break;
             }
           } catch (e) {}
         }
       }
 
-      if (decodedCandidates.length > 0) {
-        let raw = decodedCandidates[0];
-        let valorFinal = raw.trim().replace(/^(SN|S\/N|GPON)[:\s\-_]*/i, '').trim().toUpperCase();
-        if (isGpon) {
+      const allDecoded = Array.from(foundSet);
+
+      if (allDecoded.length > 0) {
+        let chosenRaw = allDecoded[0];
+
+        // Discriminador inteligente de código:
+        if (isGpon || campo === 'numero_serie_onu') {
+          // 1. Buscar candidato con prefijo GPON hex o ASCII conocido
+          const gponVendorMatch = allDecoded.find(c => {
+            const cleaned = c.replace(/^(SN|S\/N|GPON)[:\s\-_]*/i, '').trim().toUpperCase();
+            return /^(48575443|43444B54|54504C47|5A544547|46485454|414C434C|56534F4C|HWTC|CDKT|TPLG|ZTEG|FHTT|ALCL|VSOL)/i.test(cleaned);
+          });
+
+          if (gponVendorMatch) {
+            chosenRaw = gponVendorMatch;
+          } else {
+            // 2. Buscar candidato que no sea MAC ni PROD ID y tenga 12 a 16 caracteres
+            const snCandidate = allDecoded.find(c => {
+              const cleaned = c.replace(/^(SN|S\/N|GPON)[:\s\-_]*/i, '').trim().toUpperCase();
+              const isMac = c.includes('-A0') || c.includes(':') || c.startsWith('MAC');
+              const isProd = c.startsWith('21500') || c.includes('PROD');
+              return !isMac && !isProd && (cleaned.length === 16 || cleaned.length === 12);
+            });
+            if (snCandidate) chosenRaw = snCandidate;
+          }
+        } else if (campo === 'numero_serie_router' || campo === 'numero_serie_router_secundario') {
+          // Para routers, buscar el que tenga formato MAC o serie de router
+          const macMatch = allDecoded.find(c => c.includes('-A0') || c.includes(':') || c.startsWith('MAC') || c.length === 12);
+          if (macMatch) chosenRaw = macMatch;
+        }
+
+        let valorFinal = chosenRaw.trim().replace(/^(SN|S\/N|GPON|MAC|PROD\s*ID)[:\s\-_]*/i, '').trim().toUpperCase();
+        if (isGpon || campo === 'numero_serie_onu') {
           valorFinal = normalizarGponSn(valorFinal);
         }
+
         updateFormState(visitaId, { [campo]: valorFinal });
         if (navigator.vibrate) navigator.vibrate(100);
-        alert(`¡Código escaneado con éxito!\nDetectado: ${raw}${isGpon ? '\nSerie GPON: ' + valorFinal : ''}`);
+        alert(`¡Código escaneado con éxito!\nDetectado: ${chosenRaw}${isGpon ? '\nSerie GPON: ' + valorFinal : ''}`);
         return;
       }
 
@@ -979,6 +1023,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
       alert("No se pudo leer el código de la imagen. Ingrésalo manualmente.");
     }
   };
+
 
 
 
