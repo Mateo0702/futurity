@@ -253,9 +253,9 @@ function BuscadorClienteTab({ token }) {
                   </span>
                 </div>
                 <div>
-                  <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>🏢 IP Nodo</strong>
+                  <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>🏢 Nodo / OLT</strong>
                   <span style={{ color: '#0284c7', fontSize: '0.92rem', fontWeight: 700 }}>
-                    {selectedClient.ip_nodo || 'N/D'}
+                    {selectedClient.nodo_nombre || selectedClient.ip_nodo || 'N/D'}
                   </span>
                 </div>
                 <div>
@@ -264,6 +264,27 @@ function BuscadorClienteTab({ token }) {
                     {selectedClient.numero_serie || 'S/N'}
                   </span>
                 </div>
+
+                {/* Bloque de Equipos e Inventario */}
+                {(selectedClient.modelo_ont || selectedClient.router_principal) && (
+                  <div style={{ gridColumn: 'span 2', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '12px', padding: '12px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <strong style={{ color: '#059669', fontSize: '0.72rem', fontWeight: 800, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>🟢 Modelo ONT</strong>
+                      <span style={{ color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700 }}>{selectedClient.modelo_ont || 'N/D'}</span>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#6366f1', fontSize: '0.72rem', fontWeight: 800, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>📶 Router Principal</strong>
+                      <span style={{ color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700 }}>{selectedClient.router_principal || 'N/D'} {selectedClient.modo_acceso ? `(${selectedClient.modo_acceso})` : ''}</span>
+                    </div>
+                    {selectedClient.router_secundario && (
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <strong style={{ color: '#8b5cf6', fontSize: '0.72rem', fontWeight: 800, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>🔁 Router Secundario / Mesh</strong>
+                        <span style={{ color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700 }}>{selectedClient.router_secundario} {selectedClient.tipo_mesh ? `(${selectedClient.tipo_mesh})` : ''}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>💳 Forma de Pago</strong>
                   <span style={{ color: '#6366f1', fontSize: '0.92rem', fontWeight: 700 }}>
@@ -285,6 +306,7 @@ function BuscadorClienteTab({ token }) {
                     </span>
                   </div>
                 )}
+
                 <div style={{ gridColumn: 'span 2', borderTop: '1px solid var(--border-color)', paddingTop: '14px', marginTop: '4px' }}>
                   <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>📍 Dirección y Sector</strong>
                   <span style={{ color: 'var(--text-main)', fontSize: '0.92rem', fontWeight: 600, lineHeight: 1.4, display: 'block' }}>

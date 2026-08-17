@@ -173,8 +173,10 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
               nextForm[v.id_visita] = {
                 solucion_tecnico: v.solucion_tecnico || '',
                 observacion_tecnico: v.observacion_tecnico || '',
-                modelo_onu: v.modelo_onu || '',
-                modelo_router: v.modelo_router || '',
+                modelo_onu: v.modelo_onu || v.modelo_ont || '',
+                modelo_router: v.modelo_router || v.router_principal || '',
+                numero_serie_onu: '',
+                router_secundario: v.router_secundario || '',
                 metodo_firma: 'REMOTA',
                 motivo_sin_firma: 'TRABAJO_EXTERNO',
                 coordenadas_tecnico: v.coordenadas_tecnico || '',
@@ -189,6 +191,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                 foto_extra_4_base64: '',
                 materiales: []
               };
+
             }
           });
           return nextForm;
@@ -758,7 +761,63 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     reader.readAsDataURL(file);
   };
 
+  // --- Normalizador y Escáner GPON SN ---
+  const normalizarGponSn = (snRaw) => {
+    if (!snRaw) return '';
+    let sn = snRaw.trim().toUpperCase();
+    const VENDOR_HEX_MAP = {
+      '43444B54': 'CDKT', // C-Data / Kingtype
+      '48575443': 'HWTC', // Huawei
+      '54504C47': 'TPLG', // TP-Link
+      '5A544547': 'ZTEG', // ZTE
+      '46485454': 'FHTT', // Fiberhome
+      '414C434C': 'ALCL', // Alcatel / Nokia
+      '56534F4C': 'VSOL', // V-Sol
+    };
+    if (sn.length === 16) {
+      const prefix8 = sn.substring(0, 8);
+      if (VENDOR_HEX_MAP[prefix8]) {
+        return VENDOR_HEX_MAP[prefix8] + sn.substring(8);
+      }
+      try {
+        let ascii = '';
+        for (let i = 0; i < 8; i += 2) {
+          ascii += String.fromCharCode(parseInt(prefix8.substr(i, 2), 16));
+        }
+        if (/^[A-Z0-9]{4}$/i.test(ascii)) {
+          return ascii.toUpperCase() + sn.substring(8);
+        }
+      } catch (e) {}
+    }
+    return sn;
+  };
+
+  const procesarFotoBarcode = async (file, visitaId) => {
+    if (!file) return;
+    try {
+      if ('BarcodeDetector' in window) {
+        const detector = new window.BarcodeDetector({
+          formats: ['code_128', 'code_39', 'qr_code', 'data_matrix', 'ean_13', 'ean_8']
+        });
+        const img = await createImageBitmap(file);
+        const barcodes = await detector.detect(img);
+        if (barcodes && barcodes.length > 0) {
+          const raw = barcodes[0].rawValue;
+          const snFormateado = normalizarGponSn(raw);
+          updateFormState(visitaId, { numero_serie_onu: snFormateado });
+          alert(`¡Código escaneado con éxito!\nDetectado: ${raw}\nSerie GPON: ${snFormateado}`);
+          return;
+        }
+      }
+      alert("No se pudo detectar automáticamente el código en la foto. Ingrésalo manualmente y el sistema lo convertirá.");
+    } catch (err) {
+      console.error("Error escaneando código de barras:", err);
+      alert("No se pudo leer el código. Ingrésalo manualmente.");
+    }
+  };
+
   // --- Drawing / Signature Canvas ---
+
   const getCanvasPos = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -976,6 +1035,8 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         observacion_tecnico: form.observacion_tecnico,
         modelo_onu: form.modelo_onu,
         modelo_router: form.modelo_router,
+        numero_serie_onu: form.numero_serie_onu ? normalizarGponSn(form.numero_serie_onu) : null,
+        router_secundario: form.router_secundario || null,
         coordenadas_tecnico: form.coordenadas_tecnico,
         metodo_firma: form.metodo_firma,
         motivo_sin_firma: form.motivo_sin_firma,
@@ -989,6 +1050,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         foto_extra_4_base64: form.foto_extra_4_base64,
         materiales: form.materiales.map(m => ({ id_material: parseInt(m.id_material), cantidad: parseInt(m.cantidad) }))
       };
+
       
       const res = await fetch(`/api/tecnico/finalizar/${idVisita}`, {
         method: 'POST',
@@ -1480,9 +1542,43 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
             {activeSubTab === 'tab-nodo' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 
+                {/* Equipment in Home Box */}
+                <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px' }}>
+                    <strong style={{ color: '#34d399', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <i className="fa-solid fa-server"></i> Equipos en Domicilio
+                    </strong>
+                    {activeVisita.cantidad_routers > 1 && (
+                      <span style={{ background: '#3b82f6', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: 800 }}>
+                        {activeVisita.cantidad_routers} Equipos
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>ONT / ONU:</span>
+                    <strong style={{ color: '#10b981', fontSize: '0.9rem' }}>{activeVisita.modelo_ont || 'No especificada'}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Serie ONU (SN):</span>
+                    <strong style={{ color: '#fbbf24', fontSize: '0.9rem' }}>{activeVisita.numero_serie || 'S/N'}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Router Principal:</span>
+                    <strong style={{ color: '#f8fafc', fontSize: '0.9rem' }}>{activeVisita.router_principal || 'No especificado'} {activeVisita.modo_acceso ? `(${activeVisita.modo_acceso})` : ''}</strong>
+                  </div>
+                  {activeVisita.router_secundario && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
+                      <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Router Secundario / Mesh:</span>
+                      <strong style={{ color: '#a78bfa', fontSize: '0.9rem' }}>{activeVisita.router_secundario} {activeVisita.tipo_mesh ? `(${activeVisita.tipo_mesh})` : ''}</strong>
+                    </div>
+                  )}
+                </div>
+
                 {/* Connection Details Box */}
                 <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <strong style={{ color: '#38bdf8', fontSize: '0.92rem', marginBottom: '4px', display: 'block' }}>🔌 Datos de Conexión en Poste / Nodo</strong>
+
                   
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
                     <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Caja/NAP:</span>
@@ -1709,6 +1805,43 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                         </select>
                       </div>
                     </div>
+
+                    {/* Escaneo y Serie de ONU */}
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label style={{ fontWeight: 700, fontSize: '0.82rem', color: '#94a3b8', margin: 0 }}>
+                          🏷️ Serie ONU (SN) {activeVisita.numero_serie ? `[Actual: ${activeVisita.numero_serie}]` : ''}:
+                        </label>
+                        <label style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', padding: '3px 8px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <i className="fa-solid fa-barcode"></i> Escanear Código
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            capture="environment" 
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                procesarFotoBarcode(e.target.files[0], activeVisita.id_visita);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <input 
+                        type="text" 
+                        value={activeFormState.numero_serie_onu || ''} 
+                        onChange={(e) => updateFormState(activeVisita.id_visita, { numero_serie_onu: e.target.value })} 
+                        onBlur={(e) => {
+                          if (e.target.value) {
+                            const norm = normalizarGponSn(e.target.value);
+                            updateFormState(activeVisita.id_visita, { numero_serie_onu: norm });
+                          }
+                        }}
+                        placeholder="Ej. CDKT2A187B7D o escanea código de barra"
+                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#fbbf24', fontSize: '0.85rem', fontWeight: 800, boxSizing: 'border-box' }}
+                      />
+                    </div>
+
 
                     {/* Materials utilized list */}
                     <div style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '14px' }}>

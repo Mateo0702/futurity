@@ -27,7 +27,7 @@ def buscar_contrato_json():
         
     cursor = conn.cursor(dictionary=True)
     try:
-        from utils import format_antiguedad
+        from utils import format_antiguedad, MAPEO_NODOS
         query_contrato_f = contrato if contrato.upper().endswith('F') else (contrato + 'F')
         query_contrato_plain = contrato[:-1] if contrato.upper().endswith('F') else contrato
 
@@ -35,7 +35,9 @@ def buscar_contrato_json():
             SELECT contrato, cedula, empresa, nombre_cliente AS cliente, zona AS sector, 
                    telefono1, telefono2, telefono3, fecha_instalacion,
                    total_mensual, antiguedad, numero_serie, producto, direccion, forma_pago,
-                   velocidad_mbps, ip_cliente, ip_nodo, vendedor, email
+                   velocidad_mbps, ip_cliente, ip_nodo, vendedor, email,
+                   modelo_ont, router_principal, router_secundario, tipo_mesh,
+                   cantidad_routers, modo_acceso
             FROM directorio_clientes 
             WHERE contrato = %s 
                OR contrato = %s 
@@ -51,6 +53,9 @@ def buscar_contrato_json():
             cliente['numero_serie'] = cliente.get('numero_serie') or 'S/N'
             cliente['cedula'] = cliente.get('cedula') or ''
             cliente['empresa'] = cliente.get('empresa') or 'SERVICABLE'
+            cliente['nodo_nombre'] = MAPEO_NODOS.get(cliente.get('ip_nodo'), cliente.get('ip_nodo'))
+            cliente['cantidad_routers'] = cliente.get('cantidad_routers') or 1
+
 
             # Formatear fecha si existe
             if isinstance(cliente['fecha_instalacion'], (datetime, date)):
@@ -610,13 +615,15 @@ def buscar_completo_json():
         
     cursor = conn.cursor(dictionary=True)
     try:
-        from utils import format_antiguedad
+        from utils import format_antiguedad, MAPEO_NODOS
         # Búsqueda parcial por contrato, cédula, nombre, teléfono o identificación o IP
         query = """
             SELECT contrato, cedula, empresa, nombre_cliente AS cliente, zona AS sector, 
                    telefono1, telefono2, telefono3, fecha_instalacion,
                    total_mensual, antiguedad, numero_serie, producto, direccion, forma_pago,
-                   velocidad_mbps, ip_cliente, ip_nodo, vendedor, email
+                   velocidad_mbps, ip_cliente, ip_nodo, vendedor, email,
+                   modelo_ont, router_principal, router_secundario, tipo_mesh,
+                   cantidad_routers, modo_acceso
             FROM directorio_clientes 
             WHERE contrato LIKE %s 
                OR cedula LIKE %s
@@ -669,9 +676,17 @@ def buscar_completo_json():
                 "velocidad_mbps": row.get('velocidad_mbps'),
                 "ip_cliente": row.get('ip_cliente') or "",
                 "ip_nodo": row.get('ip_nodo') or "",
+                "nodo_nombre": MAPEO_NODOS.get(row.get('ip_nodo'), row.get('ip_nodo')),
+                "modelo_ont": row.get('modelo_ont'),
+                "router_principal": row.get('router_principal'),
+                "router_secundario": row.get('router_secundario'),
+                "tipo_mesh": row.get('tipo_mesh'),
+                "cantidad_routers": row.get('cantidad_routers') or 1,
+                "modo_acceso": row.get('modo_acceso'),
                 "vendedor": row.get('vendedor') or "",
                 "forma_pago": row.get('forma_pago') or "N/D"
             })
+
             
         return jsonify({"status": "success", "clientes": clientes})
 

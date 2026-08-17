@@ -112,17 +112,59 @@ def normalizar_horario_texto(texto_preferencia):
 
     return inicio_default, fin_default
 
-def parsear_informacion_tecnica(visitas):
+MAPEO_NODOS = {
+
+    '10.101.1.18': '1.18',
+    '10.101.18': '1.18',
+    '10.101.1.50': '1.50',
+    '10.11.99.1': '99.1',
+    '10.80.80.134': 'BAÑOS',
+    '10.17.200.52': 'AZOGUES',
+    '10.101.100.10': 'ESTADIO',
+    '100.64.21.2': 'FIBRACOM VALLE',
+    '100.64.20.2': 'FIBRACOM SANTA ANA'
+}
+
+def normalizar_gpon_sn(sn_raw):
     """
-    Parsea la columna 'informacion_tecnico' de cada visita y la enriquece con
-    datos comerciales del cliente (total_mensual, antiguedad_fmt, numero_serie).
+    Convierte cadenas de números de serie GPON de códigos de barras (16 dígitos hex)
+    a formato estándar ASCII GPON (4 letras + 8 dígitos hex).
+    """
+    if not sn_raw:
+        return ''
+    sn = str(sn_raw).strip().upper()
+    
+    VENDOR_HEX_MAP = {
+        '43444B54': 'CDKT', # C-Data / Kingtype
+        '48575443': 'HWTC', # Huawei
+        '54504C47': 'TPLG', # TP-Link
+        '5A544547': 'ZTEG', # ZTE
+        '46485454': 'FHTT', # Fiberhome
+        '414C434C': 'ALCL', # Alcatel / Nokia
+        '56534F4C': 'VSOL', # V-Sol
+    }
+    
+    if len(sn) == 16:
+        prefix8 = sn[:8]
+        if prefix8 in VENDOR_HEX_MAP:
+            return VENDOR_HEX_MAP[prefix8] + sn[8:]
+        try:
+            vendor_ascii = bytes.fromhex(prefix8).decode('ascii')
+            if vendor_ascii.isalnum() and len(vendor_ascii) == 4:
+                return vendor_ascii.upper() + sn[8:]
+        except Exception:
+            pass
+            
+    return sn
+
+def parsear_informacion_tecnica(visitas, cursor=None):
+    """
+    Parsea el campo `informacion_tecnico` de una lista de visitas y extrae
+    los valores estructurados de Caja, Hilo, IP, VLAN, Usuario y Password.
+    También enriquece con Cédula, Total Mensual, Antigüedad, Equipos y Nodo desde directorio_clientes.
     """
     if not visitas:
         return visitas
-
-    from db_config import get_db_connection
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True) if conn else None
 
     try:
         for v in visitas:
@@ -150,13 +192,15 @@ def parsear_informacion_tecnica(visitas):
                     elif line.upper().startswith('PAS:'):
                         v['info_pas'] = line[4:].strip()
 
-            # Enriquecer con datos comerciales del cliente (Cédula, Mensualidad, Antigüedad, SN, IP Nodo, IP Cliente, Velocidad)
+            # Enriquecer con datos comerciales del cliente y Equipos Instalados
             if cursor and v.get('contrato'):
                 c_val = str(v['contrato']).strip().upper()
                 c_clean = c_val.lstrip('0')
                 cursor.execute("""
                     SELECT cedula, total_mensual, antiguedad, fecha_instalacion, numero_serie,
-                           ip_cliente, ip_nodo, velocidad_mbps, producto, vendedor
+                           ip_cliente, ip_nodo, velocidad_mbps, producto, vendedor,
+                           modelo_ont, router_principal, router_secundario, tipo_mesh,
+                           cantidad_routers, modo_acceso
                     FROM directorio_clientes
                     WHERE UPPER(contrato) = %s OR UPPER(contrato) = %s
                     LIMIT 1
@@ -168,6 +212,16 @@ def parsear_informacion_tecnica(visitas):
                     v['numero_serie'] = cli_info.get('numero_serie') or v.get('numero_serie') or 'S/N'
                     v['antiguedad_fmt'] = format_antiguedad(cli_info.get('antiguedad'), cli_info.get('fecha_instalacion'))
                     v['ip_nodo'] = cli_info.get('ip_nodo')
+                    v['nodo_nombre'] = MAPEO_NODOS.get(cli_info.get('ip_nodo'), cli_info.get('ip_nodo'))
+                    
+                    # Equipos actuales
+                    v['modelo_ont'] = cli_info.get('modelo_ont')
+                    v['router_principal'] = cli_info.get('router_principal')
+                    v['router_secundario'] = cli_info.get('router_secundario')
+                    v['tipo_mesh'] = cli_info.get('tipo_mesh')
+                    v['cantidad_routers'] = cli_info.get('cantidad_routers') or 1
+                    v['modo_acceso'] = cli_info.get('modo_acceso')
+                    
                     if not v.get('info_ip') and cli_info.get('ip_cliente'):
                         v['info_ip'] = cli_info.get('ip_cliente')
                     if v.get('velocidad_mbps') is None and cli_info.get('velocidad_mbps') is not None:
@@ -183,8 +237,5 @@ def parsear_informacion_tecnica(visitas):
 
     except Exception as e:
         print(f"Error enriqueciendo visitas con datos de cliente: {e}")
-    finally:
-        if cursor: cursor.close()
-        if conn: conn.close()
 
     return visitas

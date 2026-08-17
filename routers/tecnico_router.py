@@ -5,7 +5,9 @@ from datetime import date
 import re
 import os
 import base64
-from utils import parsear_informacion_tecnica
+from utils import parsear_informacion_tecnica, normalizar_gpon_sn
+
+
 
 tecnico_bp = Blueprint('tecnico', __name__)
 
@@ -585,10 +587,31 @@ def finalizar_visita(id_visita):
             id_visita
         ))
         
-        # Obtener el nombre del técnico principal de esta visita
-        cursor.execute("SELECT tecnico_principal FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        # Obtener el contrato y técnico principal de esta visita
+        cursor.execute("SELECT contrato, tecnico_principal FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
         tec_row = cursor.fetchone()
         tecnico_nombre = tec_row['tecnico_principal'] if tec_row else None
+        contrato_visita = tec_row['contrato'] if tec_row else None
+
+        # Auto-actualizar el inventario de equipos del cliente en directorio_clientes
+        if contrato_visita:
+            sn_nuevo = datos.get('numero_serie') or datos.get('numero_serie_onu')
+            sn_normalizado = normalizar_gpon_sn(sn_nuevo) if sn_nuevo else None
+            router_secundario = datos.get('router_secundario')
+            c_val = str(contrato_visita).strip().upper()
+            c_clean = c_val.lstrip('0')
+            
+            cursor.execute("""
+                UPDATE directorio_clientes
+                SET modelo_ont = COALESCE(NULLIF(%s, ''), modelo_ont),
+                    router_principal = COALESCE(NULLIF(%s, ''), router_principal),
+                    router_secundario = COALESCE(NULLIF(%s, ''), router_secundario),
+                    numero_serie = COALESCE(NULLIF(%s, ''), numero_serie)
+                WHERE UPPER(contrato) = %s OR UPPER(contrato) = %s
+            """, (
+                onu, router, router_secundario, sn_normalizado,
+                c_val, c_clean
+            ))
 
         # 2. Registrar materiales e inventario si existen
         if materiales_ids and cantidades:
@@ -597,6 +620,7 @@ def finalizar_visita(id_visita):
                 cursor.execute("SELECT COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa FROM tecnicos WHERE nombre = %s", (tecnico_nombre,))
                 placa_row = cursor.fetchone()
                 placa_vehiculo = placa_row['placa'] if (placa_row and placa_row['placa']) else 'S/P'
+
             
             query_materiales = """
                 INSERT INTO visitas_materiales (id_visita, id_material, cantidad_usada)

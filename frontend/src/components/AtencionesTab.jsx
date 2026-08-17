@@ -147,22 +147,40 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
       velocidad_mbps: cli.velocidad_mbps || null,
       ip_cliente: cli.ip_cliente || '',
       ip_nodo: cli.ip_nodo || '',
+      nodo_nombre: cli.nodo_nombre || '',
       numero_serie: cli.numero_serie || '',
-      cedula: cli.cedula || ''
+      cedula: cli.cedula || '',
+      modelo_ont: cli.modelo_ont || '',
+      router_principal: cli.router_principal || '',
+      router_secundario: cli.router_secundario || '',
+      tipo_mesh: cli.tipo_mesh || '',
+      cantidad_routers: cli.cantidad_routers || 1,
+      modo_acceso: cli.modo_acceso || ''
     });
 
-    // Auto-detect OLT / Nodo if available
-    if (cli.ip_nodo) {
-      if (cli.ip_nodo.includes('1.18')) setOlt('1.18');
+    // Auto-detect OLT / Nodo from IP or name
+    if (cli.nodo_nombre && ['1.18', '1.50', '99.1', 'BAÑOS', 'AZOGUES', 'ESTADIO', 'FIBRACOM VALLE', 'FIBRACOM SANTA ANA'].includes(cli.nodo_nombre)) {
+      setOlt(cli.nodo_nombre);
+    } else if (cli.ip_nodo) {
+      if (cli.ip_nodo.includes('1.18') || cli.ip_nodo === '10.101.18') setOlt('1.18');
       else if (cli.ip_nodo.includes('1.50')) setOlt('1.50');
       else if (cli.ip_nodo.includes('99.1')) setOlt('99.1');
+      else if (cli.ip_nodo.includes('80.134')) setOlt('BAÑOS');
+      else if (cli.ip_nodo.includes('200.52')) setOlt('AZOGUES');
+      else if (cli.ip_nodo.includes('100.10')) setOlt('ESTADIO');
+      else if (cli.ip_nodo.includes('21.2')) setOlt('FIBRACOM VALLE');
+      else if (cli.ip_nodo.includes('20.2')) setOlt('FIBRACOM SANTA ANA');
     }
+
+    if (cli.modelo_ont) setOnt(cli.modelo_ont);
+    if (cli.router_principal) setRouter(cli.router_principal);
 
     // Load customer history in right side
     setContratoBusqueda(contractNum);
     fetchHistorialCliente(contractNum);
     setShowMultiContratoModal(false);
   };
+
 
   // Blur handler to autocomplete client from contract
   const handleContratoBlur = async () => {
@@ -433,8 +451,8 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
               </div>
             </div>
 
-            {/* Banner de Información Comercial / Plan / Velocidad / ONU */}
-            {clientPlanInfo && (clientPlanInfo.producto || clientPlanInfo.velocidad_mbps || clientPlanInfo.ip_cliente || clientPlanInfo.ip_nodo) && (
+            {/* Banner de Información Comercial / Plan / Velocidad / ONU / Equipos */}
+            {clientPlanInfo && (clientPlanInfo.producto || clientPlanInfo.velocidad_mbps || clientPlanInfo.ip_cliente || clientPlanInfo.ip_nodo || clientPlanInfo.modelo_ont || clientPlanInfo.router_principal) && (
               <div style={{ background: 'rgba(2, 132, 199, 0.08)', border: '1px solid rgba(2, 132, 199, 0.25)', borderRadius: '12px', padding: '8px 14px', marginBottom: '16px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', fontSize: '0.8rem' }}>
                 {clientPlanInfo.cedula && (
                   <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>
@@ -451,14 +469,14 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                     ⚡ {clientPlanInfo.velocidad_mbps} Mbps
                   </span>
                 )}
-                {clientPlanInfo.ip_cliente && (
-                  <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>
-                    🌐 <strong>IP:</strong> {clientPlanInfo.ip_cliente}
-                  </span>
-                )}
                 {clientPlanInfo.ip_nodo && (
                   <span style={{ color: '#0284c7', fontWeight: 600 }}>
-                    🏢 <strong>IP Nodo:</strong> {clientPlanInfo.ip_nodo}
+                    🏢 <strong>Nodo:</strong> {clientPlanInfo.nodo_nombre || clientPlanInfo.ip_nodo}
+                  </span>
+                )}
+                {clientPlanInfo.modelo_ont && (
+                  <span style={{ color: '#059669', fontWeight: 700, background: 'rgba(16, 185, 129, 0.1)', padding: '2px 6px', borderRadius: '6px' }}>
+                    🟢 <strong>ONT:</strong> {clientPlanInfo.modelo_ont}
                   </span>
                 )}
                 {clientPlanInfo.numero_serie && (
@@ -466,8 +484,24 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                     🏷️ <strong>SN:</strong> {clientPlanInfo.numero_serie}
                   </span>
                 )}
+                {clientPlanInfo.router_principal && (
+                  <span style={{ color: '#6366f1', fontWeight: 700, background: 'rgba(99, 102, 241, 0.1)', padding: '2px 6px', borderRadius: '6px' }}>
+                    📶 <strong>Router:</strong> {clientPlanInfo.router_principal} {clientPlanInfo.modo_acceso ? `(${clientPlanInfo.modo_acceso})` : ''}
+                  </span>
+                )}
+                {clientPlanInfo.tipo_mesh && (
+                  <span style={{ color: '#8b5cf6', fontWeight: 700, background: 'rgba(139, 92, 246, 0.1)', padding: '2px 6px', borderRadius: '6px' }}>
+                    🔁 <strong>Mesh:</strong> {clientPlanInfo.tipo_mesh}
+                  </span>
+                )}
+                {clientPlanInfo.ip_cliente && (
+                  <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>
+                    🌐 <strong>IP:</strong> {clientPlanInfo.ip_cliente}
+                  </span>
+                )}
               </div>
             )}
+
 
 
             {/* Fila 2: Teléfono 1 + Teléfono 2 + Sector */}

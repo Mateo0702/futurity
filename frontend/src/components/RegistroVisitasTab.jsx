@@ -115,9 +115,17 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
       velocidad_mbps: data.velocidad_mbps || null,
       ip_cliente: data.ip_cliente || '',
       ip_nodo: data.ip_nodo || '',
+      nodo_nombre: data.nodo_nombre || '',
       numero_serie: data.numero_serie || '',
-      cedula: data.cedula || ''
+      cedula: data.cedula || '',
+      modelo_ont: data.modelo_ont || '',
+      router_principal: data.router_principal || '',
+      router_secundario: data.router_secundario || '',
+      tipo_mesh: data.tipo_mesh || '',
+      cantidad_routers: data.cantidad_routers || 1,
+      modo_acceso: data.modo_acceso || ''
     });
+
 
     // Auto-select Sector and geolocate map marker
     if (data.zona_excel) {
@@ -581,8 +589,8 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
             </div>
           </div>
 
-          {/* Banner de Información Comercial / Plan / Velocidad / ONU */}
-          {clientPlanInfo && (clientPlanInfo.producto || clientPlanInfo.velocidad_mbps || clientPlanInfo.ip_cliente || clientPlanInfo.ip_nodo) && (
+          {/* Banner de Información Comercial / Plan / Velocidad / ONU / Equipos */}
+          {clientPlanInfo && (clientPlanInfo.producto || clientPlanInfo.velocidad_mbps || clientPlanInfo.ip_cliente || clientPlanInfo.ip_nodo || clientPlanInfo.modelo_ont || clientPlanInfo.router_principal) && (
             <div style={{ background: 'rgba(2, 132, 199, 0.08)', border: '1px solid rgba(2, 132, 199, 0.25)', borderRadius: '12px', padding: '10px 16px', marginBottom: '25px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '14px', fontSize: '0.82rem' }}>
               {clientPlanInfo.cedula && (
                 <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>
@@ -599,14 +607,14 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
                   ⚡ {clientPlanInfo.velocidad_mbps} Mbps
                 </span>
               )}
-              {clientPlanInfo.ip_cliente && (
-                <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>
-                  🌐 <strong>IP:</strong> {clientPlanInfo.ip_cliente}
-                </span>
-              )}
               {clientPlanInfo.ip_nodo && (
                 <span style={{ color: '#0284c7', fontWeight: 600 }}>
-                  🏢 <strong>IP Nodo:</strong> {clientPlanInfo.ip_nodo}
+                  🏢 <strong>Nodo:</strong> {clientPlanInfo.nodo_nombre || clientPlanInfo.ip_nodo}
+                </span>
+              )}
+              {clientPlanInfo.modelo_ont && (
+                <span style={{ color: '#059669', fontWeight: 700, background: 'rgba(16, 185, 129, 0.1)', padding: '2px 6px', borderRadius: '6px' }}>
+                  🟢 <strong>ONT:</strong> {clientPlanInfo.modelo_ont}
                 </span>
               )}
               {clientPlanInfo.numero_serie && (
@@ -614,8 +622,24 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
                   🏷️ <strong>ONU SN:</strong> {clientPlanInfo.numero_serie}
                 </span>
               )}
+              {clientPlanInfo.router_principal && (
+                <span style={{ color: '#6366f1', fontWeight: 700, background: 'rgba(99, 102, 241, 0.1)', padding: '2px 6px', borderRadius: '6px' }}>
+                  📶 <strong>Router:</strong> {clientPlanInfo.router_principal} {clientPlanInfo.modo_acceso ? `(${clientPlanInfo.modo_acceso})` : ''}
+                </span>
+              )}
+              {clientPlanInfo.tipo_mesh && (
+                <span style={{ color: '#8b5cf6', fontWeight: 700, background: 'rgba(139, 92, 246, 0.1)', padding: '2px 6px', borderRadius: '6px' }}>
+                  🔁 <strong>Mesh:</strong> {clientPlanInfo.tipo_mesh}
+                </span>
+              )}
+              {clientPlanInfo.ip_cliente && (
+                <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>
+                  🌐 <strong>IP:</strong> {clientPlanInfo.ip_cliente}
+                </span>
+              )}
             </div>
           )}
+
 
 
           {/* SECCIÓN 2: Datos de Asignación de Ruta */}

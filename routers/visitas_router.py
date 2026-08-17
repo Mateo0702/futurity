@@ -195,11 +195,14 @@ def buscar_cliente(contrato):
         query_contrato_f = query_val if query_val.upper().endswith('F') else (query_val + 'F')
         query_contrato_plain = query_val[:-1] if query_val.upper().endswith('F') else query_val
 
+        from utils import MAPEO_NODOS
         # Buscar por Contrato directo, Cédula o Contrato Fibracom
         query = """
             SELECT contrato, cedula, empresa, nombre_cliente, zona, telefono1, telefono2, telefono3,
                    COALESCE(direccion, '') AS direccion, producto, velocidad_mbps, ip_cliente, ip_nodo,
-                   numero_serie, estado, forma_pago, total_mensual, antiguedad, fecha_instalacion
+                   numero_serie, estado, forma_pago, total_mensual, antiguedad, fecha_instalacion,
+                   modelo_ont, router_principal, router_secundario, tipo_mesh,
+                   cantidad_routers, modo_acceso
             FROM directorio_clientes 
             WHERE contrato = %s 
                OR contrato = %s 
@@ -243,10 +246,18 @@ def buscar_cliente(contrato):
                 "velocidad_mbps": row.get('velocidad_mbps'),
                 "ip_cliente": row.get('ip_cliente') or "",
                 "ip_nodo": row.get('ip_nodo') or "",
+                "nodo_nombre": MAPEO_NODOS.get(row.get('ip_nodo'), row.get('ip_nodo')),
+                "modelo_ont": row.get('modelo_ont'),
+                "router_principal": row.get('router_principal'),
+                "router_secundario": row.get('router_secundario'),
+                "tipo_mesh": row.get('tipo_mesh'),
+                "cantidad_routers": row.get('cantidad_routers') or 1,
+                "modo_acceso": row.get('modo_acceso'),
                 "numero_serie": row.get('numero_serie') or "",
                 "estado": row.get('estado') or "Activo",
                 "total_mensual": float(row['total_mensual']) if row.get('total_mensual') is not None else None
             }
+
 
         if len(rows) > 1:
             # Multi-contrato detectado para esta Cédula
