@@ -11,7 +11,7 @@ function BuscadorClienteTab({ token }) {
   const [isMeasuring, setIsMeasuring] = useState(false);
   const [diagnosticResult, setDiagnosticResult] = useState(null);
   const [diagnosticError, setDiagnosticError] = useState('');
-  
+
   const searchTimeoutRef = useRef(null);
 
   // Debounced Search Logic
@@ -130,7 +130,7 @@ function BuscadorClienteTab({ token }) {
 
   return (
     <div id="tab-buscar-cliente" className="tab-content active" style={{ display: 'block', padding: '25px', overflowY: 'auto', flexGrow: 1 }}>
-      
+
       {/* Hero Header */}
       <div style={{ background: 'var(--card-bg)', padding: '24px 30px', borderRadius: '20px', marginBottom: '25px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: 'var(--shadow-sm)' }}>
         <div style={{ background: 'rgba(2, 132, 199, 0.12)', color: '#0284c7', width: '52px', height: '52px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyCenter: 'center', justifyContent: 'center', fontSize: '1.6rem', flexShrink: 0 }}>
@@ -200,7 +200,7 @@ function BuscadorClienteTab({ token }) {
       {/* Contenedor de Fichas (Ficha Comercial + SmartOLT) */}
       {selectedClient ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '25px', marginBottom: '30px' }}>
-          
+
           {/* Ficha Comercial (Izquierda) */}
           <div style={{ background: 'var(--card-bg)', borderRadius: '24px', border: '1px solid var(--border-color)', padding: '26px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <div>
@@ -266,22 +266,47 @@ function BuscadorClienteTab({ token }) {
                 </div>
 
                 {/* Bloque de Equipos e Inventario */}
-                {(selectedClient.modelo_ont || selectedClient.router_principal) && (
-                  <div style={{ gridColumn: 'span 2', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '12px', padding: '12px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    <div>
-                      <strong style={{ color: '#059669', fontSize: '0.72rem', fontWeight: 800, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>🟢 Modelo ONT</strong>
-                      <span style={{ color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700 }}>{selectedClient.modelo_ont || 'N/D'}</span>
+                {(selectedClient.modelo_ont || selectedClient.router_principal || selectedClient.router_secundario) && (
+                  <div style={{ gridColumn: 'span 2', background: 'rgba(16, 185, 129, 0.04)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '14px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px' }}>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <i className="fa-solid fa-server"></i> Equipos Instalados en Cliente
+                      </span>
+                      <span style={{ background: selectedClient.cantidad_routers > 1 ? 'rgba(139, 92, 246, 0.2)' : 'rgba(99, 102, 241, 0.15)', color: selectedClient.cantidad_routers > 1 ? '#c4b5fd' : '#a5b4fc', border: '1px solid rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                        {selectedClient.cantidad_routers > 1 ? `🔁 2 Routers (Mesh ${selectedClient.tipo_mesh || ''})` : `📶 1 Router`}
+                      </span>
                     </div>
-                    <div>
-                      <strong style={{ color: '#6366f1', fontSize: '0.72rem', fontWeight: 800, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>📶 Router Principal</strong>
-                      <span style={{ color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700 }}>{selectedClient.router_principal || 'N/D'} {selectedClient.modo_acceso ? `(${selectedClient.modo_acceso})` : ''}</span>
-                    </div>
-                    {selectedClient.router_secundario && (
-                      <div style={{ gridColumn: 'span 2' }}>
-                        <strong style={{ color: '#8b5cf6', fontSize: '0.72rem', fontWeight: 800, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>🔁 Router Secundario / Mesh</strong>
-                        <span style={{ color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700 }}>{selectedClient.router_secundario} {selectedClient.tipo_mesh ? `(${selectedClient.tipo_mesh})` : ''}</span>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      {/* ONT / ONU */}
+                      <div style={{ background: 'rgba(0,0,0,0.15)', padding: '8px 10px', borderRadius: '8px' }}>
+                        <strong style={{ color: '#059669', fontSize: '0.72rem', fontWeight: 800, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>🟢 Modelo ONT</strong>
+                        <span style={{ color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700, display: 'block' }}>{selectedClient.modelo_ont || 'N/D'}</span>
+                        <small style={{ color: '#d97706', fontSize: '0.75rem', fontWeight: 700 }}>SN: {selectedClient.numero_serie || 'S/N'}</small>
                       </div>
-                    )}
+
+                      {/* Router Principal */}
+                      <div style={{ background: 'rgba(0,0,0,0.15)', padding: '8px 10px', borderRadius: '8px' }}>
+                        <strong style={{ color: '#6366f1', fontSize: '0.72rem', fontWeight: 800, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>📶 Router Principal</strong>
+                        <span style={{ color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700, display: 'block' }}>
+                          {selectedClient.router_principal || 'N/D'} {selectedClient.modo_acceso ? `(${selectedClient.modo_acceso})` : ''}
+                        </span>
+                        {selectedClient.numero_serie_router && (
+                          <small style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, display: 'block' }}>SN/MAC: {selectedClient.numero_serie_router}</small>
+                        )}
+                      </div>
+
+                      {/* Router Secundario / Mesh si existe */}
+                      {selectedClient.router_secundario && (
+                        <div style={{ gridColumn: 'span 2', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.3)', padding: '8px 10px', borderRadius: '8px' }}>
+                          <strong style={{ color: '#c4b5fd', fontSize: '0.72rem', fontWeight: 800, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>🔁 Router Secundario / Mesh ({selectedClient.tipo_mesh || 'CABLEADO'})</strong>
+                          <span style={{ color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700, display: 'block' }}>{selectedClient.router_secundario}</span>
+                          {selectedClient.numero_serie_router_secundario && (
+                            <small style={{ color: '#c4b5fd', fontSize: '0.75rem', fontWeight: 700, display: 'block' }}>SN/MAC: {selectedClient.numero_serie_router_secundario}</small>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 

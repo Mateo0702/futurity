@@ -622,7 +622,7 @@ def buscar_completo_json():
                    telefono1, telefono2, telefono3, fecha_instalacion,
                    total_mensual, antiguedad, numero_serie, producto, direccion, forma_pago,
                    velocidad_mbps, ip_cliente, ip_nodo, vendedor, email,
-                   modelo_ont, router_principal, router_secundario, tipo_mesh,
+                   modelo_ont, router_principal, numero_serie_router, router_secundario, numero_serie_router_secundario, tipo_mesh,
                    cantidad_routers, modo_acceso
             FROM directorio_clientes 
             WHERE contrato LIKE %s 
@@ -679,7 +679,9 @@ def buscar_completo_json():
                 "nodo_nombre": MAPEO_NODOS.get(row.get('ip_nodo'), row.get('ip_nodo')),
                 "modelo_ont": row.get('modelo_ont'),
                 "router_principal": row.get('router_principal'),
+                "numero_serie_router": row.get('numero_serie_router'),
                 "router_secundario": row.get('router_secundario'),
+                "numero_serie_router_secundario": row.get('numero_serie_router_secundario'),
                 "tipo_mesh": row.get('tipo_mesh'),
                 "cantidad_routers": row.get('cantidad_routers') or 1,
                 "modo_acceso": row.get('modo_acceso'),
