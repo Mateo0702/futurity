@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserMultiFormatReader } from '@zxing/library';
+import { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } from '@zxing/library';
+
 
 
 function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
@@ -839,52 +840,146 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   const procesarFotoBarcodeParaCampo = async (file, visitaId, campo, isGpon = false) => {
     if (!file) return;
     try {
-      // 1. BarcodeDetector nativo si está disponible en el WebView
-      if ('BarcodeDetector' in window) {
+      // 1. Cargar imagen en memoria
+      const img = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = reject;
+          image.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const hints = new Map();
+      hints.set(DecodeHintType.TRY_HARDER, true);
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.CODE_128,
+        BarcodeFormat.CODE_39,
+        BarcodeFormat.QR_CODE,
+        BarcodeFormat.DATA_MATRIX,
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.EAN_8,
+        BarcodeFormat.ITF
+      ]);
+      const codeReader = new BrowserMultiFormatReader(hints);
+
+      // Probar en 4 ángulos de orientación: 0°, 90°, 270°, 180° (para fotos tomadas de lado o verticales)
+      const angles = [0, 90, 270, 180];
+      let decodedCandidates = [];
+
+      for (const angle of angles) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (angle === 90 || angle === 270) {
+          canvas.width = img.height;
+          canvas.height = img.width;
+        } else {
+          canvas.width = img.width;
+          canvas.height = img.height;
+        }
+
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate((angle * Math.PI) / 180);
+        ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+        // A) Intentar con BarcodeDetector nativo si el WebView lo soporta
+        if ('BarcodeDetector' in window) {
+          try {
+            const detector = new window.BarcodeDetector({
+              formats: ['code_128', 'code_39', 'qr_code', 'data_matrix', 'ean_13', 'ean_8']
+            });
+            const barcodes = await detector.detect(canvas);
+            if (barcodes && barcodes.length > 0) {
+              barcodes.forEach(b => {
+                if (b.rawValue) decodedCandidates.push(b.rawValue);
+              });
+            }
+          } catch (e) {}
+        }
+
+        // B) Intentar con ZXing decodeFromImageUrl sobre el canvas rotado
         try {
-          const detector = new window.BarcodeDetector({
-            formats: ['code_128', 'code_39', 'qr_code', 'data_matrix', 'ean_13', 'ean_8']
-          });
-          const img = await createImageBitmap(file);
-          const barcodes = await detector.detect(img);
-          if (barcodes && barcodes.length > 0) {
-            const raw = barcodes[0].rawValue;
-            const valorFinal = isGpon ? normalizarGponSn(raw) : raw.trim().toUpperCase();
-            updateFormState(visitaId, { [campo]: valorFinal });
-            if (navigator.vibrate) navigator.vibrate(100);
-            alert(`¡Código escaneado con éxito!\nDetectado: ${raw}${isGpon ? '\nSerie GPON: ' + valorFinal : ''}`);
-            return;
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+          const result = await codeReader.decodeFromImageUrl(dataUrl);
+          if (result && result.getText()) {
+            decodedCandidates.push(result.getText());
           }
-        } catch (e) {
-          console.warn("BarcodeDetector fallback to ZXing:", e);
+        } catch (e) {}
+
+        if (decodedCandidates.length > 0) {
+          if (isGpon) {
+            const gponCand = decodedCandidates.find(c => {
+              const cleaned = c.replace(/^(SN|S\/N|GPON)[:\s\-_]*/i, '').trim();
+              return cleaned.length === 16 || cleaned.length === 12 || /^(48575443|43444B54|54504C47|5A544547|HWTC|CDKT|TPLG|ZTEG)/i.test(cleaned);
+            });
+            if (gponCand) {
+              decodedCandidates = [gponCand];
+              break;
+            }
+          } else {
+            break;
+          }
         }
       }
 
-      // 2. Decodificador ZXing en Javascript puro (100% compatible en cualquier APK / WebView)
-      const codeReader = new BrowserMultiFormatReader();
-      const imageUrl = URL.createObjectURL(file);
-      try {
-        const result = await codeReader.decodeFromImageUrl(imageUrl);
-        URL.revokeObjectURL(imageUrl);
-        if (result && result.getText()) {
-          const raw = result.getText();
-          const valorFinal = isGpon ? normalizarGponSn(raw) : raw.trim().toUpperCase();
-          updateFormState(visitaId, { [campo]: valorFinal });
-          if (navigator.vibrate) navigator.vibrate(100);
-          alert(`¡Código escaneado con éxito!\nDetectado: ${raw}${isGpon ? '\nSerie GPON: ' + valorFinal : ''}`);
-          return;
+      // Si no encontró, intentar con filtro de contraste en ángulos rotados
+      if (decodedCandidates.length === 0) {
+        for (const angle of [90, 270, 0]) {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (angle === 90 || angle === 270) {
+            canvas.width = img.height;
+            canvas.height = img.width;
+          } else {
+            canvas.width = img.width;
+            canvas.height = img.height;
+          }
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate((angle * Math.PI) / 180);
+          ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const d = imgData.data;
+          for (let i = 0; i < d.length; i += 4) {
+            const gray = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+            const v = gray > 125 ? 255 : 0;
+            d[i] = v; d[i+1] = v; d[i+2] = v;
+          }
+          ctx.putImageData(imgData, 0, 0);
+
+          try {
+            const dataUrl = canvas.toDataURL('image/png');
+            const result = await codeReader.decodeFromImageUrl(dataUrl);
+            if (result && result.getText()) {
+              decodedCandidates.push(result.getText());
+              break;
+            }
+          } catch (e) {}
         }
-      } catch (zxingErr) {
-        URL.revokeObjectURL(imageUrl);
-        console.warn("ZXing decode error:", zxingErr);
+      }
+
+      if (decodedCandidates.length > 0) {
+        let raw = decodedCandidates[0];
+        let valorFinal = raw.trim().replace(/^(SN|S\/N|GPON)[:\s\-_]*/i, '').trim().toUpperCase();
+        if (isGpon) {
+          valorFinal = normalizarGponSn(valorFinal);
+        }
+        updateFormState(visitaId, { [campo]: valorFinal });
+        if (navigator.vibrate) navigator.vibrate(100);
+        alert(`¡Código escaneado con éxito!\nDetectado: ${raw}${isGpon ? '\nSerie GPON: ' + valorFinal : ''}`);
+        return;
       }
 
       alert("No se pudo detectar automáticamente el código en la foto. Ingrésalo manualmente.");
     } catch (err) {
       console.error("Error escaneando código de barras:", err);
-      alert("No se pudo leer el código. Ingrésalo manualmente.");
+      alert("No se pudo leer el código de la imagen. Ingrésalo manualmente.");
     }
   };
+
 
 
 
