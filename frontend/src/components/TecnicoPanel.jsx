@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } from '@zxing/library';
+import { createWorker } from 'tesseract.js';
+
 
 
 
@@ -976,53 +978,99 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
       }
 
       const allDecoded = Array.from(foundSet);
+      let confirmedSn = null;
 
-      if (allDecoded.length > 0) {
-        let chosenRaw = allDecoded[0];
+      // 1. Verificar si en los códigos de barra leídos está la SN GPON
+      if (isGpon || campo === 'numero_serie_onu') {
+        const gponVendorMatch = allDecoded.find(c => {
+          const cleaned = c.replace(/^(SN|S\/N|GPON)[:\s\-_]*/i, '').trim().toUpperCase();
+          return /^(48575443|43444B54|54504C47|5A544547|46485454|414C434C|56534F4C|HWTC|CDKT|TPLG|ZTEG|FHTT|ALCL|VSOL)/i.test(cleaned);
+        });
 
-        // Discriminador inteligente de código:
-        if (isGpon || campo === 'numero_serie_onu') {
-          // 1. Buscar candidato con prefijo GPON hex o ASCII conocido
-          const gponVendorMatch = allDecoded.find(c => {
+        if (gponVendorMatch) {
+          confirmedSn = gponVendorMatch;
+        } else {
+          const snCandidate = allDecoded.find(c => {
             const cleaned = c.replace(/^(SN|S\/N|GPON)[:\s\-_]*/i, '').trim().toUpperCase();
-            return /^(48575443|43444B54|54504C47|5A544547|46485454|414C434C|56534F4C|HWTC|CDKT|TPLG|ZTEG|FHTT|ALCL|VSOL)/i.test(cleaned);
+            const isMac = c.includes('-A0') || c.includes(':') || c.startsWith('MAC');
+            const isProd = c.startsWith('21500') || c.includes('PROD');
+            return !isMac && !isProd && (cleaned.length === 16 || cleaned.length === 12);
           });
-
-          if (gponVendorMatch) {
-            chosenRaw = gponVendorMatch;
-          } else {
-            // 2. Buscar candidato que no sea MAC ni PROD ID y tenga 12 a 16 caracteres
-            const snCandidate = allDecoded.find(c => {
-              const cleaned = c.replace(/^(SN|S\/N|GPON)[:\s\-_]*/i, '').trim().toUpperCase();
-              const isMac = c.includes('-A0') || c.includes(':') || c.startsWith('MAC');
-              const isProd = c.startsWith('21500') || c.includes('PROD');
-              return !isMac && !isProd && (cleaned.length === 16 || cleaned.length === 12);
-            });
-            if (snCandidate) chosenRaw = snCandidate;
-          }
-        } else if (campo === 'numero_serie_router' || campo === 'numero_serie_router_secundario') {
-          // Para routers, buscar el que tenga formato MAC o serie de router
-          const macMatch = allDecoded.find(c => c.includes('-A0') || c.includes(':') || c.startsWith('MAC') || c.length === 12);
-          if (macMatch) chosenRaw = macMatch;
+          if (snCandidate) confirmedSn = snCandidate;
         }
+      } else if (campo === 'numero_serie_router' || campo === 'numero_serie_router_secundario') {
+        const macMatch = allDecoded.find(c => c.includes('-A0') || c.includes(':') || c.startsWith('MAC') || c.length === 12);
+        if (macMatch) confirmedSn = macMatch;
+        else if (allDecoded.length > 0) confirmedSn = allDecoded[0];
+      }
 
-        let valorFinal = chosenRaw.trim().replace(/^(SN|S\/N|GPON|MAC|PROD\s*ID)[:\s\-_]*/i, '').trim().toUpperCase();
+      if (confirmedSn) {
+        let valorFinal = confirmedSn.trim().replace(/^(SN|S\/N|GPON|MAC|PROD\s*ID)[:\s\-_]*/i, '').trim().toUpperCase();
         if (isGpon || campo === 'numero_serie_onu') {
           valorFinal = normalizarGponSn(valorFinal);
         }
-
         updateFormState(visitaId, { [campo]: valorFinal });
         if (navigator.vibrate) navigator.vibrate(100);
-        alert(`¡Código escaneado con éxito!\nDetectado: ${chosenRaw}${isGpon ? '\nSerie GPON: ' + valorFinal : ''}`);
+        alert(`¡Código escaneado con éxito!\nDetectado: ${confirmedSn}${isGpon ? '\nSerie GPON: ' + valorFinal : ''}`);
         return;
       }
 
-      alert("No se pudo detectar automáticamente el código en la foto. Ingrésalo manualmente.");
+      // 2. OCR Fallback con Tesseract.js (Lectura de texto óptico de la etiqueta: SN: ... / MAC: ...)
+      try {
+        const worker = await createWorker('eng');
+        for (const angle of [90, 270, 0, 180]) {
+          const canvas = document.createElement('canvas');
+          const rawW = (angle === 90 || angle === 270) ? img.height : img.width;
+          const rawH = (angle === 90 || angle === 270) ? img.width : img.height;
+          canvas.width = rawW;
+          canvas.height = rawH;
+          const ctx = canvas.getContext('2d');
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate((angle * Math.PI) / 180);
+          ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+          const ocrDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+          const ret = await worker.recognize(ocrDataUrl);
+          const txt = ret?.data?.text || '';
+
+          if (isGpon || campo === 'numero_serie_onu') {
+            const m1 = txt.match(/S\/?N[:\s\-_]*([0-9A-Z]{12,18})/i);
+            const m2 = txt.match(/(48575443|43444B54|54504C47|5A544547|46485454|414C434C|56534F4C)[0-9A-F]{8}/i);
+            const m3 = txt.match(/(HWTC|CDKT|TPLG|ZTEG|FHTT|ALCL|VSOL)[0-9A-Z]{8}/i);
+            const cand = (m1 ? m1[1] : (m2 ? m2[0] : (m3 ? m3[0] : null)));
+            if (cand) {
+              await worker.terminate();
+              let valorFinal = cand.trim().replace(/^(SN|S\/N|GPON)[:\s\-_]*/i, '').trim().toUpperCase();
+              valorFinal = normalizarGponSn(valorFinal);
+              updateFormState(visitaId, { [campo]: valorFinal });
+              if (navigator.vibrate) navigator.vibrate(100);
+              alert(`¡Etiqueta leída con éxito (OCR)!\nTexto detectado: ${cand}\nSerie GPON: ${valorFinal}`);
+              return;
+            }
+          } else if (campo === 'numero_serie_router' || campo === 'numero_serie_router_secundario') {
+            const macM = txt.match(/MAC[:\s\-_]*([0-9A-Z\-()]{12,22})/i);
+            if (macM) {
+              await worker.terminate();
+              const valorFinal = macM[1].trim().toUpperCase();
+              updateFormState(visitaId, { [campo]: valorFinal });
+              if (navigator.vibrate) navigator.vibrate(100);
+              alert(`¡MAC leída con éxito (OCR)!\nSerie/MAC: ${valorFinal}`);
+              return;
+            }
+          }
+        }
+        await worker.terminate();
+      } catch (ocrErr) {
+        console.warn("OCR fallback error:", ocrErr);
+      }
+
+      alert("No se pudo detectar automáticamente la Serie en la foto. Ingrésala manualmente.");
     } catch (err) {
       console.error("Error escaneando código de barras:", err);
-      alert("No se pudo leer el código de la imagen. Ingrésalo manualmente.");
+      alert("No se pudo leer la imagen. Ingrésala manualmente.");
     }
   };
+
 
 
 
