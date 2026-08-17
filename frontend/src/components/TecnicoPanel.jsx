@@ -144,16 +144,25 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     };
   }, [activeVisita, formCierre]);
 
-  const cargarDatosPanel = async () => {
+  const cargarDatosPanel = async (manual = false) => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`/api/tecnico/panel/${tecnicoUrlName}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const timestamp = Date.now();
+      const res = await fetch(`/api/tecnico/panel/${tecnicoUrlName}?_t=${timestamp}`, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
       });
       const data = await res.json();
       if (res.ok && data.status === 'ok') {
-        setVisitas(data.visitas || []);
+        const freshVisitas = data.visitas || [];
+        setVisitas(freshVisitas);
         setTecnicoRealName(data.tecnico);
         setFotoPerfil(data.foto_perfil || '');
         setEstadoActividad(data.estado_actividad);
@@ -167,11 +176,18 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         setCatalogoOnt(data.catalogo_ont || []);
         setCatalogoRouter(data.catalogo_router || []);
         setTecnicosLista(data.tecnicos_lista || []);
+
+        // Sync activeVisita with fresh server state
+        setActiveVisita(prevActive => {
+          if (!prevActive) return null;
+          const fresh = freshVisitas.find(x => x.id_visita === prevActive.id_visita);
+          return fresh || prevActive;
+        });
         
-        // Initialize form closures state, preserving any user input in progress
+        // Initialize form closures state, updating fields from fresh visit data
         setFormCierre(prev => {
           const nextForm = { ...prev };
-          (data.visitas || []).forEach(v => {
+          freshVisitas.forEach(v => {
             if (!nextForm[v.id_visita]) {
               nextForm[v.id_visita] = {
                 solucion_tecnico: v.solucion_tecnico || '',
@@ -204,6 +220,10 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
           return nextForm;
         });
 
+        if (manual) {
+          if (navigator.vibrate) navigator.vibrate(60);
+        }
+
       } else {
         setError(data.message || 'Error al obtener información de visitas.');
       }
@@ -214,6 +234,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
       setLoading(false);
     }
   };
+
 
   const defaultFormState = {
     solucion_tecnico: '',
@@ -1376,19 +1397,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
             <button 
               type="button" 
-              onClick={async () => {
-                await cargarDatosPanel();
-                try {
-                  const resV = await fetch(`/api/tecnico/panel/${tecnicoUrlName}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                  });
-                  const dV = await resV.json();
-                  if (dV.ok || dV.status === 'ok') {
-                    const fresh = (dV.visitas || []).find(x => x.id_visita === activeVisita.id_visita);
-                    if (fresh) setActiveVisita(fresh);
-                  }
-                } catch (e) {}
-              }}
+              onClick={() => cargarDatosPanel(true)}
               style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid #475569', color: '#38bdf8', padding: '6px 12px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
             >
               <i className={`fa-solid fa-arrows-rotate ${loading ? 'fa-spin' : ''}`}></i>
@@ -1897,40 +1906,23 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                         </select>
 
                         {/* Serie ONU (SN) */}
-                        {/* Serie ONU (SN) */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                           <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
                             Serie GPON (SN) {activeVisita.numero_serie ? `[Actual: ${activeVisita.numero_serie}]` : ''}:
                           </label>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <label style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <i className="fa-solid fa-camera"></i> Cámara
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                capture="environment"
-                                style={{ display: 'none' }}
-                                onChange={(e) => {
-                                  if (e.target.files && e.target.files[0]) {
-                                    procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_onu', true);
-                                  }
-                                }}
-                              />
-                            </label>
-                            <label style={{ background: 'rgba(255,255,255,0.08)', color: '#cbd5e1', border: '1px solid #475569', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <i className="fa-solid fa-images"></i> Galería
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                style={{ display: 'none' }}
-                                onChange={(e) => {
-                                  if (e.target.files && e.target.files[0]) {
-                                    procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_onu', true);
-                                  }
-                                }}
-                              />
-                            </label>
-                          </div>
+                          <label style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', padding: '5px 12px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <i className="fa-solid fa-images"></i> Galería / Escanear
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              style={{ display: 'none' }}
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_onu', true);
+                                }
+                              }}
+                            />
+                          </label>
                         </div>
                         <input 
                           type="text" 
@@ -1941,7 +1933,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                               updateFormState(activeVisita.id_visita, { numero_serie_onu: normalizarGponSn(e.target.value) });
                             }
                           }}
-                          placeholder="Ej. CDKT2A187B7D o toma foto a la serie"
+                          placeholder="Ej. CDKT2A187B7D o elige foto de galería"
                           style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#fbbf24', fontSize: '0.85rem', fontWeight: 800, boxSizing: 'border-box' }}
                         />
                       </div>
@@ -1963,35 +1955,19 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                           <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
                             Serie Router Principal {activeVisita.numero_serie_router ? `[Actual: ${activeVisita.numero_serie_router}]` : ''}:
                           </label>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <label style={{ background: 'rgba(99, 102, 241, 0.25)', color: '#a5b4fc', border: '1px solid rgba(99, 102, 241, 0.5)', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <i className="fa-solid fa-camera"></i> Cámara
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                capture="environment"
-                                style={{ display: 'none' }}
-                                onChange={(e) => {
-                                  if (e.target.files && e.target.files[0]) {
-                                    procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router', false);
-                                  }
-                                }}
-                              />
-                            </label>
-                            <label style={{ background: 'rgba(255,255,255,0.08)', color: '#cbd5e1', border: '1px solid #475569', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <i className="fa-solid fa-images"></i> Galería
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                style={{ display: 'none' }}
-                                onChange={(e) => {
-                                  if (e.target.files && e.target.files[0]) {
-                                    procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router', false);
-                                  }
-                                }}
-                              />
-                            </label>
-                          </div>
+                          <label style={{ background: 'rgba(99, 102, 241, 0.25)', color: '#a5b4fc', border: '1px solid rgba(99, 102, 241, 0.5)', padding: '5px 12px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <i className="fa-solid fa-images"></i> Galería / Escanear
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              style={{ display: 'none' }}
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router', false);
+                                }
+                              }}
+                            />
+                          </label>
                         </div>
                         <input 
                           type="text" 
@@ -2038,35 +2014,19 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                             <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
                               Serie Router Secundario:
                             </label>
-                            <div style={{ display: 'flex', gap: '6px' }}>
-                              <label style={{ background: 'rgba(139, 92, 246, 0.25)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.5)', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <i className="fa-solid fa-camera"></i> Cámara
-                                <input 
-                                  type="file" 
-                                  accept="image/*" 
-                                  capture="environment"
-                                  style={{ display: 'none' }}
-                                  onChange={(e) => {
-                                    if (e.target.files && e.target.files[0]) {
-                                      procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router_secundario', false);
-                                    }
-                                  }}
-                                />
-                              </label>
-                              <label style={{ background: 'rgba(255,255,255,0.08)', color: '#cbd5e1', border: '1px solid #475569', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <i className="fa-solid fa-images"></i> Galería
-                                <input 
-                                  type="file" 
-                                  accept="image/*" 
-                                  style={{ display: 'none' }}
-                                  onChange={(e) => {
-                                    if (e.target.files && e.target.files[0]) {
-                                      procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router_secundario', false);
-                                    }
-                                  }}
-                                />
-                              </label>
-                            </div>
+                            <label style={{ background: 'rgba(139, 92, 246, 0.25)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.5)', padding: '5px 12px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <i className="fa-solid fa-images"></i> Galería / Escanear
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                style={{ display: 'none' }}
+                                onChange={(e) => {
+                                  if (e.target.files && e.target.files[0]) {
+                                    procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router_secundario', false);
+                                  }
+                                }}
+                              />
+                            </label>
                           </div>
                           <input 
                             type="text" 
@@ -2075,6 +2035,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                             placeholder="Opcional: Serie/MAC del Router Secundario"
                             style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 700, boxSizing: 'border-box' }}
                           />
+
 
 
 
@@ -2170,32 +2131,20 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
                     {/* Photo Captures Box */}
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px' }}>
-                      <strong style={{ fontWeight: 700, fontSize: '0.82rem', display: 'block', marginBottom: '8px', color: '#94a3b8' }}>📷 Evidencia Fotográfica (Cámara o Galería):</strong>
+                      <strong style={{ fontWeight: 700, fontSize: '0.82rem', display: 'block', marginBottom: '8px', color: '#94a3b8' }}>📷 Evidencia Fotográfica:</strong>
                       
                       {activeFormState.equipos_juntos ? (
                         <div style={{ marginBottom: '10px' }}>
                           <label style={{ fontSize: '0.75rem', color: '#cbd5e1', display: 'block', marginBottom: '4px' }}>Foto conjunta de ONU y Router:</label>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <label style={{ flex: 1, background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', padding: '7px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 800, textAlign: 'center', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                              <i className="fa-solid fa-camera"></i> Tomar Foto
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                capture="environment" 
-                                onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos', 'preview-foto-conjunta')} 
-                                style={{ display: 'none' }}
-                              />
-                            </label>
-                            <label style={{ flex: 1, background: 'rgba(255,255,255,0.08)', color: '#cbd5e1', border: '1px solid #475569', padding: '7px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 800, textAlign: 'center', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                              <i className="fa-solid fa-images"></i> Galería
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos', 'preview-foto-conjunta')} 
-                                style={{ display: 'none' }}
-                              />
-                            </label>
-                          </div>
+                          <label style={{ width: '100%', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', border: '1px solid #475569', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', boxSizing: 'border-box' }}>
+                            <i className="fa-solid fa-images" style={{ color: '#38bdf8' }}></i> Seleccionar Foto (Galería)
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos', 'preview-foto-conjunta')} 
+                              style={{ display: 'none' }}
+                            />
+                          </label>
                           <div style={{ marginTop: '8px', textAlign: 'center' }}>
                             <img id="preview-foto-conjunta" style={{ maxWidth: '100%', maxHeight: '110px', display: activeFormState.foto_equipos_base64 ? 'block' : 'none', borderRadius: '6px', margin: '0 auto', border: '1px solid #475569' }} src={activeFormState.foto_equipos_base64} alt="Preview" />
                           </div>
@@ -2204,54 +2153,30 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <div>
                             <label style={{ fontSize: '0.75rem', color: '#cbd5e1', display: 'block', marginBottom: '4px' }}>Foto de ONU:</label>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <label style={{ flex: 1, background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', padding: '7px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 800, textAlign: 'center', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                                <i className="fa-solid fa-camera"></i> Tomar Foto
-                                <input 
-                                  type="file" 
-                                  accept="image/*" 
-                                  capture="environment" 
-                                  onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos', 'preview-foto-onu')} 
-                                  style={{ display: 'none' }}
-                                />
-                              </label>
-                              <label style={{ flex: 1, background: 'rgba(255,255,255,0.08)', color: '#cbd5e1', border: '1px solid #475569', padding: '7px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 800, textAlign: 'center', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                                <i className="fa-solid fa-images"></i> Galería
-                                <input 
-                                  type="file" 
-                                  accept="image/*" 
-                                  onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos', 'preview-foto-onu')} 
-                                  style={{ display: 'none' }}
-                                />
-                              </label>
-                            </div>
+                            <label style={{ width: '100%', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', border: '1px solid #475569', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', boxSizing: 'border-box' }}>
+                              <i className="fa-solid fa-images" style={{ color: '#38bdf8' }}></i> Seleccionar Foto ONU (Galería)
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos', 'preview-foto-onu')} 
+                                style={{ display: 'none' }}
+                              />
+                            </label>
                             <div style={{ marginTop: '6px', textAlign: 'center' }}>
                               <img id="preview-foto-onu" style={{ maxWidth: '100%', maxHeight: '100px', display: activeFormState.foto_equipos_base64 ? 'block' : 'none', borderRadius: '6px', margin: '0 auto', border: '1px solid #475569' }} src={activeFormState.foto_equipos_base64} alt="ONU Preview" />
                             </div>
                           </div>
                           <div>
                             <label style={{ fontSize: '0.75rem', color: '#cbd5e1', display: 'block', marginBottom: '4px' }}>Foto de Router:</label>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <label style={{ flex: 1, background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', padding: '7px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 800, textAlign: 'center', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                                <i className="fa-solid fa-camera"></i> Tomar Foto
-                                <input 
-                                  type="file" 
-                                  accept="image/*" 
-                                  capture="environment" 
-                                  onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos_2', 'preview-foto-router')} 
-                                  style={{ display: 'none' }}
-                                />
-                              </label>
-                              <label style={{ flex: 1, background: 'rgba(255,255,255,0.08)', color: '#cbd5e1', border: '1px solid #475569', padding: '7px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 800, textAlign: 'center', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                                <i className="fa-solid fa-images"></i> Galería
-                                <input 
-                                  type="file" 
-                                  accept="image/*" 
-                                  onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos_2', 'preview-foto-router')} 
-                                  style={{ display: 'none' }}
-                                />
-                              </label>
-                            </div>
+                            <label style={{ width: '100%', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', border: '1px solid #475569', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', boxSizing: 'border-box' }}>
+                              <i className="fa-solid fa-images" style={{ color: '#38bdf8' }}></i> Seleccionar Foto Router (Galería)
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos_2', 'preview-foto-router')} 
+                                style={{ display: 'none' }}
+                              />
+                            </label>
                             <div style={{ marginTop: '6px', textAlign: 'center' }}>
                               <img id="preview-foto-router" style={{ maxWidth: '100%', maxHeight: '100px', display: activeFormState.foto_equipos_2_base64 ? 'block' : 'none', borderRadius: '6px', margin: '0 auto', border: '1px solid #475569' }} src={activeFormState.foto_equipos_2_base64} alt="Router Preview" />
                             </div>
@@ -2261,38 +2186,27 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
                       {/* Optional extra photos */}
                       <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '8px' }}>
-                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'block', marginBottom: '6px', fontWeight: 700 }}>📷 Fotos Adicionales (Cámara o Galería - Máx 4):</span>
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'block', marginBottom: '6px', fontWeight: 700 }}>📷 Fotos Adicionales (Opcional - Máx 4):</span>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                           {[1, 2, 3, 4].map(idx => (
                             <div key={idx} style={{ background: 'rgba(0,0,0,0.15)', padding: '6px', borderRadius: '6px', textAlign: 'center' }}>
                               <label style={{ fontSize: '0.65rem', color: '#cbd5e1', display: 'block', marginBottom: '2px', fontWeight: 800 }}>Extra {idx}:</label>
-                              <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                                <label style={{ flex: 1, background: '#0284c7', color: 'white', padding: '4px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer' }}>
-                                  📷 Cámara
-                                  <input 
-                                    type="file" 
-                                    accept="image/*" 
-                                    capture="environment"
-                                    onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, `foto_extra_${idx}`, `preview-foto-extra-${idx}`)} 
-                                    style={{ display: 'none' }} 
-                                  />
-                                </label>
-                                <label style={{ flex: 1, background: '#334155', color: '#cbd5e1', padding: '4px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer' }}>
-                                  🖼️ Galería
-                                  <input 
-                                    type="file" 
-                                    accept="image/*" 
-                                    onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, `foto_extra_${idx}`, `preview-foto-extra-${idx}`)} 
-                                    style={{ display: 'none' }} 
-                                  />
-                                </label>
-                              </div>
+                              <label style={{ display: 'block', background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', border: '1px solid #475569', padding: '6px 4px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer', textAlign: 'center' }}>
+                                <i className="fa-solid fa-images" style={{ color: '#38bdf8' }}></i> Galería
+                                <input 
+                                  type="file" 
+                                  accept="image/*" 
+                                  onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, `foto_extra_${idx}`, `preview-foto-extra-${idx}`)} 
+                                  style={{ display: 'none' }} 
+                                />
+                              </label>
                               <img id={`preview-foto-extra-${idx}`} style={{ display: activeFormState[`foto_extra_${idx}_base64`] ? 'block' : 'none', maxHeight: '50px', maxWidth: '100%', borderRadius: '4px', margin: '4px auto' }} src={activeFormState[`foto_extra_${idx}_base64`]} alt="" />
                             </div>
                           ))}
                         </div>
                       </div>
                     </div>
+
 
 
 
