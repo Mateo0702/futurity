@@ -105,6 +105,16 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
+  // Live Barcode Camera Scanner state & refs
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerField, setScannerField] = useState('numero_serie_onu');
+  const [scannerVisitaId, setScannerVisitaId] = useState(null);
+  const [scannerIsGpon, setScannerIsGpon] = useState(false);
+  const scannerVideoRef = useRef(null);
+  const scannerStreamRef = useRef(null);
+  const scannerLoopRef = useRef(null);
+
+
   // Load panel data
   useEffect(() => {
     cargarDatosPanel();
@@ -560,6 +570,14 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
   // --- Actions and state changes ---
   const registrarVoyEnCamino = async (idVisita) => {
+    // Validación preventiva en frontend
+    const visitaActiva = visitas.find(v => v.id_visita !== idVisita && (v.estado === 'EN_RUTA' || v.estado === 'EN_PROGRESO'));
+    if (visitaActiva) {
+      const estTxt = visitaActiva.estado === 'EN_RUTA' ? 'en ruta' : 'en progreso';
+      alert(`⚠️ Ya tienes la visita #${visitaActiva.id_visita} (${visitaActiva.cliente}) ${estTxt}.\nDebes finalizarla o posponerla antes de iniciar otra.`);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/tecnico/en_camino/${idVisita}`, {
         method: 'POST',
@@ -597,6 +615,12 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   };
 
   const registrarLlegueTrabajo = async (idVisita) => {
+    const visitaActiva = visitas.find(v => v.id_visita !== idVisita && v.estado === 'EN_PROGRESO');
+    if (visitaActiva) {
+      alert(`⚠️ Ya tienes la visita #${visitaActiva.id_visita} (${visitaActiva.cliente}) en progreso.\nDebes finalizarla o posponerla antes de iniciar otra.`);
+      return;
+    }
+
     if (window.AndroidBridge) {
       try {
         window.AndroidBridge.stopTracking();
@@ -604,6 +628,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         console.error("Error al detener tracking en registrarLlegueTrabajo:", e);
       }
     }
+
 
     // Get GPS coords first
     let lat = null, lon = null;
@@ -810,6 +835,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
           const raw = barcodes[0].rawValue;
           const valorFinal = isGpon ? normalizarGponSn(raw) : raw.trim().toUpperCase();
           updateFormState(visitaId, { [campo]: valorFinal });
+          if (navigator.vibrate) navigator.vibrate(100);
           alert(`¡Código escaneado con éxito!\nDetectado: ${raw}${isGpon ? '\nSerie GPON: ' + valorFinal : ''}`);
           return;
         }
@@ -820,6 +846,74 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
       alert("No se pudo leer el código. Ingrésalo manualmente.");
     }
   };
+
+  const abrirEscanerCamara = async (visitaId, campo, isGpon = false) => {
+    setScannerVisitaId(visitaId);
+    setScannerField(campo);
+    setScannerIsGpon(isGpon);
+    setScannerOpen(true);
+
+    setTimeout(async () => {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          alert("Tu navegador no soporta cámara en vivo. Por favor usa la opción de subir foto.");
+          return;
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        scannerStreamRef.current = stream;
+        if (scannerVideoRef.current) {
+          scannerVideoRef.current.srcObject = stream;
+          await scannerVideoRef.current.play();
+        }
+
+        // Start continuous frame detection loop
+        if ('BarcodeDetector' in window) {
+          const detector = new window.BarcodeDetector({
+            formats: ['code_128', 'code_39', 'qr_code', 'data_matrix', 'ean_13', 'ean_8']
+          });
+
+          const scanFrame = async () => {
+            if (!scannerVideoRef.current || scannerVideoRef.current.readyState < 2) {
+              scannerLoopRef.current = setTimeout(scanFrame, 200);
+              return;
+            }
+            try {
+              const barcodes = await detector.detect(scannerVideoRef.current);
+              if (barcodes && barcodes.length > 0) {
+                const raw = barcodes[0].rawValue;
+                const valorFinal = isGpon ? normalizarGponSn(raw) : raw.trim().toUpperCase();
+                updateFormState(visitaId, { [campo]: valorFinal });
+                if (navigator.vibrate) navigator.vibrate(120);
+                detenerEscanerCamara();
+                alert(`¡Código escaneado con éxito!\nCódigo: ${raw}${isGpon ? '\nSerie GPON: ' + valorFinal : ''}`);
+                return;
+              }
+            } catch (err) {}
+            scannerLoopRef.current = setTimeout(scanFrame, 250);
+          };
+          scannerLoopRef.current = setTimeout(scanFrame, 300);
+        }
+      } catch (err) {
+        console.error("Error abriendo cámara de escaneo:", err);
+      }
+    }, 100);
+  };
+
+  const detenerEscanerCamara = () => {
+    if (scannerLoopRef.current) {
+      clearTimeout(scannerLoopRef.current);
+      cancelAnimationFrame(scannerLoopRef.current);
+      scannerLoopRef.current = null;
+    }
+    if (scannerStreamRef.current) {
+      scannerStreamRef.current.getTracks().forEach(track => track.stop());
+      scannerStreamRef.current = null;
+    }
+    setScannerOpen(false);
+  };
+
 
 
   // --- Drawing / Signature Canvas ---
@@ -1328,8 +1422,28 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
               {activeVisita.es_instalacion === 1 ? `🔌 Inst. #${activeVisita.numero_parada}` : `🎫 Ticket #${activeVisita.numero_parada}`}
             </span>
 
-            <div style={{ width: '70px' }}></div>
+            <button 
+              type="button" 
+              onClick={async () => {
+                await cargarDatosPanel();
+                try {
+                  const resV = await fetch(`/api/tecnico/panel/${tecnicoUrlName}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                  });
+                  const dV = await resV.json();
+                  if (dV.ok || dV.status === 'ok') {
+                    const fresh = (dV.visitas || []).find(x => x.id_visita === activeVisita.id_visita);
+                    if (fresh) setActiveVisita(fresh);
+                  }
+                } catch (e) {}
+              }}
+              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid #475569', color: '#38bdf8', padding: '6px 12px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+            >
+              <i className={`fa-solid fa-arrows-rotate ${loading ? 'fa-spin' : ''}`}></i>
+              <span>Refrescar</span>
+            </button>
           </div>
+
 
           {/* Sub tabs nav */}
           <div style={{ background: '#1e293b', display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
@@ -1835,20 +1949,13 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                           <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
                             Serie GPON (SN) {activeVisita.numero_serie ? `[Actual: ${activeVisita.numero_serie}]` : ''}:
                           </label>
-                          <label style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <i className="fa-solid fa-barcode"></i> Escanear
-                            <input 
-                              type="file" 
-                              accept="image/*" 
-                              capture="environment" 
-                              style={{ display: 'none' }}
-                              onChange={(e) => {
-                                if (e.target.files && e.target.files[0]) {
-                                  procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_onu', true);
-                                }
-                              }}
-                            />
-                          </label>
+                          <button 
+                            type="button" 
+                            onClick={() => abrirEscanerCamara(activeVisita.id_visita, 'numero_serie_onu', true)}
+                            style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', border: 'none', padding: '4px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                          >
+                            <i className="fa-solid fa-camera"></i> Escanear SN
+                          </button>
                         </div>
                         <input 
                           type="text" 
@@ -1881,20 +1988,13 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                           <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
                             Serie Router Principal {activeVisita.numero_serie_router ? `[Actual: ${activeVisita.numero_serie_router}]` : ''}:
                           </label>
-                          <label style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#a5b4fc', border: '1px solid rgba(99, 102, 241, 0.4)', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <i className="fa-solid fa-barcode"></i> Escanear
-                            <input 
-                              type="file" 
-                              accept="image/*" 
-                              capture="environment" 
-                              style={{ display: 'none' }}
-                              onChange={(e) => {
-                                if (e.target.files && e.target.files[0]) {
-                                  procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router', false);
-                                }
-                              }}
-                            />
-                          </label>
+                          <button 
+                            type="button" 
+                            onClick={() => abrirEscanerCamara(activeVisita.id_visita, 'numero_serie_router', false)}
+                            style={{ background: 'rgba(99, 102, 241, 0.25)', color: '#a5b4fc', border: '1px solid rgba(99, 102, 241, 0.5)', padding: '4px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                          >
+                            <i className="fa-solid fa-camera"></i> Escanear SN
+                          </button>
                         </div>
                         <input 
                           type="text" 
@@ -1941,20 +2041,13 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                             <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
                               Serie Router Secundario:
                             </label>
-                            <label style={{ background: 'rgba(139, 92, 246, 0.2)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.4)', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <i className="fa-solid fa-barcode"></i> Escanear
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                capture="environment" 
-                                style={{ display: 'none' }}
-                                onChange={(e) => {
-                                  if (e.target.files && e.target.files[0]) {
-                                    procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router_secundario', false);
-                                  }
-                                }}
-                              />
-                            </label>
+                            <button 
+                              type="button" 
+                              onClick={() => abrirEscanerCamara(activeVisita.id_visita, 'numero_serie_router_secundario', false)}
+                              style={{ background: 'rgba(139, 92, 246, 0.25)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.5)', padding: '4px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                            >
+                              <i className="fa-solid fa-camera"></i> Escanear SN
+                            </button>
                           </div>
                           <input 
                             type="text" 
@@ -1963,6 +2056,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                             placeholder="Opcional: Serie/MAC del Router Secundario"
                             style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 700, boxSizing: 'border-box' }}
                           />
+
 
                           {/* Tipo de Conexión Mesh */}
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -2055,7 +2149,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
                     {/* Photo Captures Box */}
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px' }}>
-                      <strong style={{ fontWeight: 700, fontSize: '0.82rem', display: 'block', marginBottom: '8px', color: '#94a3b8' }}>📷 Evidencia Fotográfica (Obligatorio):</strong>
+                      <strong style={{ fontWeight: 700, fontSize: '0.82rem', display: 'block', marginBottom: '8px', color: '#94a3b8' }}>📷 Evidencia Fotográfica (Cámara o Galería):</strong>
                       
                       {activeFormState.equipos_juntos ? (
                         <div style={{ marginBottom: '10px' }}>
@@ -2063,7 +2157,6 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                           <input 
                             type="file" 
                             accept="image/*" 
-                            capture="environment" 
                             onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos', 'preview-foto-conjunta')} 
                             style={{ width: '100%', padding: '6px', fontSize: '0.8rem', background: '#1e293b', border: '1px solid #475569', color: '#f8fafc', borderRadius: '6px' }} 
                           />
@@ -2078,7 +2171,6 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                             <input 
                               type="file" 
                               accept="image/*" 
-                              capture="environment" 
                               onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos', 'preview-foto-onu')} 
                               style={{ width: '100%', padding: '6px', fontSize: '0.8rem', background: '#1e293b', border: '1px solid #475569', color: '#f8fafc', borderRadius: '6px' }} 
                             />
@@ -2091,7 +2183,6 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                             <input 
                               type="file" 
                               accept="image/*" 
-                              capture="environment" 
                               onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, 'foto_equipos_2', 'preview-foto-router')} 
                               style={{ width: '100%', padding: '6px', fontSize: '0.8rem', background: '#1e293b', border: '1px solid #475569', color: '#f8fafc', borderRadius: '6px' }} 
                             />
@@ -2104,7 +2195,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
                       {/* Optional extra photos */}
                       <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '8px' }}>
-                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'block', marginBottom: '6px', fontWeight: 700 }}>📷 Fotos Adicionales (Opcional - Máx 4):</span>
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'block', marginBottom: '6px', fontWeight: 700 }}>📷 Fotos Adicionales (Cámara o Galería - Máx 4):</span>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                           {[1, 2, 3, 4].map(idx => (
                             <div key={idx} style={{ background: 'rgba(0,0,0,0.15)', padding: '6px', borderRadius: '6px', textAlign: 'center' }}>
@@ -2112,7 +2203,6 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                               <input 
                                 type="file" 
                                 accept="image/*" 
-                                capture="environment" 
                                 onChange={(e) => comprimirYConvertirFoto(activeVisita.id_visita, e.target, `foto_extra_${idx}`, `preview-foto-extra-${idx}`)} 
                                 style={{ width: '100%', fontSize: '0.68rem', color: 'white' }} 
                               />
@@ -2121,8 +2211,8 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                           ))}
                         </div>
                       </div>
-
                     </div>
+
 
                     {/* Client Conformity Signature Method */}
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px' }}>
@@ -2698,8 +2788,80 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         </div>
       )}
 
+      {/* MODAL: ESCÁNER DE CÁMARA EN VIVO */}
+
+      {scannerOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.92)', zIndex: 300000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '16px', boxSizing: 'border-box' }}>
+          <div style={{ width: '100%', maxWidth: '420px', background: '#1e293b', borderRadius: '18px', overflow: 'hidden', border: '1px solid #475569', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px rgba(0,0,0,0.75)' }}>
+            
+            {/* Modal Header */}
+            <div style={{ padding: '14px 18px', background: '#0f172a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <strong style={{ color: '#38bdf8', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="fa-solid fa-camera"></i> Escanear Código de Barras {scannerIsGpon ? '(GPON)' : ''}
+              </strong>
+              <button 
+                type="button" 
+                onClick={detenerEscanerCamara} 
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.4rem', cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Video Feed Viewport */}
+            <div style={{ position: 'relative', width: '100%', height: '280px', background: '#000', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <video 
+                ref={scannerVideoRef} 
+                autoPlay 
+                playsInline 
+                muted 
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+              {/* Reticle / Mira láser */}
+              <div style={{ position: 'absolute', width: '75%', height: '120px', border: '2px dashed #10b981', borderRadius: '12px', boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)', pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ color: '#34d399', fontSize: '0.74rem', fontWeight: 800, background: 'rgba(0,0,0,0.7)', padding: '3px 8px', borderRadius: '4px' }}>
+                  Apunta al código de barras
+                </span>
+              </div>
+            </div>
+
+            {/* Controls / Galería fallback */}
+            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.78rem', textAlign: 'center' }}>
+                Centra la etiqueta en la mira. La captura y decodificación es automática.
+              </p>
+
+              <label style={{ width: '100%', padding: '11px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid #475569', color: '#f8fafc', fontSize: '0.82rem', fontWeight: 700, textAlign: 'center', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', boxSizing: 'border-box' }}>
+                <i className="fa-solid fa-images" style={{ color: '#38bdf8' }}></i> O elegir foto de la Galería
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      procesarFotoBarcodeParaCampo(e.target.files[0], scannerVisitaId, scannerField, scannerIsGpon);
+                      detenerEscanerCamara();
+                    }
+                  }}
+                />
+              </label>
+
+              <button 
+                type="button" 
+                onClick={detenerEscanerCamara} 
+                style={{ width: '100%', padding: '10px', borderRadius: '10px', border: 'none', background: '#334155', color: '#cbd5e1', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}
+              >
+                Cerrar Escáner
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
+
 }
 
 export default TecnicoPanel;

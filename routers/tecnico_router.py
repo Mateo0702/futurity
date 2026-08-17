@@ -316,6 +316,23 @@ def en_camino_visita(id_visita):
         
         if tecnico_nombre:
             cursor.execute("""
+                SELECT id_visita, cliente, estado 
+                FROM visitas_tecnicas 
+                WHERE (tecnico_principal = %s OR tecnico_apoyo = %s) 
+                  AND estado IN ('EN_RUTA', 'EN_PROGRESO')
+                  AND id_visita != %s
+                  AND fecha_programada = %s
+                LIMIT 1
+            """, (tecnico_nombre, tecnico_nombre, id_visita, date.today().isoformat()))
+            activa = cursor.fetchone()
+            if activa:
+                est_txt = "en ruta" if activa[2] == 'EN_RUTA' else "en progreso"
+                return jsonify({
+                    "status": "error",
+                    "message": f"Ya tienes la visita #{activa[0]} ({activa[1]}) {est_txt}. Debes finalizarla o posponerla antes de iniciar otra."
+                }), 400
+            
+            cursor.execute("""
                 UPDATE visitas_tecnicas 
                 SET estado = 'PENDIENTE', 
                     token_rastreo = NULL 
@@ -402,6 +419,22 @@ def iniciar_visita(id_visita):
         tecnico_nombre = tec_row[0] if tec_row else None
         
         if tecnico_nombre:
+            cursor.execute("""
+                SELECT id_visita, cliente, estado 
+                FROM visitas_tecnicas 
+                WHERE (tecnico_principal = %s OR tecnico_apoyo = %s) 
+                  AND estado = 'EN_PROGRESO'
+                  AND id_visita != %s
+                  AND fecha_programada = %s
+                LIMIT 1
+            """, (tecnico_nombre, tecnico_nombre, id_visita, date.today().isoformat()))
+            activa = cursor.fetchone()
+            if activa:
+                return jsonify({
+                    "status": "error",
+                    "message": f"Ya tienes la visita #{activa[0]} ({activa[1]}) en progreso. Debes finalizarla o posponerla antes de iniciar otra."
+                }), 400
+            
             cursor.execute("""
                 UPDATE visitas_tecnicas 
                 SET estado = 'PENDIENTE', 
