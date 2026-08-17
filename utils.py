@@ -166,7 +166,46 @@ def parsear_informacion_tecnica(visitas, cursor=None):
     if not visitas:
         return visitas
 
+    close_conn = False
+    conn = None
+    if cursor is None:
+        try:
+            import db_config
+            conn = db_config.get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+            close_conn = True
+        except Exception as err:
+            print(f"Error conectando a BD en parsear_informacion_tecnica: {err}")
+
     try:
+        dict_clientes = {}
+        if cursor:
+            contratos_set = set()
+            for v in visitas:
+                c = v.get('contrato')
+                if c:
+                    c_str = str(c).strip().upper()
+                    if c_str:
+                        contratos_set.add(c_str)
+                        contratos_set.add(c_str.lstrip('0'))
+            
+            if contratos_set:
+                c_list = list(contratos_set)
+                format_strings = ','.join(['%s'] * len(c_list))
+                cursor.execute(f"""
+                    SELECT contrato, cedula, total_mensual, antiguedad, fecha_instalacion, numero_serie,
+                           ip_cliente, ip_nodo, velocidad_mbps, producto, vendedor,
+                           modelo_ont, router_principal, numero_serie_router,
+                           router_secundario, numero_serie_router_secundario,
+                           tipo_mesh, cantidad_routers, modo_acceso
+                    FROM directorio_clientes
+                    WHERE UPPER(contrato) IN ({format_strings})
+                """, tuple(c_list))
+                for row in cursor.fetchall():
+                    ck = str(row['contrato']).strip().upper()
+                    dict_clientes[ck] = row
+                    dict_clientes[ck.lstrip('0')] = row
+
         for v in visitas:
             v['info_caja'] = None
             v['info_hilo'] = None
@@ -193,49 +232,48 @@ def parsear_informacion_tecnica(visitas, cursor=None):
                         v['info_pas'] = line[4:].strip()
 
             # Enriquecer con datos comerciales del cliente y Equipos Instalados
-            if cursor and v.get('contrato'):
-                c_val = str(v['contrato']).strip().upper()
-                c_clean = c_val.lstrip('0')
-                cursor.execute("""
-                    SELECT cedula, total_mensual, antiguedad, fecha_instalacion, numero_serie,
-                           ip_cliente, ip_nodo, velocidad_mbps, producto, vendedor,
-                           modelo_ont, router_principal, router_secundario, tipo_mesh,
-                           cantidad_routers, modo_acceso
-                    FROM directorio_clientes
-                    WHERE UPPER(contrato) = %s OR UPPER(contrato) = %s
-                    LIMIT 1
-                """, (c_val, c_clean))
-                cli_info = cursor.fetchone()
-                if cli_info:
-                    v['cedula'] = cli_info.get('cedula') or v.get('cedula')
-                    v['total_mensual'] = float(cli_info['total_mensual']) if cli_info.get('total_mensual') is not None else None
-                    v['numero_serie'] = cli_info.get('numero_serie') or v.get('numero_serie') or 'S/N'
-                    v['antiguedad_fmt'] = format_antiguedad(cli_info.get('antiguedad'), cli_info.get('fecha_instalacion'))
-                    v['ip_nodo'] = cli_info.get('ip_nodo')
-                    v['nodo_nombre'] = MAPEO_NODOS.get(cli_info.get('ip_nodo'), cli_info.get('ip_nodo'))
-                    
-                    # Equipos actuales
-                    v['modelo_ont'] = cli_info.get('modelo_ont')
-                    v['router_principal'] = cli_info.get('router_principal')
-                    v['router_secundario'] = cli_info.get('router_secundario')
-                    v['tipo_mesh'] = cli_info.get('tipo_mesh')
-                    v['cantidad_routers'] = cli_info.get('cantidad_routers') or 1
-                    v['modo_acceso'] = cli_info.get('modo_acceso')
-                    
-                    if not v.get('info_ip') and cli_info.get('ip_cliente'):
-                        v['info_ip'] = cli_info.get('ip_cliente')
-                    if v.get('velocidad_mbps') is None and cli_info.get('velocidad_mbps') is not None:
-                        v['velocidad_mbps'] = cli_info.get('velocidad_mbps')
-                    if not v.get('producto') and cli_info.get('producto'):
-                        v['producto'] = cli_info.get('producto')
-                    if not v.get('vendedor') and cli_info.get('vendedor'):
-                        v['vendedor'] = cli_info.get('vendedor')
-                else:
-                    v['total_mensual'] = None
-                    v['numero_serie'] = v.get('numero_serie') or 'S/N'
-                    v['antiguedad_fmt'] = 'N/D'
+            c_val = str(v.get('contrato') or '').strip().upper()
+            cli_info = dict_clientes.get(c_val) or dict_clientes.get(c_val.lstrip('0'))
+            if cli_info:
+                v['cedula'] = cli_info.get('cedula') or v.get('cedula')
+                v['total_mensual'] = float(cli_info['total_mensual']) if cli_info.get('total_mensual') is not None else None
+                v['numero_serie'] = cli_info.get('numero_serie') or v.get('numero_serie') or 'S/N'
+                v['antiguedad_fmt'] = format_antiguedad(cli_info.get('antiguedad'), cli_info.get('fecha_instalacion'))
+                v['ip_nodo'] = cli_info.get('ip_nodo')
+                v['nodo_nombre'] = MAPEO_NODOS.get(cli_info.get('ip_nodo'), cli_info.get('ip_nodo'))
+                
+                # Equipos actuales
+                v['modelo_ont'] = cli_info.get('modelo_ont') or v.get('modelo_onu')
+                v['router_principal'] = cli_info.get('router_principal') or v.get('modelo_router')
+                v['numero_serie_router'] = cli_info.get('numero_serie_router') or v.get('numero_serie_router')
+                v['router_secundario'] = cli_info.get('router_secundario') or v.get('router_secundario')
+                v['numero_serie_router_secundario'] = cli_info.get('numero_serie_router_secundario') or v.get('numero_serie_router_secundario')
+                v['tipo_mesh'] = cli_info.get('tipo_mesh') or v.get('tipo_mesh')
+                v['cantidad_routers'] = cli_info.get('cantidad_routers') or v.get('cantidad_routers') or 1
+                v['modo_acceso'] = cli_info.get('modo_acceso')
+                
+                if not v.get('info_ip') and cli_info.get('ip_cliente'):
+                    v['info_ip'] = cli_info.get('ip_cliente')
+                if v.get('velocidad_mbps') is None and cli_info.get('velocidad_mbps') is not None:
+                    v['velocidad_mbps'] = cli_info.get('velocidad_mbps')
+                if not v.get('producto') and cli_info.get('producto'):
+                    v['producto'] = cli_info.get('producto')
+                if not v.get('vendedor') and cli_info.get('vendedor'):
+                    v['vendedor'] = cli_info.get('vendedor')
+            else:
+                v['total_mensual'] = v.get('total_mensual')
+                v['numero_serie'] = v.get('numero_serie') or 'S/N'
+                v['antiguedad_fmt'] = v.get('antiguedad_fmt') or 'N/D'
 
     except Exception as e:
         print(f"Error enriqueciendo visitas con datos de cliente: {e}")
+    finally:
+        if close_conn and cursor:
+            try:
+                cursor.close()
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
 
-    return visitas
+    return visitas

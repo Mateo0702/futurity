@@ -560,6 +560,14 @@ def finalizar_visita(id_visita):
             raise Exception("No se puede finalizar la visita sin la firma de conformidad del cliente.")
 
         # 1. Actualizar la visita técnica
+        sn_nuevo = datos.get('numero_serie_onu') or datos.get('numero_serie')
+        sn_onu_normalizado = normalizar_gpon_sn(sn_nuevo) if sn_nuevo else None
+        sn_router = datos.get('numero_serie_router')
+        router_secundario = datos.get('router_secundario')
+        sn_router_secundario = datos.get('numero_serie_router_secundario')
+        tipo_mesh = datos.get('tipo_mesh')
+        cantidad_routers = datos.get('cantidad_routers') or 1
+
         query = """
             UPDATE visitas_tecnicas 
             SET estado = 'FINALIZADA', 
@@ -567,7 +575,13 @@ def finalizar_visita(id_visita):
                 solucion_tecnico = %s,
                 observacion_tecnico = %s,
                 modelo_onu = %s,
+                numero_serie_onu = COALESCE(%s, numero_serie_onu),
                 modelo_router = %s,
+                numero_serie_router = COALESCE(%s, numero_serie_router),
+                router_secundario = COALESCE(%s, router_secundario),
+                numero_serie_router_secundario = COALESCE(%s, numero_serie_router_secundario),
+                tipo_mesh = COALESCE(%s, tipo_mesh),
+                cantidad_routers = %s,
                 coordenadas_tecnico = %s,
                 equipos_juntos = %s,
                 foto_equipos = %s,
@@ -580,7 +594,9 @@ def finalizar_visita(id_visita):
             WHERE id_visita = %s
         """
         cursor.execute(query, (
-            solucion, observacion, onu, router, coordenadas,
+            solucion, observacion, onu, sn_onu_normalizado, router, sn_router,
+            router_secundario, sn_router_secundario, tipo_mesh, cantidad_routers,
+            coordenadas,
             equipos_juntos_val, foto_equipos_filename, foto_equipos_2_filename,
             firma_final_filename,
             foto_extra_1_filename, foto_extra_2_filename, foto_extra_3_filename, foto_extra_4_filename,
@@ -595,23 +611,26 @@ def finalizar_visita(id_visita):
 
         # Auto-actualizar el inventario de equipos del cliente en directorio_clientes
         if contrato_visita:
-            sn_nuevo = datos.get('numero_serie') or datos.get('numero_serie_onu')
-            sn_normalizado = normalizar_gpon_sn(sn_nuevo) if sn_nuevo else None
-            router_secundario = datos.get('router_secundario')
             c_val = str(contrato_visita).strip().upper()
             c_clean = c_val.lstrip('0')
             
             cursor.execute("""
                 UPDATE directorio_clientes
                 SET modelo_ont = COALESCE(NULLIF(%s, ''), modelo_ont),
+                    numero_serie = COALESCE(NULLIF(%s, ''), numero_serie),
                     router_principal = COALESCE(NULLIF(%s, ''), router_principal),
+                    numero_serie_router = COALESCE(NULLIF(%s, ''), numero_serie_router),
                     router_secundario = COALESCE(NULLIF(%s, ''), router_secundario),
-                    numero_serie = COALESCE(NULLIF(%s, ''), numero_serie)
+                    numero_serie_router_secundario = COALESCE(NULLIF(%s, ''), numero_serie_router_secundario),
+                    tipo_mesh = COALESCE(NULLIF(%s, ''), tipo_mesh),
+                    cantidad_routers = COALESCE(%s, cantidad_routers)
                 WHERE UPPER(contrato) = %s OR UPPER(contrato) = %s
             """, (
-                onu, router, router_secundario, sn_normalizado,
+                onu, sn_onu_normalizado, router, sn_router,
+                router_secundario, sn_router_secundario, tipo_mesh, cantidad_routers,
                 c_val, c_clean
             ))
+
 
         # 2. Registrar materiales e inventario si existen
         if materiales_ids and cantidades:

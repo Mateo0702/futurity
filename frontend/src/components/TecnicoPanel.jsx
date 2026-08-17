@@ -174,9 +174,14 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                 solucion_tecnico: v.solucion_tecnico || '',
                 observacion_tecnico: v.observacion_tecnico || '',
                 modelo_onu: v.modelo_onu || v.modelo_ont || '',
-                modelo_router: v.modelo_router || v.router_principal || '',
                 numero_serie_onu: '',
+                modelo_router: v.modelo_router || v.router_principal || '',
+                numero_serie_router: v.numero_serie_router || '',
+                tiene_mesh: !!(v.router_secundario || v.tipo_mesh),
                 router_secundario: v.router_secundario || '',
+                numero_serie_router_secundario: v.numero_serie_router_secundario || '',
+                tipo_mesh: v.tipo_mesh || 'CABLEADO',
+                cantidad_routers: v.cantidad_routers || 1,
                 metodo_firma: 'REMOTA',
                 motivo_sin_firma: 'TRABAJO_EXTERNO',
                 coordenadas_tecnico: v.coordenadas_tecnico || '',
@@ -191,11 +196,11 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                 foto_extra_4_base64: '',
                 materiales: []
               };
-
             }
           });
           return nextForm;
         });
+
       } else {
         setError(data.message || 'Error al obtener información de visitas.');
       }
@@ -792,7 +797,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     return sn;
   };
 
-  const procesarFotoBarcode = async (file, visitaId) => {
+  const procesarFotoBarcodeParaCampo = async (file, visitaId, campo, isGpon = false) => {
     if (!file) return;
     try {
       if ('BarcodeDetector' in window) {
@@ -803,18 +808,19 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         const barcodes = await detector.detect(img);
         if (barcodes && barcodes.length > 0) {
           const raw = barcodes[0].rawValue;
-          const snFormateado = normalizarGponSn(raw);
-          updateFormState(visitaId, { numero_serie_onu: snFormateado });
-          alert(`¡Código escaneado con éxito!\nDetectado: ${raw}\nSerie GPON: ${snFormateado}`);
+          const valorFinal = isGpon ? normalizarGponSn(raw) : raw.trim().toUpperCase();
+          updateFormState(visitaId, { [campo]: valorFinal });
+          alert(`¡Código escaneado con éxito!\nDetectado: ${raw}${isGpon ? '\nSerie GPON: ' + valorFinal : ''}`);
           return;
         }
       }
-      alert("No se pudo detectar automáticamente el código en la foto. Ingrésalo manualmente y el sistema lo convertirá.");
+      alert("No se pudo detectar automáticamente el código en la foto. Ingrésalo manualmente.");
     } catch (err) {
       console.error("Error escaneando código de barras:", err);
       alert("No se pudo leer el código. Ingrésalo manualmente.");
     }
   };
+
 
   // --- Drawing / Signature Canvas ---
 
@@ -1034,9 +1040,13 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         solucion_tecnico: form.solucion_tecnico,
         observacion_tecnico: form.observacion_tecnico,
         modelo_onu: form.modelo_onu,
-        modelo_router: form.modelo_router,
         numero_serie_onu: form.numero_serie_onu ? normalizarGponSn(form.numero_serie_onu) : null,
-        router_secundario: form.router_secundario || null,
+        modelo_router: form.modelo_router,
+        numero_serie_router: form.numero_serie_router || null,
+        router_secundario: form.tiene_mesh ? form.router_secundario : null,
+        numero_serie_router_secundario: form.tiene_mesh ? form.numero_serie_router_secundario : null,
+        tipo_mesh: form.tiene_mesh ? form.tipo_mesh : null,
+        cantidad_routers: form.tiene_mesh ? (parseInt(form.cantidad_routers) || 2) : 1,
         coordenadas_tecnico: form.coordenadas_tecnico,
         metodo_firma: form.metodo_firma,
         motivo_sin_firma: form.motivo_sin_firma,
@@ -1050,6 +1060,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         foto_extra_4_base64: form.foto_extra_4_base64,
         materiales: form.materiales.map(m => ({ id_material: parseInt(m.id_material), cantidad: parseInt(m.cantidad) }))
       };
+
 
       
       const res = await fetch(`/api/tecnico/finalizar/${idVisita}`, {
@@ -1568,11 +1579,25 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                     <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Router Principal:</span>
                     <strong style={{ color: '#f8fafc', fontSize: '0.9rem' }}>{activeVisita.router_principal || 'No especificado'} {activeVisita.modo_acceso ? `(${activeVisita.modo_acceso})` : ''}</strong>
                   </div>
-                  {activeVisita.router_secundario && (
+                  {activeVisita.numero_serie_router && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
-                      <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Router Secundario / Mesh:</span>
-                      <strong style={{ color: '#a78bfa', fontSize: '0.9rem' }}>{activeVisita.router_secundario} {activeVisita.tipo_mesh ? `(${activeVisita.tipo_mesh})` : ''}</strong>
+                      <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Serie Router:</span>
+                      <strong style={{ color: '#cbd5e1', fontSize: '0.88rem' }}>{activeVisita.numero_serie_router}</strong>
                     </div>
+                  )}
+                  {activeVisita.router_secundario && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
+                        <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Router Secundario / Mesh:</span>
+                        <strong style={{ color: '#a78bfa', fontSize: '0.9rem' }}>{activeVisita.router_secundario} {activeVisita.tipo_mesh ? `(${activeVisita.tipo_mesh})` : ''}</strong>
+                      </div>
+                      {activeVisita.numero_serie_router_secundario && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
+                          <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Serie Mesh:</span>
+                          <strong style={{ color: '#cbd5e1', fontSize: '0.88rem' }}>{activeVisita.numero_serie_router_secundario}</strong>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -1635,51 +1660,41 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                   )}
 
                   {oltResult && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', padding: '8px 10px' }}>
-                          <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>ESTADO</span>
-                          <strong style={{ fontSize: '0.85rem', fontWeight: 800, color: '#f8fafc' }}>{oltResult.estado.toUpperCase()}</strong>
-                        </div>
-                        <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', padding: '8px 10px', textAlign: 'right' }}>
-                          <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>DISTANCIA</span>
-                          <strong style={{ fontSize: '0.85rem', fontWeight: 800, color: '#f8fafc' }}>{oltResult.distancia || 'N/D'}</strong>
-                        </div>
-                        <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', padding: '8px 10px' }}>
-                          <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>ENGANCHE (RX)</span>
-                          <strong style={{ fontSize: '1rem', fontWeight: 900, color: getPowerRangeValues(oltResult.potencia_rx).color }}>{oltResult.potencia_rx || 'N/D'}</strong>
-                        </div>
-                        <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', padding: '8px 10px', textAlign: 'right' }}>
-                          <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>RETORNO (TX)</span>
-                          <strong style={{ fontSize: '1rem', fontWeight: 900, color: '#cbd5e1' }}>{oltResult.potencia_tx || 'N/D'}</strong>
-                        </div>
-                      </div>
-
-                      {/* Rx Progress Bar */}
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', fontWeight: 800, color: '#94a3b8', marginBottom: '4px' }}>
-                          <span>Crítico (-29 a -35)</span>
-                          <span>Excelente (-15 a -25)</span>
-                        </div>
-                        <div style={{ height: '7px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${getPowerRangeValues(oltResult.potencia_rx).pct}%`, backgroundColor: getPowerRangeValues(oltResult.potencia_rx).color, transition: 'width 0.4s ease' }}></div>
-                        </div>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: getPowerRangeValues(oltResult.potencia_rx).color, display: 'block', marginTop: '4px' }}>
-                          {getPowerRangeValues(oltResult.potencia_rx).text}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.82rem', color: '#94a3b8', fontWeight: 700 }}>Estado GPON:</span>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 850, padding: '4px 10px', borderRadius: '6px', background: oltResult.status === 'ONLINE' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)', color: oltResult.status === 'ONLINE' ? '#34d399' : '#f87171' }}>
+                          {oltResult.status || 'DESCONOCIDO'}
                         </span>
                       </div>
-
-                      <div style={{ fontSize: '0.72rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px', color: '#94a3b8', display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Uptime de la ONU:</span>
-                        <strong style={{ color: '#f8fafc' }}>{oltResult.uptime || 'N/D'}</strong>
-                      </div>
                       
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' }}>
+                        <div>
+                          <small style={{ color: '#64748b', fontSize: '0.72rem', display: 'block' }}>Potencia Rx (ONU)</small>
+                          <strong style={{ fontSize: '0.95rem', color: (parseFloat(oltResult.rx_power) < -27 || parseFloat(oltResult.rx_power) > -8) ? '#f87171' : '#38bdf8' }}>
+                            {oltResult.rx_power ? `${oltResult.rx_power} dBm` : 'N/D'}
+                          </strong>
+                        </div>
+                        <div>
+                          <small style={{ color: '#64748b', fontSize: '0.72rem', display: 'block' }}>Potencia Tx (OLT)</small>
+                          <strong style={{ fontSize: '0.95rem', color: '#f8fafc' }}>
+                            {oltResult.tx_power ? `${oltResult.tx_power} dBm` : 'N/D'}
+                          </strong>
+                        </div>
+                      </div>
+
+                      {oltResult.detalles && (
+                        <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8', background: 'rgba(0,0,0,0.15)', padding: '8px', borderRadius: '6px' }}>
+                          {oltResult.detalles}
+                        </p>
+                      )}
+
                       <button 
                         type="button" 
                         onClick={() => ejecutarMedicionOLT(activeVisita.numero_serie)} 
-                        style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 700, fontSize: '0.78rem', padding: '8px', background: 'transparent', border: '1px solid #475569', borderRadius: '8px', color: '#38bdf8', cursor: 'pointer', marginTop: '5px' }}
+                        style={{ alignSelf: 'flex-start', background: 'transparent', border: '1px solid #475569', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', marginTop: '4px' }}
                       >
-                        <i className="fa-solid fa-arrows-rotate"></i> Volver a Medir
+                        <i className="fa-solid fa-arrows-rotate"></i> Volver a medir
                       </button>
                     </div>
                   )}
@@ -1689,42 +1704,31 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
               </div>
             )}
 
-            {/* SUB TAB 3: ACCIONES / TRABAJO */}
+            {/* SUB TAB 3: TRABAJO (CIERRE & REPORTES) */}
             {activeSubTab === 'tab-acciones' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                
-                {/* 1. PENDIENTE STATE ACTIONS */}
-                {(activeVisita.estado === 'PENDIENTE' || activeVisita.estado === 'REAGENDADA') && (
-                  <button 
-                    type="button" 
-                    onClick={() => registrarVoyEnCamino(activeVisita.id_visita)} 
-                    style={{ width: '100%', padding: '14px 20px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: 'white', fontWeight: 800, fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)' }}
-                  >
-                    <i className="fa-solid fa-truck-fast"></i> Iniciar Traslado (Voy en Camino)
-                  </button>
-                )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
 
-                {/* 2. EN_RUTA STATE ACTIONS */}
-                {activeVisita.estado === 'EN_RUTA' && (
-                  <div style={{ backgroundColor: 'rgba(251, 191, 36, 0.04)', padding: '18px', border: '1px solid #fbbf24', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <p style={{ margin: 0, color: '#fbbf24', fontSize: '0.9rem', fontWeight: 700, lineHeight: 1.4 }}>
-                      ⏳ En Traslado: Notifique al cliente que se encuentra en camino.
-                    </p>
+                {/* 1. ASIGNADA / PENDIENTE STATE ACTIONS */}
+                {(activeVisita.estado === 'ASIGNADA' || activeVisita.estado === 'PENDIENTE') && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <button 
                       type="button" 
-                      onClick={() => abrirWhatsApp(activeVisita.telefonos, tecnicoRealName, activeVisita.token_rastreo)} 
-                      style={{ width: '100%', padding: '11px', borderRadius: '8px', border: 'none', background: '#25d366', color: 'white', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                      onClick={() => registrarVoyEnCamino(activeVisita.id_visita)} 
+                      style={{ width: '100%', padding: '14px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', fontWeight: 850, fontSize: '0.95rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)' }}
                     >
-                      <i className="fa-brands fa-whatsapp" style={{ fontSize: '1.15rem' }}></i> Avisar Llegada por WhatsApp
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => registrarLlegueTrabajo(activeVisita.id_visita)} 
-                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 10px rgba(59, 130, 246, 0.2)' }}
-                    >
-                      <i className="fa-solid fa-play"></i> Llegué / Iniciar Trabajo
+                      <i className="fa-solid fa-route"></i> Voy en Camino
                     </button>
                     
+                    {activeVisita.telefonos && (
+                      <button 
+                        type="button" 
+                        onClick={() => abrirWhatsApp(activeVisita.telefonos, tecnicoRealName, activeVisita.token_rastreo)} 
+                        style={{ width: '100%', padding: '11px', borderRadius: '10px', border: 'none', background: '#22c55e', color: 'white', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 10px rgba(34, 197, 94, 0.2)' }}
+                      >
+                        <i className="fa-brands fa-whatsapp" style={{ fontSize: '1.1rem' }}></i> Avisar "Voy en Camino" por WhatsApp
+                      </button>
+                    )}
+
                     <button 
                       type="button" 
                       onClick={() => {
@@ -1736,6 +1740,24 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                       style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', marginTop: '5px' }}
                     >
                       <i className="fa-solid fa-clock"></i> Posponer para más tarde hoy
+                    </button>
+                  </div>
+                )}
+
+                {/* 2. EN_RUTA STATE ACTIONS */}
+                {activeVisita.estado === 'EN_RUTA' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
+                      <span style={{ color: '#38bdf8', fontWeight: 800, fontSize: '0.85rem' }}>🚗 En Ruta al Domicilio</span>
+                      <small style={{ display: 'block', color: '#94a3b8', fontSize: '0.75rem', marginTop: '4px' }}>El GPS está activo y el cliente puede seguir tu llegada.</small>
+                    </div>
+
+                    <button 
+                      type="button" 
+                      onClick={() => registrarLlegueTrabajo(activeVisita.id_visita)} 
+                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 10px rgba(59, 130, 246, 0.2)' }}
+                    >
+                      <i className="fa-solid fa-play"></i> Llegué / Iniciar Trabajo
                     </button>
                   </div>
                 )}
@@ -1781,68 +1803,196 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                       />
                     </div>
 
-                    {/* Models ONU and Router */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                      <div>
-                        <label style={{ fontWeight: 700, fontSize: '0.82rem', display: 'block', marginBottom: '6px', color: '#94a3b8' }}>Modelo ONU:</label>
+                    {/* --- SECCIÓN DE EQUIPOS EN DOMICILIO --- */}
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px' }}>
+                        <h6 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 850, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <i className="fa-solid fa-server"></i> Registro y Configuración de Equipos
+                        </h6>
+                      </div>
+
+                      {/* 1. ONT / ONU */}
+                      <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <label style={{ fontWeight: 800, fontSize: '0.82rem', color: '#10b981', margin: 0 }}>🟢 Modelo ONT / ONU:</label>
+                          {['XX530V', 'XX231V', 'XPON'].some(m => (activeFormState.modelo_onu || '').toUpperCase().includes(m)) && (
+                            <span style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontSize: '0.7rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
+                              ONU COMBO (Wi-Fi Integrado)
+                            </span>
+                          )}
+                        </div>
                         <select 
                           value={activeFormState.modelo_onu} 
                           onChange={(e) => updateFormState(activeVisita.id_visita, { modelo_onu: e.target.value })} 
-                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #475569', background: '#1e293b', color: 'white', fontSize: '0.82rem' }}
+                          style={{ width: '100%', padding: '9px', borderRadius: '8px', border: '1px solid #475569', background: '#1e293b', color: 'white', fontSize: '0.82rem' }}
                         >
                           <option value="">-- Ninguna --</option>
                           {catalogoOnt.map((o, idx) => <option key={idx} value={o.nombre}>{o.nombre}</option>)}
                         </select>
+
+                        {/* Serie ONU (SN) */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                          <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
+                            Serie GPON (SN) {activeVisita.numero_serie ? `[Actual: ${activeVisita.numero_serie}]` : ''}:
+                          </label>
+                          <label style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <i className="fa-solid fa-barcode"></i> Escanear
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              capture="environment" 
+                              style={{ display: 'none' }}
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_onu', true);
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                        <input 
+                          type="text" 
+                          value={activeFormState.numero_serie_onu || ''} 
+                          onChange={(e) => updateFormState(activeVisita.id_visita, { numero_serie_onu: e.target.value })} 
+                          onBlur={(e) => {
+                            if (e.target.value) {
+                              updateFormState(activeVisita.id_visita, { numero_serie_onu: normalizarGponSn(e.target.value) });
+                            }
+                          }}
+                          placeholder="Ej. CDKT2A187B7D o escanea código"
+                          style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#fbbf24', fontSize: '0.85rem', fontWeight: 800, boxSizing: 'border-box' }}
+                        />
                       </div>
-                      <div>
-                        <label style={{ fontWeight: 700, fontSize: '0.82rem', display: 'block', marginBottom: '6px', color: '#94a3b8' }}>Modelo Router:</label>
+
+                      {/* 2. ROUTER PRINCIPAL */}
+                      <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <label style={{ fontWeight: 800, fontSize: '0.82rem', color: '#6366f1', margin: 0 }}>📶 Router Principal:</label>
                         <select 
                           value={activeFormState.modelo_router} 
                           onChange={(e) => updateFormState(activeVisita.id_visita, { modelo_router: e.target.value })} 
-                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #475569', background: '#1e293b', color: 'white', fontSize: '0.82rem' }}
+                          style={{ width: '100%', padding: '9px', borderRadius: '8px', border: '1px solid #475569', background: '#1e293b', color: 'white', fontSize: '0.82rem' }}
                         >
                           <option value="">-- Ninguno --</option>
                           {catalogoRouter.map((r, idx) => <option key={idx} value={r.nombre}>{r.nombre}</option>)}
                         </select>
-                      </div>
-                    </div>
 
-                    {/* Escaneo y Serie de ONU */}
-                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                        <label style={{ fontWeight: 700, fontSize: '0.82rem', color: '#94a3b8', margin: 0 }}>
-                          🏷️ Serie ONU (SN) {activeVisita.numero_serie ? `[Actual: ${activeVisita.numero_serie}]` : ''}:
-                        </label>
-                        <label style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', padding: '3px 8px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <i className="fa-solid fa-barcode"></i> Escanear Código
+                        {/* Serie Router Principal */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                          <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
+                            Serie Router Principal {activeVisita.numero_serie_router ? `[Actual: ${activeVisita.numero_serie_router}]` : ''}:
+                          </label>
+                          <label style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#a5b4fc', border: '1px solid rgba(99, 102, 241, 0.4)', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <i className="fa-solid fa-barcode"></i> Escanear
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              capture="environment" 
+                              style={{ display: 'none' }}
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router', false);
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                        <input 
+                          type="text" 
+                          value={activeFormState.numero_serie_router || ''} 
+                          onChange={(e) => updateFormState(activeVisita.id_visita, { numero_serie_router: e.target.value.toUpperCase() })} 
+                          placeholder="Opcional: Serie/MAC del Router Principal"
+                          style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 700, boxSizing: 'border-box' }}
+                        />
+                      </div>
+
+                      {/* 3. ADICIONAR ROUTER SECUNDARIO / MESH */}
+                      {!activeFormState.tiene_mesh ? (
+                        <button 
+                          type="button" 
+                          onClick={() => updateFormState(activeVisita.id_visita, { tiene_mesh: true, cantidad_routers: 2, tipo_mesh: activeFormState.tipo_mesh || 'CABLEADO' })} 
+                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px dashed #8b5cf6', background: 'rgba(139, 92, 246, 0.08)', color: '#c4b5fd', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                        >
+                          <i className="fa-solid fa-plus"></i> + Adicionar Router Secundario / Mesh
+                        </button>
+                      ) : (
+                        <div style={{ background: 'rgba(139, 92, 246, 0.06)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>
+                            <label style={{ fontWeight: 800, fontSize: '0.82rem', color: '#c4b5fd', margin: 0 }}>🔁 Router Secundario / Mesh:</label>
+                            <button 
+                              type="button" 
+                              onClick={() => updateFormState(activeVisita.id_visita, { tiene_mesh: false, router_secundario: '', numero_serie_router_secundario: '', cantidad_routers: 1 })} 
+                              style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer' }}
+                            >
+                              <i className="fa-solid fa-trash"></i> Quitar
+                            </button>
+                          </div>
+
+                          <select 
+                            value={activeFormState.router_secundario} 
+                            onChange={(e) => updateFormState(activeVisita.id_visita, { router_secundario: e.target.value })} 
+                            style={{ width: '100%', padding: '9px', borderRadius: '8px', border: '1px solid #475569', background: '#1e293b', color: 'white', fontSize: '0.82rem' }}
+                          >
+                            <option value="">-- Seleccionar Router Secundario --</option>
+                            {catalogoRouter.map((r, idx) => <option key={idx} value={r.nombre}>{r.nombre}</option>)}
+                          </select>
+
+                          {/* Serie Router Secundario */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
+                              Serie Router Secundario:
+                            </label>
+                            <label style={{ background: 'rgba(139, 92, 246, 0.2)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.4)', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <i className="fa-solid fa-barcode"></i> Escanear
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                capture="environment" 
+                                style={{ display: 'none' }}
+                                onChange={(e) => {
+                                  if (e.target.files && e.target.files[0]) {
+                                    procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router_secundario', false);
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
                           <input 
-                            type="file" 
-                            accept="image/*" 
-                            capture="environment" 
-                            style={{ display: 'none' }}
-                            onChange={(e) => {
-                              if (e.target.files && e.target.files[0]) {
-                                procesarFotoBarcode(e.target.files[0], activeVisita.id_visita);
-                              }
-                            }}
+                            type="text" 
+                            value={activeFormState.numero_serie_router_secundario || ''} 
+                            onChange={(e) => updateFormState(activeVisita.id_visita, { numero_serie_router_secundario: e.target.value.toUpperCase() })} 
+                            placeholder="Opcional: Serie/MAC del Router Secundario"
+                            style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 700, boxSizing: 'border-box' }}
                           />
-                        </label>
-                      </div>
-                      <input 
-                        type="text" 
-                        value={activeFormState.numero_serie_onu || ''} 
-                        onChange={(e) => updateFormState(activeVisita.id_visita, { numero_serie_onu: e.target.value })} 
-                        onBlur={(e) => {
-                          if (e.target.value) {
-                            const norm = normalizarGponSn(e.target.value);
-                            updateFormState(activeVisita.id_visita, { numero_serie_onu: norm });
-                          }
-                        }}
-                        placeholder="Ej. CDKT2A187B7D o escanea código de barra"
-                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#fbbf24', fontSize: '0.85rem', fontWeight: 800, boxSizing: 'border-box' }}
-                      />
-                    </div>
 
+                          {/* Tipo de Conexión Mesh */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            <div>
+                              <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Tipo de Conexión:</label>
+                              <select 
+                                value={activeFormState.tipo_mesh || 'CABLEADO'} 
+                                onChange={(e) => updateFormState(activeVisita.id_visita, { tipo_mesh: e.target.value })} 
+                                style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #475569', background: '#1e293b', color: 'white', fontSize: '0.8rem' }}
+                              >
+                                <option value="CABLEADO">🔌 CABLEADO</option>
+                                <option value="INALAMBRICO (MESH)">📶 INALÁMBRICO (MESH)</option>
+                                <option value="REDES DISTINTAS (AP)">🔀 REDES DISTINTAS (AP)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Cantidad Total Routers:</label>
+                              <input 
+                                type="number" 
+                                min="1" 
+                                max="10" 
+                                value={activeFormState.cantidad_routers || 2} 
+                                onChange={(e) => updateFormState(activeVisita.id_visita, { cantidad_routers: parseInt(e.target.value) || 1 })} 
+                                style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #475569', background: '#1e293b', color: 'white', fontSize: '0.8rem', textAlign: 'center', boxSizing: 'border-box' }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Materials utilized list */}
                     <div style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '14px' }}>
