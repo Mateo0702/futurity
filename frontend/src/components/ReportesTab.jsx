@@ -1,6 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+const LISTA_HORARIOS_TURNO = [
+  "LIBRE",
+  "7AM - 2PM",
+  "7 AM - 4PM",
+  "7AM - 5PM",
+  "8AM - 6PM",
+  "10 AM - 6PM",
+  "10 AM - 8PM",
+  "1PM - 9PM",
+  "9AM - 9PM",
+  "2PM - 9PM",
+  "8AM - 7PM",
+  "8AM - 8PM"
+];
+
 function ReportesTab({ token, initialSubTab, initialFecha }) {
+
   const Chart = window.Chart;
   const getTodayStr = (d = new Date()) => {
     const year = d.getFullYear();
@@ -461,7 +477,14 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
               </div>
               <div style={{ marginBottom: '10px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Horario:</label>
-                <input type="text" value={horarioA} onChange={(e) => { setHorarioA(e.target.value); localStorage.setItem('cm_saved_cm_horario_a', e.target.value); }} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }} />
+                <select 
+                  value={horarioA} 
+                  onChange={(e) => { setHorarioA(e.target.value); localStorage.setItem('cm_saved_cm_horario_a', e.target.value); }} 
+                  style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                >
+                  {LISTA_HORARIOS_TURNO.map((h, i) => <option key={i} value={h}>{h}</option>)}
+                  {!LISTA_HORARIOS_TURNO.includes(horarioA) && horarioA && <option value={horarioA}>{horarioA}</option>}
+                </select>
               </div>
               <div>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Soporte Técnicos VT (Manual):</label>
@@ -481,7 +504,14 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
               </div>
               <div style={{ marginBottom: '10px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Horario:</label>
-                <input type="text" value={horarioB} onChange={(e) => { setHorarioB(e.target.value); localStorage.setItem('cm_saved_cm_horario_b', e.target.value); }} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }} />
+                <select 
+                  value={horarioB} 
+                  onChange={(e) => { setHorarioB(e.target.value); localStorage.setItem('cm_saved_cm_horario_b', e.target.value); }} 
+                  style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                >
+                  {LISTA_HORARIOS_TURNO.map((h, i) => <option key={i} value={h}>{h}</option>)}
+                  {!LISTA_HORARIOS_TURNO.includes(horarioB) && horarioB && <option value={horarioB}>{horarioB}</option>}
+                </select>
               </div>
               <div>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Soporte Técnicos VT (Manual):</label>
@@ -501,7 +531,18 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
               </div>
               <div style={{ marginBottom: '10px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Horario:</label>
-                <input type="text" value={horarioC} onChange={(e) => { setHorarioC(e.target.value); localStorage.setItem('cm_saved_cm_horario_c', e.target.value); }} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }} />
+                <select 
+                  value={horarioC} 
+                  onChange={(e) => { setHorarioC(e.target.value); localStorage.setItem('cm_saved_cm_horario_c', e.target.value); }} 
+                  style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                >
+                  {LISTA_HORARIOS_TURNO.map((h, i) => <option key={i} value={h}>{h}</option>)}
+                  {!LISTA_HORARIOS_TURNO.includes(horarioC) && horarioC && <option value={horarioC}>{horarioC}</option>}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Soporte Técnicos VT (Manual):</label>
+                <input type="number" value={soporteC} onChange={(e) => { setSoporteC(parseInt(e.target.value) || 0); localStorage.setItem('cm_saved_cm_soporte_c', e.target.value); }} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }} />
               </div>
               <div>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Soporte Técnicos VT (Manual):</label>
