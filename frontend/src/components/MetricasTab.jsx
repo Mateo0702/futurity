@@ -497,10 +497,18 @@ function MetricasTab({ token }) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      setAuditResults(data);
+      if (Array.isArray(data)) {
+        setAuditResults(data);
+      } else {
+        setAuditResults([]);
+        if (data && data.status === 'error') {
+          alert(data.message || "Error al consultar auditoría");
+        }
+      }
     } catch (err) {
       console.error("Error al buscar auditoría:", err);
       alert("Error de conexión al buscar el historial de auditoría.");
+      setAuditResults([]);
     } finally {
       setLoadingAudit(false);
     }
@@ -533,7 +541,7 @@ function MetricasTab({ token }) {
 
   // Filter audit timeline based on current sub-tab type
   const getFilteredAudit = () => {
-    if (!auditResults) return [];
+    if (!Array.isArray(auditResults)) return [];
     if (subTab === 'visitas') {
       return auditResults.filter(v => v.tipo_registro === 'visita_tecnica');
     }
@@ -1036,19 +1044,20 @@ function MetricasTab({ token }) {
               <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', padding: '10px 15px', borderRadius: '14px', textAlign: 'center' }}>
                 <div style={{ fontSize: '0.65rem', color: 'var(--sidebar-text)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Visitas VT</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-main)' }}>
-                  {auditResults.filter(v => v.tipo_registro === 'visita_tecnica').length}
+                  {Array.isArray(auditResults) ? auditResults.filter(v => v.tipo_registro === 'visita_tecnica').length : 0}
                 </div>
               </div>
               <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', padding: '10px 15px', borderRadius: '14px', textAlign: 'center' }}>
                 <div style={{ fontSize: '0.65rem', color: 'var(--sidebar-text)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Atenciones</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#6366f1' }}>
-                  {auditResults.filter(v => v.tipo_registro === 'atencion').length}
+                  {Array.isArray(auditResults) ? auditResults.filter(v => v.tipo_registro === 'atencion').length : 0}
                 </div>
               </div>
               <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', padding: '10px 15px', borderRadius: '14px', textAlign: 'center' }}>
                 <div style={{ fontSize: '0.65rem', color: 'var(--sidebar-text)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Promedio</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#eab308' }}>
                   {(() => {
+                    if (!Array.isArray(auditResults)) return '-';
                     const calificadas = auditResults.filter(v => v.tipo_registro === 'visita_tecnica' && v.calificacion_estrellas != null);
                     if (calificadas.length > 0) {
                       const prom = calificadas.reduce((acc, v) => acc + v.calificacion_estrellas, 0) / calificadas.length;

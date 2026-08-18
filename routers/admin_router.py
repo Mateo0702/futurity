@@ -157,9 +157,19 @@ def api_dashboard_calidad():
 
 @admin_bp.route('/api/admin/auditoria_cliente', methods=['GET'])
 def auditoria_cliente():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'role': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+    
+    user_role = user.get('role') or user.get('rol')
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para realizar auditorías de clientes."}), 403
 
     contrato = request.args.get('contrato', '').strip()
@@ -581,9 +591,19 @@ class NumberedCanvas(canvas.Canvas):
 
 @admin_bp.route('/api/admin/reporte_pdf', methods=['GET'])
 def reporte_pdf():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'role': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR']:
+    
+    user_role = user.get('role') or user.get('rol')
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para descargar reportes."}), 403
 
     contrato = request.args.get('contrato', '').strip()
