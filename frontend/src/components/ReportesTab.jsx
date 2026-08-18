@@ -544,10 +544,6 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Soporte Técnicos VT (Manual):</label>
                 <input type="number" value={soporteC} onChange={(e) => { setSoporteC(parseInt(e.target.value) || 0); localStorage.setItem('cm_saved_cm_soporte_c', e.target.value); }} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }} />
               </div>
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Soporte Técnicos VT (Manual):</label>
-                <input type="number" value={soporteC} onChange={(e) => { setSoporteC(parseInt(e.target.value) || 0); localStorage.setItem('cm_saved_cm_soporte_c', e.target.value); }} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }} />
-              </div>
             </div>
           </div>
         </div>
