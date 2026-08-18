@@ -265,8 +265,8 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
         setContratoOk(false);
         fetchMisAtenciones(fechaBusqueda);
 
-        // Auto-navigate to RegistroVisitasTab ONLY if explicitly requested via "Agendar Visita" button
-        if (shouldGenerateVisit && onNavigateToRegistroVisitas) {
+        // Auto-navigate to RegistroVisitasTab ONLY if explicitly requested via "Agendar Visita" button and not ATC
+        if (shouldGenerateVisit && onNavigateToRegistroVisitas && user?.rol !== 'ATC' && user?.role !== 'ATC') {
           onNavigateToRegistroVisitas(visitData);
         }
       } else {
@@ -756,8 +756,8 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
               </div>
             </div>
 
-            {/* Banner Dinámico Alerta Visita Técnica */}
-            {(accion.toUpperCase().includes('VISITA') || motivo.toLowerCase().includes('visita')) && (
+            {/* Banner Dinámico Alerta Visita Técnica (Oculto para ATC) */}
+            {user?.rol !== 'ATC' && user?.role !== 'ATC' && (accion.toUpperCase().includes('VISITA') || motivo.toLowerCase().includes('visita')) && (
               <div style={{ background: 'rgba(99, 102, 241, 0.08)', border: '1px solid #c7d2fe', borderLeft: '5px solid #6366f1', padding: '16px', borderRadius: '14px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '15px' }}>
                 <div>
                   <strong style={{ color: '#4f46e5', display: 'block', fontSize: '0.88rem' }}><i className="fa-solid fa-circle-exclamation"></i> Visita Técnica Requerida</strong>

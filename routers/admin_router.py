@@ -312,7 +312,7 @@ def api_tecnicos_ubicaciones():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver la ubicación de los técnicos."}), 403
         
     active_area = request.args.get('area') or session.get('active_area', 'SOPORTE')
@@ -368,7 +368,7 @@ def api_tecnicos_ubicaciones():
 def metricas_globales():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas globales."}), 403
 
     active_area = session.get('active_area', 'SOPORTE')
@@ -3318,7 +3318,7 @@ def api_eliminar_material(id_material):
 
 @admin_bp.route('/api/admin/tecnicos/mas_cercano', methods=['GET'])
 def obtener_tecnico_mas_cercano():
-    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     lat_str = request.args.get('lat')
@@ -3396,7 +3396,7 @@ def obtener_tecnico_mas_cercano():
 def metricas_tiempos():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas de tiempos."}), 403
 
     active_area = session.get('active_area', 'SOPORTE')
@@ -3689,7 +3689,7 @@ def crear_recordatorio():
         user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'nombre': session.get('user_name')}
 
     user_role = user.get('role') or user.get('rol') if user else None
-    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     datos = request.get_json() or {}
@@ -3738,7 +3738,7 @@ def eliminar_recordatorio(id_recordatorio):
         user = {'id_usuario': session['user_id'], 'rol': session.get('user_role')}
 
     user_role = user.get('role') or user.get('rol') if user else None
-    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     conexion = get_db_connection()
@@ -3859,7 +3859,7 @@ def editar_visita(id_visita):
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
         return jsonify({"status": "error", "message": "No tienes permiso para editar visitas."}), 403
 
     # Validar que la visita no esté cerrada o en progreso antes de editar

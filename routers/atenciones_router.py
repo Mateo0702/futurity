@@ -137,7 +137,7 @@ def registrar_atencion():
     user = obtener_usuario_actual(request)
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if user.get('rol') not in ['ADMIN', 'ASESOR']:
+    if user.get('rol') not in ['ADMIN', 'ASESOR', 'ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para registrar atenciones."}), 403
         
     # Obtener parámetros del JSON o del formulario
@@ -230,7 +230,7 @@ def atenciones_recientes():
     user = obtener_usuario_actual(request)
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if user.get('rol') not in ['ADMIN', 'ASESOR']:
+    if user.get('rol') not in ['ADMIN', 'ASESOR', 'ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver atenciones."}), 403
     
     conn = get_db_connection()
@@ -287,7 +287,7 @@ def atenciones_recientes():
 def metricas_atenciones():
     if 'user_id' not in session:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas de atenciones."}), 403
 
     # Obtener parámetros de filtros (hoy y hace 3 meses por defecto si no se especifican)
@@ -712,7 +712,7 @@ def diagnostico_smartolt(sn):
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'TECNICO', 'CALIDAD']:
+    if user_role not in ['ADMIN', 'ASESOR', 'TECNICO', 'CALIDAD', 'ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para consultar diagnóstico"}), 403
         
     import urllib.request

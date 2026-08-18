@@ -28,13 +28,19 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
   const name = user.nombre || 'Asesor';
 
   const isVisible = (tab) => {
-    if (tab === 'visitas' || tab === 'mapa-tecnicos' || tab === 'registro') {
+    if (tab === 'visitas') {
+      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC'].includes(role);
+    }
+    if (tab === 'mapa-tecnicos' || tab === 'registro') {
       return ['ADMIN', 'ASESOR', 'CALIDAD'].includes(role);
     }
     if (tab === 'registro-atencion' || tab === 'buscar-cliente') {
-      return ['ADMIN', 'ASESOR'].includes(role);
+      return ['ADMIN', 'ASESOR', 'ATC'].includes(role);
     }
-    if (tab === 'metricas' || tab === 'reportes' || tab === 'control-calidad') {
+    if (tab === 'metricas') {
+      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC'].includes(role);
+    }
+    if (tab === 'reportes' || tab === 'control-calidad') {
       return ['ADMIN', 'ASESOR', 'CALIDAD'].includes(role);
     }
     if (tab === 'inventario') {
@@ -83,7 +89,7 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
           </div>
         )}
 
-        {['ADMIN', 'ASESOR'].includes(role) ? (
+        {['ADMIN', 'ASESOR', 'ATC'].includes(role) ? (
           <div className="segmented-control" id="area-switcher" style={{ height: collapsed ? '0px' : 'auto', overflow: 'hidden', opacity: collapsed ? 0 : 1, transition: 'all 0.2s ease' }}>
             <div
               className="segmented-slider"

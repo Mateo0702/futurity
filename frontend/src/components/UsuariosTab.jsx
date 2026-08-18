@@ -326,6 +326,7 @@ function UsuariosTab({ token, user }) {
     const roleStyles = {
       ADMIN: { bg: 'rgba(99, 102, 241, 0.12)', color: '#4f46e5', label: '👑 ADMIN' },
       ASESOR: { bg: 'rgba(2, 132, 199, 0.12)', color: '#0284c7', label: '🎧 ASESOR' },
+      ATC: { bg: 'rgba(168, 85, 247, 0.12)', color: '#9333ea', label: '🏢 ATC' },
       TECNICO: { bg: 'rgba(16, 185, 129, 0.12)', color: '#059669', label: '🛠️ TÉCNICO' },
       BODEGA: { bg: 'rgba(245, 158, 11, 0.12)', color: '#d97706', label: '📦 BODEGA' },
       CALIDAD: { bg: 'rgba(6, 182, 212, 0.12)', color: '#0891b2', label: '✨ CALIDAD' },
@@ -716,6 +717,7 @@ function UsuariosTab({ token, user }) {
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
                 >
                   <option value="ASESOR">ASESOR</option>
+                  <option value="ATC">ATC (Atención al Cliente)</option>
                   <option value="ADMIN">ADMIN</option>
                   <option value="TECNICO">TECNICO</option>
                   <option value="BODEGA">BODEGA</option>
