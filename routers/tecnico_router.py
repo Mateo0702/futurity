@@ -642,6 +642,13 @@ def finalizar_visita(id_visita):
         tecnico_nombre = tec_row['tecnico_principal'] if tec_row else None
         contrato_visita = tec_row['contrato'] if tec_row else None
 
+        # Obtener la placa del vehículo asignado al técnico
+        placa_vehiculo = 'S/P'
+        if tecnico_nombre:
+            cursor.execute("SELECT COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa FROM tecnicos WHERE nombre = %s", (tecnico_nombre,))
+            placa_row = cursor.fetchone()
+            placa_vehiculo = placa_row['placa'] if (placa_row and placa_row['placa']) else 'S/P'
+
         # Auto-actualizar el inventario de equipos del cliente en directorio_clientes
         if contrato_visita:
             c_val = str(contrato_visita).strip().upper()
@@ -664,16 +671,8 @@ def finalizar_visita(id_visita):
                 c_val, c_clean
             ))
 
-
         # 2. Registrar materiales e inventario si existen
         if materiales_ids and cantidades:
-            placa_vehiculo = 'S/P'
-            if tecnico_nombre:
-                cursor.execute("SELECT COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa FROM tecnicos WHERE nombre = %s", (tecnico_nombre,))
-                placa_row = cursor.fetchone()
-                placa_vehiculo = placa_row['placa'] if (placa_row and placa_row['placa']) else 'S/P'
-
-            
             query_materiales = """
                 INSERT INTO visitas_materiales (id_visita, id_material, cantidad_usada)
                 VALUES (%s, %s, %s)
