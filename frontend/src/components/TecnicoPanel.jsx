@@ -59,11 +59,89 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   const [qrToken, setQrToken] = useState('');
   const [qrClienteName, setQrClienteName] = useState('');
 
+  // Inventario Móvil / Vehículo State
+  const [showInventarioVehiculoModal, setShowInventarioVehiculoModal] = useState(false);
+  const [inventarioVehiculoData, setInventarioVehiculoData] = useState({
+    tecnico: '',
+    placa: '',
+    materiales: [],
+    equipos_retirados: []
+  });
+  const [loadingInventarioVehiculo, setLoadingInventarioVehiculo] = useState(false);
+  const [tabInventarioVehiculo, setTabInventarioVehiculo] = useState('materiales'); // 'materiales' | 'retirados'
+  const [devolviendoEquipos, setDevolviendoEquipos] = useState(false);
+
+  const cargarInventarioVehiculo = async () => {
+    setLoadingInventarioVehiculo(true);
+    try {
+      const res = await fetch('/api/tecnico/mi_inventario', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        setInventarioVehiculoData({
+          tecnico: data.tecnico || '',
+          placa: data.placa || 'S/P',
+          materiales: data.materiales || [],
+          equipos_retirados: data.equipos_retirados || []
+        });
+      }
+    } catch (e) {
+      console.error("Error al cargar inventario del vehículo:", e);
+    } finally {
+      setLoadingInventarioVehiculo(false);
+    }
+  };
+
+  const handleDevolverEquiposBodega = async (idsRetiro) => {
+    if (!idsRetiro || idsRetiro.length === 0) return;
+    if (!confirm(`¿Confirmas la devolución física de ${idsRetiro.length} equipo(s) a Bodega Central?`)) return;
+    setDevolviendoEquipos(true);
+    try {
+      const res = await fetch('/api/tecnico/devolver_equipos_bodega', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ ids_retiro: idsRetiro })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        alert(data.message || "Equipos devueltos a Bodega Central exitosamente.");
+        await cargarInventarioVehiculo();
+      } else {
+        alert("Error al devolver equipos: " + (data.message || "No se pudo realizar la transacción"));
+      }
+    } catch (err) {
+      console.error("Error en devolución de equipos:", err);
+      alert("Error de conexión al devolver equipos.");
+    } finally {
+      setDevolviendoEquipos(false);
+    }
+  };
+
   // Traspaso Modal State
   const [showTraspasoModal, setShowTraspasoModal] = useState(false);
   const [tecnicosLista, setTecnicosLista] = useState([]);
   const [traspasoForm, setTraspasoForm] = useState({ tecnico_destino_nombre: '', id_material: '', cantidad: '' });
   const [traspasoLoading, setTraspasoLoading] = useState(false);
+
+  // Live Camera Scanner State
+  const [scannerLiveModal, setScannerLiveModal] = useState({
+    isOpen: false,
+    visitaId: null,
+    campo: '',
+    isGpon: false,
+    title: ''
+  });
+  const [torchOn, setTorchOn] = useState(false);
+  const [hasTorch, setHasTorch] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const [scanningStatus, setScanningStatus] = useState('Buscando código de barras...');
+  const scannerVideoRef = useRef(null);
+  const scannerStreamRef = useRef(null);
+  const scannerActiveRef = useRef(false);
 
   const handleTraspasoSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -92,6 +170,9 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         setShowTraspasoModal(false);
         setTraspasoForm({ tecnico_destino_nombre: '', id_material: '', cantidad: '' });
         await cargarDatosPanel();
+        if (showInventarioVehiculoModal) {
+          await cargarInventarioVehiculo();
+        }
       } else {
         alert("Error al traspasar: " + (data.message || "No se pudo realizar la transacción"));
       }
@@ -104,7 +185,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   };
 
   // Work Tab Forms State (indexed by visit ID)
-  const [formCierre, setFormCierre] = useState({}); // { [visitaId]: { solucion_tecnico, observacion_tecnico, modelo_onu, modelo_router, metodo_firma, motivo_sin_firma, coordenadas_tecnico, equipos_juntos: true, foto_equipos_base64, foto_equipos_2_base64, foto_extra_1_base64, foto_extra_2_base64, foto_extra_3_base64, foto_extra_4_base64, firma_cliente_base64, materiales: [] } }
+  const [formCierre, setFormCierre] = useState({});
 
   // Canvas Ref for Signature Drawing
   const canvasRef = useRef(null);
@@ -256,6 +337,16 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     foto_extra_2_base64: '',
     foto_extra_3_base64: '',
     foto_extra_4_base64: '',
+    hubo_cambio_onu: false,
+    sn_retirado_onu: '',
+    modelo_retirado_onu: '',
+    motivo_retiro_onu: 'DANADO_FALLA',
+    obs_retiro_onu: '',
+    hubo_cambio_router: false,
+    sn_retirado_router: '',
+    modelo_retirado_router: '',
+    motivo_retiro_router: 'DANADO_FALLA',
+    obs_retiro_router: '',
     materiales: []
   };
 
@@ -1071,6 +1162,307 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     }
   };
 
+  // --- Live Camera Scanner Methods & Effects ---
+  const playBeep = () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15);
+    } catch (e) {}
+  };
+
+  const abrirEscanerEnVivo = (visitaId, campo, isGpon = false, title = 'Escanear Código') => {
+    setCameraError('');
+    setTorchOn(false);
+    setHasTorch(false);
+    setScanningStatus('Iniciando cámara...');
+    setScannerLiveModal({
+      isOpen: true,
+      visitaId,
+      campo,
+      isGpon,
+      title
+    });
+  };
+
+  const cerrarEscanerEnVivo = () => {
+    scannerActiveRef.current = false;
+    if (scannerStreamRef.current) {
+      scannerStreamRef.current.getTracks().forEach(t => t.stop());
+      scannerStreamRef.current = null;
+    }
+    setScannerLiveModal({ isOpen: false, visitaId: null, campo: '', isGpon: false, title: '' });
+  };
+
+  const toggleTorch = async () => {
+    if (!scannerStreamRef.current) return;
+    const track = scannerStreamRef.current.getVideoTracks()[0];
+    if (track && 'applyConstraints' in track) {
+      try {
+        await track.applyConstraints({
+          advanced: [{ torch: !torchOn }]
+        });
+        setTorchOn(!torchOn);
+      } catch (e) {
+        console.warn('Torch no soportado:', e);
+      }
+    }
+  };
+
+  const validarYFiltrarCodigoEscaneado = (rawCode, isGpon, campo) => {
+    if (!rawCode) return { valido: false, razon: 'Buscando código...' };
+    const clean = rawCode.trim();
+    const upper = clean.toUpperCase();
+
+    // 1. Descartar patrones evidentes de PROD ID, Model, Part Number o IMEI
+    if (
+      /^(PROD|PRODUCT|MODEL|MOD|P\/N|PN|PID|INPUT|POWER|IMEI|SSID|WIFI|WLAN)[:\s\-_]*/i.test(clean) ||
+      upper.startsWith('21500') || // Huawei Product ID (ej: 2150083456...)
+      upper.startsWith('HG8') || upper.startsWith('EG8') || upper.startsWith('FD511') || upper.startsWith('F670') || upper.startsWith('F680')
+    ) {
+      return { valido: false, razon: '⚠️ Ignorando Código de Producto / Modelo' };
+    }
+
+    // 2. Si estamos escaneando GPON SN (ONU)
+    if (isGpon || campo === 'numero_serie_onu') {
+      // Descartar si es dirección MAC evidente
+      if (
+        /^MAC[:\s\-_]*/i.test(clean) || 
+        /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i.test(clean) || 
+        /^[0-9A-F]{2}(-[0-9A-F]{2}){5}$/i.test(clean) || 
+        upper.endsWith('-A0') || 
+        upper.endsWith('-A1')
+      ) {
+        return { valido: false, razon: '⚠️ Ignorando MAC. Apunta a la Serie GPON (SN)' };
+      }
+
+      const hasSnPrefix = /^(SN|S\/N|GPON|GPON\s*SN)[:\s\-_]*/i.test(clean);
+      let candidate = upper.replace(/^(SN|S\/N|GPON|GPON\s*SN)[:\s\-_]*/i, '').trim();
+
+      // Prefijos conocidos de fabricantes GPON (ASCII o HEX de 8 caracteres)
+      const GPON_PREFIXES = /^(48575443|43444B54|54504C47|5A544547|46485454|414C434C|56534F4C|534D4253|HWTC|CDKT|TPLG|ZTEG|FHTT|ALCL|VSOL|SMBS|ISKT|VNPT|CATA|ELTX|DSNW|GNMS|BDCM|ZTE)/i;
+      
+      if (GPON_PREFIXES.test(candidate)) {
+        const normalized = normalizarGponSn(candidate);
+        return { valido: true, valor: normalized };
+      }
+
+      // Si el código tenía explícitamente el prefijo "SN:" o "S/N:" en el código de barras
+      if (hasSnPrefix && candidate.length >= 8 && candidate.length <= 20) {
+        const normalized = normalizarGponSn(candidate);
+        return { valido: true, valor: normalized };
+      }
+
+      // Si es un código hexadecimal de 12 caracteres sin prefijo GPON (es una MAC address en la etiqueta)
+      if (/^[0-9A-F]{12}$/i.test(candidate)) {
+        return { valido: false, razon: '⚠️ Ignorando MAC. Apunta a la Serie GPON (SN)' };
+      }
+
+      return { valido: false, razon: 'Apunta el recuadro verde a la Serie (SN)...' };
+    }
+
+    // 3. Si estamos escaneando Router (Principal o Secundario)
+    if (campo === 'numero_serie_router' || campo === 'numero_serie_router_secundario') {
+      // Descartar si es dirección MAC evidente
+      if (
+        /^MAC[:\s\-_]*/i.test(clean) || 
+        /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i.test(clean) || 
+        /^[0-9A-F]{2}(-[0-9A-F]{2}){5}$/i.test(clean) || 
+        upper.endsWith('-A0') || 
+        upper.endsWith('-A1')
+      ) {
+        return { valido: false, razon: '⚠️ Ignorando MAC. Apunta a la Serie (S/N) del Router' };
+      }
+
+      // Descartar códigos de modelos comunes de routers
+      const ROUTER_MODELS = /^(ARCHER|MR30G|MR50G|MR70X|AX3|AX10|AX12|AX20|AX50|AC1200|AC1900|AC750|WR840N|WR841N|WR940N|DIR-|MW305|MW301|F3|F6|F9|AC6|AC10|MW325R|EX220|EC220|HX220|WS7000|WS7001)/i;
+      if (ROUTER_MODELS.test(upper)) {
+        return { valido: false, razon: '⚠️ Ignorando Modelo del Router' };
+      }
+
+      // Descartar PINs, WPS, Contraseñas o Voltajes
+      if (/^(PIN|WPS|WPA|KEY|PASS|PWD|SSID|WIRELESS|12V|9V|1A|1\.5A|2A|REV|VER|V1|V2|V3)[:\s\-_]*/i.test(clean)) {
+        return { valido: false, razon: '⚠️ Ignorando PIN / Clave / Modelo' };
+      }
+
+      const hasSnPrefix = /^(SN|S\/N|SERIAL|SERIAL\s*NO|SERIAL\s*NUMBER|ROUTER\s*SN)[:\s\-_]*/i.test(clean);
+      let candidate = upper.replace(/^(SN|S\/N|SERIAL|SERIAL\s*NO|SERIAL\s*NUMBER|ROUTER\s*SN)[:\s\-_]*/i, '').trim();
+
+      // Si el código tenía explícitamente el prefijo "S/N:" o "SN:"
+      if (hasSnPrefix && candidate.length >= 8 && candidate.length <= 24) {
+        return { valido: true, valor: candidate };
+      }
+
+      // Si es un código hexadecimal de 12 caracteres sin prefijo SN (es una dirección MAC en el router)
+      if (/^[0-9A-F]{12}$/i.test(candidate)) {
+        return { valido: false, razon: '⚠️ Ignorando MAC. Apunta a la Serie (S/N) del Router' };
+      }
+
+      // Formato típico de serie de router (TP-Link, Mercusys, Huawei, Tenda, etc. de 13 a 22 caracteres)
+      if (/^[0-9A-Z]{13,24}$/i.test(candidate)) {
+        return { valido: true, valor: candidate };
+      }
+
+      return { valido: false, razon: 'Apunta el recuadro a la Serie (S/N) del Router...' };
+    }
+
+    return { valido: true, valor: clean.toUpperCase() };
+  };
+
+  useEffect(() => {
+    if (!scannerLiveModal.isOpen) return;
+    let stream = null;
+    scannerActiveRef.current = true;
+
+    const startCamera = async () => {
+      try {
+        setScanningStatus('Accediendo a la cámara trasera...');
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920, min: 640 },
+            height: { ideal: 1080, min: 480 }
+          },
+          audio: false
+        });
+        scannerStreamRef.current = stream;
+
+        const track = stream.getVideoTracks()[0];
+        if (track && 'getCapabilities' in track) {
+          const caps = track.getCapabilities();
+          if (caps && caps.torch) {
+            setHasTorch(true);
+          }
+        }
+
+        if (scannerVideoRef.current) {
+          scannerVideoRef.current.srcObject = stream;
+          await scannerVideoRef.current.play();
+          setScanningStatus('Apunta el recuadro a la Serie (SN)...');
+          iniciarBucleEscaneo();
+        }
+      } catch (err) {
+        console.error('Error accediendo a cámara:', err);
+        setCameraError('No se pudo abrir la cámara. Revisa los permisos o usa la opción de Galería/Foto.');
+      }
+    };
+
+    const hints = new Map();
+    hints.set(DecodeHintType.TRY_HARDER, true);
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.CODE_39,
+      BarcodeFormat.QR_CODE,
+      BarcodeFormat.DATA_MATRIX,
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.ITF
+    ]);
+    const zxingReader = new BrowserMultiFormatReader(hints);
+    const hasNativeBarcodeDetector = 'BarcodeDetector' in window;
+    let nativeDetector = null;
+    if (hasNativeBarcodeDetector) {
+      try {
+        nativeDetector = new window.BarcodeDetector({
+          formats: ['code_128', 'code_39', 'qr_code', 'data_matrix', 'ean_13', 'ean_8']
+        });
+      } catch (e) {}
+    }
+
+    const onCodeFound = (finalValue) => {
+      if (!scannerActiveRef.current) return;
+      scannerActiveRef.current = false;
+      playBeep();
+      if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+
+      updateFormState(scannerLiveModal.visitaId, { [scannerLiveModal.campo]: finalValue });
+      cerrarEscanerEnVivo();
+    };
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    const scanFrame = async () => {
+      if (!scannerActiveRef.current || !scannerVideoRef.current) return;
+      const video = scannerVideoRef.current;
+      if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+        // 1. Detección nativa por GPU/Hardware
+        if (nativeDetector) {
+          try {
+            const detected = await nativeDetector.detect(video);
+            if (detected && detected.length > 0) {
+              for (const item of detected) {
+                if (item.rawValue && item.rawValue.trim()) {
+                  const check = validarYFiltrarCodigoEscaneado(item.rawValue, scannerLiveModal.isGpon, scannerLiveModal.campo);
+                  if (check.valido) {
+                    onCodeFound(check.valor);
+                    return;
+                  } else if (check.razon) {
+                    setScanningStatus(check.razon);
+                  }
+                }
+              }
+            }
+          } catch (e) {}
+        }
+
+        // 2. Detección con ZXing en canvas enfocado en la zona central (viewfinder)
+        if (scannerActiveRef.current) {
+          try {
+            const vw = video.videoWidth || 640;
+            const vh = video.videoHeight || 480;
+            
+            // Recorte enfocado en el centro (75% ancho, 45% alto)
+            const cropW = Math.floor(vw * 0.75);
+            const cropH = Math.floor(vh * 0.45);
+            const cropX = Math.floor((vw - cropW) / 2);
+            const cropY = Math.floor((vh - cropH) / 2);
+
+            canvas.width = cropW;
+            canvas.height = cropH;
+            ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+            const imgData = ctx.getImageData(0, 0, cropW, cropH);
+            const result = await zxingReader.decodeFromImageData(imgData);
+            if (result && result.getText() && result.getText().trim()) {
+              const check = validarYFiltrarCodigoEscaneado(result.getText(), scannerLiveModal.isGpon, scannerLiveModal.campo);
+              if (check.valido) {
+                onCodeFound(check.valor);
+                return;
+              } else if (check.razon) {
+                setScanningStatus(check.razon);
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      if (scannerActiveRef.current) {
+        setTimeout(scanFrame, 70);
+      }
+    };
+
+    const iniciarBucleEscaneo = () => {
+      setTimeout(scanFrame, 150);
+    };
+
+    startCamera();
+
+    return () => {
+      scannerActiveRef.current = false;
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, [scannerLiveModal.isOpen]);
+
 
 
 
@@ -1205,18 +1597,23 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   };
 
   const getPublicDomain = () => {
-    return 'http://atlas.futurity.com.ec:7565';
+    if (typeof window !== 'undefined' && window.location && window.location.origin && !window.location.origin.includes('localhost') && !window.location.origin.includes('127.0.0.1')) {
+      return window.location.origin;
+    }
+    return 'https://atlas.futurity.com.ec';
   };
 
-  const enviarLinkFirmaWhatsApp = (telefonos, tecnico, tokenRastreo) => {
+  const enviarLinkFirmaWhatsApp = (telefonos, tecnico, tokenRastreo, idVisita) => {
     if (!telefonos) return;
+    const tokenFinal = tokenRastreo || idVisita;
     const cleanTel = telefonos.split('/')[0].trim().replace(/[^\d+]/g, '');
-    const msg = `Hola! Soy ${tecnico}, tu técnico asignado. Por favor, ingresa a este enlace para firmar tu conformidad del trabajo: ${getPublicDomain()}/firma-remota/${tokenRastreo}`;
+    const msg = `Hola! Soy ${tecnico}, tu técnico asignado. Por favor, ingresa a este enlace para firmar tu conformidad del trabajo: ${getPublicDomain()}/firma-remota/${tokenFinal}`;
     window.open(`https://wa.me/${cleanTel}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
-  const mostrarQRDeFirma = (tokenRastreo, clienteName) => {
-    setQrToken(tokenRastreo);
+  const mostrarQRDeFirma = (tokenRastreo, clienteName, idVisita) => {
+    const tokenFinal = tokenRastreo || idVisita;
+    setQrToken(tokenFinal);
     setQrClienteName(clienteName);
     setShowQRModal(true);
   };
@@ -1247,10 +1644,32 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   };
 
   // WhatsApp client arrival notification
-  const abrirWhatsApp = (telefonos, tecnico, tokenRastreo) => {
+  const abrirWhatsApp = async (telefonos, tecnico, tokenRastreo, idVisita) => {
     if (!telefonos) return;
+    let finalToken = tokenRastreo;
+
+    // Si aún no se ha generado el token de rastreo, iniciamos "voy en camino" primero
+    if (!finalToken && idVisita) {
+      try {
+        await registrarVoyEnCamino(idVisita);
+        const resV = await fetch(`/api/tecnico/panel/${tecnicoUrlName}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const dV = await resV.json();
+        if (dV.ok || dV.status === 'ok') {
+          const fresh = (dV.visitas || []).find(x => x.id_visita === idVisita);
+          if (fresh && fresh.token_rastreo) finalToken = fresh.token_rastreo;
+        }
+      } catch (e) {
+        console.warn("Error generando token para WhatsApp:", e);
+      }
+    }
+
     const cleanTel = telefonos.split('/')[0].trim().replace(/[^\d+]/g, '');
-    const msg = `Estimado cliente, le saluda ${tecnico}. Le informo que ya voy en camino a su domicilio para realizar el trabajo. Puede seguir mi trayecto en tiempo real ingresando aquí: ${getPublicDomain()}/seguimiento/${tokenRastreo}`;
+    let msg = `Estimado cliente, le saluda ${tecnico}. Le informo que ya voy en camino a su domicilio para realizar el trabajo.`;
+    if (finalToken && finalToken !== 'null' && finalToken !== 'undefined') {
+      msg += ` Puede seguir mi trayecto en tiempo real ingresando aquí: ${getPublicDomain()}/seguimiento/${finalToken}`;
+    }
     window.open(`https://wa.me/${cleanTel}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -1313,6 +1732,16 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         foto_extra_2_base64: form.foto_extra_2_base64,
         foto_extra_3_base64: form.foto_extra_3_base64,
         foto_extra_4_base64: form.foto_extra_4_base64,
+        hubo_cambio_onu: !!form.hubo_cambio_onu,
+        sn_retirado_onu: form.sn_retirado_onu ? normalizarGponSn(form.sn_retirado_onu) : '',
+        modelo_retirado_onu: form.modelo_retirado_onu || '',
+        motivo_retiro_onu: form.motivo_retiro_onu || 'DANADO_FALLA',
+        obs_retiro_onu: form.obs_retiro_onu || '',
+        hubo_cambio_router: !!form.hubo_cambio_router,
+        sn_retirado_router: form.sn_retirado_router || '',
+        modelo_retirado_router: form.modelo_retirado_router || '',
+        motivo_retiro_router: form.motivo_retiro_router || 'DANADO_FALLA',
+        obs_retiro_router: form.obs_retiro_router || '',
         materiales: form.materiales.map(m => ({ id_material: parseInt(m.id_material), cantidad: parseInt(m.cantidad) }))
       };
 
@@ -1465,25 +1894,52 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
             </span>
           </div>
 
-          <button 
-            type="button" 
-            onClick={cargarDatosPanel} 
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--primary)',
-              fontWeight: 800,
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              flexShrink: 0
-            }}
-          >
-            <i className="fa-solid fa-arrows-rotate"></i>
-            <span>Actualizar</span>
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button 
+              type="button" 
+              onClick={() => {
+                setShowInventarioVehiculoModal(true);
+                cargarInventarioVehiculo();
+              }}
+              style={{
+                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.25) 100%)',
+                border: '1px solid rgba(59, 130, 246, 0.4)',
+                color: '#60a5fa',
+                fontWeight: 800,
+                fontSize: '0.78rem',
+                padding: '6px 12px',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                flexShrink: 0
+              }}
+            >
+              <i className="fa-solid fa-truck-moving"></i>
+              <span>📦 Mi Vehículo</span>
+            </button>
+
+            <button 
+              type="button" 
+              onClick={cargarDatosPanel} 
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--primary)',
+                fontWeight: 800,
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                flexShrink: 0
+              }}
+            >
+              <i className="fa-solid fa-arrows-rotate"></i>
+              <span>Actualizar</span>
+            </button>
+          </div>
         </div>
 
       </div>
@@ -1985,7 +2441,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                     {activeVisita.telefonos && (
                       <button 
                         type="button" 
-                        onClick={() => abrirWhatsApp(activeVisita.telefonos, tecnicoRealName, activeVisita.token_rastreo)} 
+                        onClick={() => abrirWhatsApp(activeVisita.telefonos, tecnicoRealName, activeVisita.token_rastreo, activeVisita.id_visita)} 
                         style={{ width: '100%', padding: '11px', borderRadius: '10px', border: 'none', background: '#22c55e', color: 'white', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 10px rgba(34, 197, 94, 0.2)' }}
                       >
                         <i className="fa-brands fa-whatsapp" style={{ fontSize: '1.1rem' }}></i> Avisar "Voy en Camino" por WhatsApp
@@ -2094,23 +2550,32 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                         </select>
 
                         {/* Serie ONU (SN) */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap', gap: '6px' }}>
                           <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
                             Serie GPON (SN) {activeVisita.numero_serie ? `[Actual: ${activeVisita.numero_serie}]` : ''}:
                           </label>
-                          <label style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', padding: '5px 12px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                            <i className="fa-solid fa-images"></i> Galería / Escanear
-                            <input 
-                              type="file" 
-                              accept="image/*" 
-                              style={{ display: 'none' }}
-                              onChange={(e) => {
-                                if (e.target.files && e.target.files[0]) {
-                                  procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_onu', true);
-                                }
-                              }}
-                            />
-                          </label>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => abrirEscanerEnVivo(activeVisita.id_visita, 'numero_serie_onu', true, 'Escanear Serie GPON (ONU)')}
+                              style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                            >
+                              <i className="fa-solid fa-camera"></i> 📷 Cámara
+                            </button>
+                            <label style={{ background: 'rgba(255,255,255,0.08)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.15)', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <i className="fa-solid fa-images"></i> Foto
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                style={{ display: 'none' }}
+                                onChange={(e) => {
+                                  if (e.target.files && e.target.files[0]) {
+                                    procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_onu', true);
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
                         </div>
                         <input 
                           type="text" 
@@ -2121,7 +2586,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                               updateFormState(activeVisita.id_visita, { numero_serie_onu: normalizarGponSn(e.target.value) });
                             }
                           }}
-                          placeholder="Ej. CDKT2A187B7D o elige foto de galería"
+                          placeholder="Ej. CDKT2A187B7D o escanea con cámara"
                           style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#fbbf24', fontSize: '0.85rem', fontWeight: 800, boxSizing: 'border-box' }}
                         />
                       </div>
@@ -2139,23 +2604,32 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                         </select>
 
                         {/* Serie Router Principal */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap', gap: '6px' }}>
                           <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
                             Serie Router Principal {activeVisita.numero_serie_router ? `[Actual: ${activeVisita.numero_serie_router}]` : ''}:
                           </label>
-                          <label style={{ background: 'rgba(99, 102, 241, 0.25)', color: '#a5b4fc', border: '1px solid rgba(99, 102, 241, 0.5)', padding: '5px 12px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                            <i className="fa-solid fa-images"></i> Galería / Escanear
-                            <input 
-                              type="file" 
-                              accept="image/*" 
-                              style={{ display: 'none' }}
-                              onChange={(e) => {
-                                if (e.target.files && e.target.files[0]) {
-                                  procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router', false);
-                                }
-                              }}
-                            />
-                          </label>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => abrirEscanerEnVivo(activeVisita.id_visita, 'numero_serie_router', false, 'Escanear Router Principal')}
+                              style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                            >
+                              <i className="fa-solid fa-camera"></i> 📷 Cámara
+                            </button>
+                            <label style={{ background: 'rgba(255,255,255,0.08)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.15)', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <i className="fa-solid fa-images"></i> Foto
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                style={{ display: 'none' }}
+                                onChange={(e) => {
+                                  if (e.target.files && e.target.files[0]) {
+                                    procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router', false);
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
                         </div>
                         <input 
                           type="text" 
@@ -2198,23 +2672,32 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                           </select>
 
                           {/* Serie Router Secundario */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                             <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
                               Serie Router Secundario:
                             </label>
-                            <label style={{ background: 'rgba(139, 92, 246, 0.25)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.5)', padding: '5px 12px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                              <i className="fa-solid fa-images"></i> Galería / Escanear
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                style={{ display: 'none' }}
-                                onChange={(e) => {
-                                  if (e.target.files && e.target.files[0]) {
-                                    procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router_secundario', false);
-                                  }
-                                }}
-                              />
-                            </label>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => abrirEscanerEnVivo(activeVisita.id_visita, 'numero_serie_router_secundario', false, 'Escanear Router Secundario')}
+                                style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                              >
+                                <i className="fa-solid fa-camera"></i> 📷 Cámara
+                              </button>
+                              <label style={{ background: 'rgba(255,255,255,0.08)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.15)', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <i className="fa-solid fa-images"></i> Foto
+                                <input 
+                                  type="file" 
+                                  accept="image/*" 
+                                  style={{ display: 'none' }}
+                                  onChange={(e) => {
+                                    if (e.target.files && e.target.files[0]) {
+                                      procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'numero_serie_router_secundario', false);
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
                           </div>
                           <input 
                             type="text" 
@@ -2256,6 +2739,184 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                           </div>
                         </div>
                       )}
+
+                      {/* --- SECCIÓN INTELIGENTE: EQUIPOS RETIRADOS (CAMBIO / REEMPLAZO) --- */}
+                      <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px' }}>
+                          <h6 style={{ margin: 0, fontSize: '0.86rem', fontWeight: 850, color: '#f87171', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="fa-solid fa-box-archive"></i> ¿Hubo Retiro o Reemplazo de Equipos?
+                          </h6>
+                          <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>Pasan a tu custodia móvil</span>
+                        </div>
+
+                        {/* Checkbox Retiro ONU */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.84rem', fontWeight: 800, color: activeFormState.hubo_cambio_onu ? '#fca5a5' : '#cbd5e1' }}>
+                            <input 
+                              type="checkbox"
+                              checked={!!activeFormState.hubo_cambio_onu}
+                              onChange={(e) => updateFormState(activeVisita.id_visita, { 
+                                hubo_cambio_onu: e.target.checked,
+                                sn_retirado_onu: e.target.checked ? (activeFormState.sn_retirado_onu || activeVisita.numero_serie || '') : ''
+                              })}
+                              style={{ width: '16px', height: '16px', accentColor: '#ef4444', cursor: 'pointer' }}
+                            />
+                            📦 Se retiró una ONT / ONU anterior de este domicilio
+                          </label>
+
+                          {activeFormState.hubo_cambio_onu && (
+                            <div style={{ background: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px', marginLeft: '6px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                                <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#fca5a5', margin: 0 }}>
+                                  Serie (SN) ONU Retirada {activeVisita.numero_serie ? `[Anterior: ${activeVisita.numero_serie}]` : ''}:
+                                </label>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => abrirEscanerEnVivo(activeVisita.id_visita, 'sn_retirado_onu', true, 'Escanear ONU Retirada')}
+                                    style={{ background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                                  >
+                                    <i className="fa-solid fa-camera"></i> 📷 Cámara
+                                  </button>
+                                  <label style={{ background: 'rgba(255,255,255,0.08)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.15)', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <i className="fa-solid fa-images"></i> Foto
+                                    <input 
+                                      type="file" 
+                                      accept="image/*" 
+                                      style={{ display: 'none' }}
+                                      onChange={(e) => {
+                                        if (e.target.files && e.target.files[0]) {
+                                          procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'sn_retirado_onu', true);
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                              <input 
+                                type="text"
+                                value={activeFormState.sn_retirado_onu || ''}
+                                onChange={(e) => updateFormState(activeVisita.id_visita, { sn_retirado_onu: e.target.value })}
+                                onBlur={(e) => {
+                                  if (e.target.value) {
+                                    updateFormState(activeVisita.id_visita, { sn_retirado_onu: normalizarGponSn(e.target.value) });
+                                  }
+                                }}
+                                placeholder="SN de la ONU que retiras"
+                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #ef4444', background: '#0f172a', color: '#fca5a5', fontSize: '0.85rem', fontWeight: 800, boxSizing: 'border-box' }}
+                              />
+
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                <div>
+                                  <label style={{ fontWeight: 700, fontSize: '0.76rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Motivo de Retiro / Estado:</label>
+                                  <select
+                                    value={activeFormState.motivo_retiro_onu || 'DANADO_FALLA'}
+                                    onChange={(e) => updateFormState(activeVisita.id_visita, { motivo_retiro_onu: e.target.value })}
+                                    style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #475569', background: '#1e293b', color: 'white', fontSize: '0.8rem' }}
+                                  >
+                                    <option value="DANADO_FALLA">⚡ Dañado / Falla / Rayo (Garantía)</option>
+                                    <option value="REEMPLAZO_UPGRADE">🔄 Operativo / Reemplazo (Reutilizable)</option>
+                                    <option value="DANADO_CLIENTE">💧 Dañado por Cliente (Agua/Golpe)</option>
+                                    <option value="OTRO">❓ Otro Motivo</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label style={{ fontWeight: 700, fontSize: '0.76rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Detalle / Observación:</label>
+                                  <input 
+                                    type="text"
+                                    value={activeFormState.obs_retiro_onu || ''}
+                                    onChange={(e) => updateFormState(activeVisita.id_visita, { obs_retiro_onu: e.target.value })}
+                                    placeholder="Ej. No enciende / Puerto PON quemado"
+                                    style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #475569', background: '#1e293b', color: 'white', fontSize: '0.8rem', boxSizing: 'border-box' }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Checkbox Retiro Router */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.84rem', fontWeight: 800, color: activeFormState.hubo_cambio_router ? '#fca5a5' : '#cbd5e1' }}>
+                            <input 
+                              type="checkbox"
+                              checked={!!activeFormState.hubo_cambio_router}
+                              onChange={(e) => updateFormState(activeVisita.id_visita, { 
+                                hubo_cambio_router: e.target.checked,
+                                sn_retirado_router: e.target.checked ? (activeFormState.sn_retirado_router || activeVisita.numero_serie_router || '') : ''
+                              })}
+                              style={{ width: '16px', height: '16px', accentColor: '#ef4444', cursor: 'pointer' }}
+                            />
+                            📦 Se retiró un Router anterior de este domicilio
+                          </label>
+
+                          {activeFormState.hubo_cambio_router && (
+                            <div style={{ background: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px', marginLeft: '6px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                                <label style={{ fontWeight: 700, fontSize: '0.78rem', color: '#fca5a5', margin: 0 }}>
+                                  Serie (SN / MAC) Router Retirado {activeVisita.numero_serie_router ? `[Anterior: ${activeVisita.numero_serie_router}]` : ''}:
+                                </label>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => abrirEscanerEnVivo(activeVisita.id_visita, 'sn_retirado_router', false, 'Escanear Router Retirado')}
+                                    style={{ background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                                  >
+                                    <i className="fa-solid fa-camera"></i> 📷 Cámara
+                                  </button>
+                                  <label style={{ background: 'rgba(255,255,255,0.08)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.15)', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <i className="fa-solid fa-images"></i> Foto
+                                    <input 
+                                      type="file" 
+                                      accept="image/*" 
+                                      style={{ display: 'none' }}
+                                      onChange={(e) => {
+                                        if (e.target.files && e.target.files[0]) {
+                                          procesarFotoBarcodeParaCampo(e.target.files[0], activeVisita.id_visita, 'sn_retirado_router', false);
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                              <input 
+                                type="text"
+                                value={activeFormState.sn_retirado_router || ''}
+                                onChange={(e) => updateFormState(activeVisita.id_visita, { sn_retirado_router: e.target.value.toUpperCase() })}
+                                placeholder="SN / MAC del Router que retiras"
+                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #ef4444', background: '#0f172a', color: '#fca5a5', fontSize: '0.85rem', fontWeight: 800, boxSizing: 'border-box' }}
+                              />
+
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                <div>
+                                  <label style={{ fontWeight: 700, fontSize: '0.76rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Motivo de Retiro / Estado:</label>
+                                  <select
+                                    value={activeFormState.motivo_retiro_router || 'DANADO_FALLA'}
+                                    onChange={(e) => updateFormState(activeVisita.id_visita, { motivo_retiro_router: e.target.value })}
+                                    style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #475569', background: '#1e293b', color: 'white', fontSize: '0.8rem' }}
+                                  >
+                                    <option value="DANADO_FALLA">⚡ Dañado / No Enciende (Garantía)</option>
+                                    <option value="REEMPLAZO_UPGRADE">🔄 Operativo / Reemplazo (Reutilizable)</option>
+                                    <option value="DANADO_CLIENTE">💧 Dañado por Cliente (Agua/Golpe)</option>
+                                    <option value="OTRO">❓ Otro Motivo</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label style={{ fontWeight: 700, fontSize: '0.76rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Detalle / Observación:</label>
+                                  <input 
+                                    type="text"
+                                    value={activeFormState.obs_retiro_router || ''}
+                                    onChange={(e) => updateFormState(activeVisita.id_visita, { obs_retiro_router: e.target.value })}
+                                    placeholder="Ej. Reemplazado por Gigabit / Falla Wi-Fi"
+                                    style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #475569', background: '#1e293b', color: 'white', fontSize: '0.8rem', boxSizing: 'border-box' }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
                     </div>
 
                     {/* Materials utilized list */}
@@ -2428,14 +3089,14 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <button 
                               type="button" 
-                              onClick={() => enviarLinkFirmaWhatsApp(activeVisita.telefonos, tecnicoRealName, activeVisita.token_rastreo)} 
+                              onClick={() => enviarLinkFirmaWhatsApp(activeVisita.telefonos, tecnicoRealName, activeVisita.token_rastreo, activeVisita.id_visita)} 
                               style={{ flex: 1, padding: '9px', borderRadius: '6px', border: 'none', background: '#25d366', color: 'white', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
                             >
                               <i className="fa-brands fa-whatsapp"></i> WhatsApp
                             </button>
                             <button 
                               type="button" 
-                              onClick={() => mostrarQRDeFirma(activeVisita.token_rastreo, activeVisita.cliente)} 
+                              onClick={() => mostrarQRDeFirma(activeVisita.token_rastreo, activeVisita.cliente, activeVisita.id_visita)} 
                               style={{ flex: 1, padding: '9px', borderRadius: '6px', border: 'none', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: 'white', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
                             >
                               <i className="fa-solid fa-qrcode"></i> Mostrar QR
@@ -2876,9 +3537,28 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
               </div>
 
               {/* Traspaso de Material entre Técnicos */}
+              {/* Mi Vehículo / Bodega Móvil */}
               <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '16px' }}>
                 <label style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <i className="fa-solid fa-arrow-right-arrow-left" style={{ marginRight: '6px', color: '#10b981' }}></i> Transferencia de Insumos
+                  <i className="fa-solid fa-truck-moving" style={{ marginRight: '6px', color: '#3b82f6' }}></i> Mi Bodega Móvil / Vehículo
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProfileModal(false);
+                    setShowInventarioVehiculoModal(true);
+                    cargarInventarioVehiculo();
+                  }}
+                  style={{ width: '100%', padding: '12px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', color: 'white', fontWeight: 800, cursor: 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                >
+                  <i className="fa-solid fa-boxes-stacked"></i> 📦 Ver Materiales y Equipos en Vehículo
+                </button>
+              </div>
+
+              {/* Traspaso de Material entre Técnicos */}
+              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '16px' }}>
+                <label style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <i className="fa-solid fa-arrow-right-arrow-left" style={{ marginRight: '6px', color: '#10b981' }}></i> Transferencia o Devolución
                 </label>
                 <button
                   type="button"
@@ -2888,7 +3568,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                   }}
                   style={{ width: '100%', padding: '12px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', fontWeight: 800, cursor: 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                 >
-                  <i className="fa-solid fa-people-arrows"></i> 🔄 Traspaso de Material a Técnico
+                  <i className="fa-solid fa-people-arrows"></i> 🔄 Traspaso / Devolver a Bodega
                 </button>
               </div>
 
@@ -2906,30 +3586,229 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         </div>
       )}
 
-      {/* MODAL: TRASPASO DE MATERIAL ENTRE TÉCNICOS */}
+      {/* MODAL: MI INVENTARIO / VEHÍCULO ASIGNADO */}
+      {showInventarioVehiculoModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: 200000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px', boxSizing: 'border-box' }}>
+          <div style={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '24px', width: '100%', maxWidth: '520px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.7)', overflow: 'hidden' }}>
+            
+            {/* Header */}
+            <div style={{ padding: '20px 24px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h4 style={{ margin: 0, color: 'white', fontSize: '1.1rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <i className="fa-solid fa-truck-moving" style={{ color: '#38bdf8' }}></i> Mi Bodega Móvil
+                </h4>
+                <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, marginTop: '2px', display: 'block' }}>
+                  🚗 Placa: <strong style={{ color: '#38bdf8' }}>{inventarioVehiculoData.placa || 'S/P'}</strong> &bull; {inventarioVehiculoData.tecnico}
+                </span>
+              </div>
+              <button onClick={() => setShowInventarioVehiculoModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.4rem', cursor: 'pointer', padding: '4px' }}>&times;</button>
+            </div>
+
+            {/* Sub Tabs: Materiales vs Equipos Retirados */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#0f172a', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '6px' }}>
+              <button
+                type="button"
+                onClick={() => setTabInventarioVehiculo('materiales')}
+                style={{
+                  padding: '10px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: tabInventarioVehiculo === 'materiales' ? 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)' : 'transparent',
+                  color: tabInventarioVehiculo === 'materiales' ? 'white' : '#94a3b8',
+                  fontWeight: 800,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <i className="fa-solid fa-toolbox"></i> Materiales ({inventarioVehiculoData.materiales.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTabInventarioVehiculo('retirados')}
+                style={{
+                  padding: '10px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: tabInventarioVehiculo === 'retirados' ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' : 'transparent',
+                  color: tabInventarioVehiculo === 'retirados' ? 'white' : '#94a3b8',
+                  fontWeight: 800,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <i className="fa-solid fa-box-archive"></i> Retirados ({inventarioVehiculoData.equipos_retirados.length})
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {loadingInventarioVehiculo ? (
+                <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8' }}>
+                  <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '1.8rem', color: '#38bdf8', marginBottom: '10px' }}></i>
+                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700 }}>Cargando inventario del vehículo...</p>
+                </div>
+              ) : tabInventarioVehiculo === 'materiales' ? (
+                /* TAB 1: MATERIALES EN CAMIONETA */
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase' }}>Insumos Disponibles:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowInventarioVehiculoModal(false);
+                        setShowTraspasoModal(true);
+                      }}
+                      style={{ padding: '6px 12px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.2)', border: '1px solid rgba(16, 185, 129, 0.4)', color: '#34d399', fontWeight: 800, fontSize: '0.74rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      <i className="fa-solid fa-arrow-right-arrow-left"></i> Traspasar / Devolver
+                    </button>
+                  </div>
+
+                  {inventarioVehiculoData.materiales.length === 0 ? (
+                    <div style={{ padding: '30px 20px', textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                      <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.86rem', fontWeight: 600 }}>No hay materiales asignados a este vehículo ({inventarioVehiculoData.placa}).</p>
+                      <small style={{ color: '#64748b', marginTop: '4px', display: 'block' }}>Solicita carga de stock en Bodega Central.</small>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {inventarioVehiculoData.materiales.map((m, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px' }}>
+                          <div>
+                            <strong style={{ color: '#f8fafc', fontSize: '0.88rem', display: 'block' }}>{m.nombre_material}</strong>
+                            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{m.categoria || 'Consumible'} &bull; Cod: {m.codigo_material || 'N/A'}</span>
+                          </div>
+                          <span style={{ padding: '4px 10px', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.2)', border: '1px solid rgba(59, 130, 246, 0.4)', color: '#60a5fa', fontWeight: 900, fontSize: '0.88rem' }}>
+                            {m.cantidad_disponible} {m.unidad_medida || 'uds'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* TAB 2: EQUIPOS RETIRADOS EN CUSTODIA */
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '0.78rem', color: '#fca5a5', fontWeight: 800, textTransform: 'uppercase' }}>Equipos en Custodia:</span>
+                    {inventarioVehiculoData.equipos_retirados.length > 0 && (
+                      <button
+                        type="button"
+                        disabled={devolviendoEquipos}
+                        onClick={() => handleDevolverEquiposBodega(inventarioVehiculoData.equipos_retirados.map(x => x.id_retiro))}
+                        style={{ padding: '6px 12px', borderRadius: '8px', background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', border: 'none', color: 'white', fontWeight: 800, fontSize: '0.74rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                      >
+                        {devolviendoEquipos ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-building-circle-arrow-right"></i>} Devolver Todos a Bodega
+                      </button>
+                    )}
+                  </div>
+
+                  {inventarioVehiculoData.equipos_retirados.length === 0 ? (
+                    <div style={{ padding: '30px 20px', textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                      <p style={{ margin: 0, color: '#34d399', fontSize: '0.86rem', fontWeight: 700 }}>✨ No tienes equipos retirados pendientes de devolución.</p>
+                      <small style={{ color: '#94a3b8', marginTop: '4px', display: 'block' }}>Tu furgoneta está al día sin rezagos.</small>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {inventarioVehiculoData.equipos_retirados.map((eq, idx) => {
+                        const esDanado = eq.motivo_retiro === 'DANADO_FALLA' || eq.motivo_retiro === 'DANADO_CLIENTE';
+                        return (
+                          <div key={idx} style={{ background: 'rgba(15, 23, 42, 0.7)', border: `1px solid ${esDanado ? 'rgba(239, 68, 68, 0.35)' : 'rgba(16, 185, 129, 0.35)'}`, borderRadius: '14px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <div>
+                                <span style={{ padding: '2px 8px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: 900, background: eq.tipo_equipo === 'ONU' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(99, 102, 241, 0.2)', color: eq.tipo_equipo === 'ONU' ? '#34d399' : '#a5b4fc', textTransform: 'uppercase', marginRight: '6px' }}>
+                                  {eq.tipo_equipo}
+                                </span>
+                                <strong style={{ color: '#f8fafc', fontSize: '0.92rem', fontFamily: 'monospace' }}>{eq.numero_serie}</strong>
+                              </div>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '3px 8px', borderRadius: '8px', background: esDanado ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)', color: esDanado ? '#fca5a5' : '#6ee7b7' }}>
+                                {eq.motivo_retiro === 'DANADO_FALLA' ? '⚡ Dañado' : eq.motivo_retiro === 'REEMPLAZO_UPGRADE' ? '🔄 Reutilizable' : eq.motivo_retiro}
+                              </span>
+                            </div>
+
+                            <div style={{ fontSize: '0.76rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              {eq.cliente && <span>Cliente: <strong style={{ color: '#cbd5e1' }}>{eq.cliente}</strong> (Contrato: {eq.contrato || 'N/A'})</span>}
+                              {eq.observacion_retiro && <span>Detalle: <em>"{eq.observacion_retiro}"</em></span>}
+                              <small style={{ color: '#64748b', marginTop: '2px' }}>Retirado: {eq.fecha_retiro}</small>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '8px' }}>
+                              <button
+                                type="button"
+                                disabled={devolviendoEquipos}
+                                onClick={() => handleDevolverEquiposBodega([eq.id_retiro])}
+                                style={{ padding: '6px 12px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#fca5a5', fontWeight: 800, fontSize: '0.74rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                              >
+                                <i className="fa-solid fa-arrow-right-to-bracket"></i> Devolver a Bodega
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '16px 24px', background: '#0f172a', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={cargarInventarioVehiculo}
+                style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <i className="fa-solid fa-arrows-rotate"></i> Actualizar
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowInventarioVehiculoModal(false)}
+                style={{ padding: '8px 18px', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', color: 'white', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer' }}
+              >
+                Cerrar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TRASPASO DE MATERIAL ENTRE TÉCNICOS / BODEGA */}
       {showTraspasoModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: 200000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
           <div style={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '24px', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 40px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
             <div style={{ padding: '20px 24px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h4 style={{ margin: 0, color: 'white', fontSize: '1.05rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <i className="fa-solid fa-arrow-right-arrow-left" style={{ color: '#10b981' }}></i> Traspaso de Material
+                <i className="fa-solid fa-arrow-right-arrow-left" style={{ color: '#10b981' }}></i> Transferencia o Devolución
               </h4>
               <button onClick={() => setShowTraspasoModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.4rem', cursor: 'pointer', padding: '4px' }}>&times;</button>
             </div>
 
             <form onSubmit={handleTraspasoSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Técnico Destino (Quien recibe):</label>
+                <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Destino (Quien recibe):</label>
                 <select
                   value={traspasoForm.tecnico_destino_nombre}
                   onChange={(e) => setTraspasoForm({ ...traspasoForm, tecnico_destino_nombre: e.target.value })}
                   style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.15)', backgroundColor: '#0f172a', color: '#fff', fontSize: '0.88rem', fontWeight: 700 }}
                   required
                 >
-                  <option value="">-- Seleccione Técnico --</option>
-                  {tecnicosLista.map((t, i) => (
-                    <option key={i} value={t.nombre}>{t.nombre} ({t.placa})</option>
-                  ))}
+                  <option value="">-- Seleccione Destino --</option>
+                  <option value="BODEGA_CENTRAL" style={{ background: '#1e3a8a', color: '#60a5fa', fontWeight: 800 }}>🏢 BODEGA CENTRAL (Devolución)</option>
+                  <optgroup label="Técnicos Cuadrilla">
+                    {tecnicosLista.map((t, i) => (
+                      <option key={i} value={t.nombre}>{t.nombre} ({t.placa})</option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
 
@@ -2964,11 +3843,109 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                 <button type="button" onClick={() => setShowTraspasoModal(false)} style={{ flex: 1, padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', color: 'white', fontWeight: 800, cursor: 'pointer' }}>Cancelar</button>
                 <button type="submit" disabled={traspasoLoading} style={{ flex: 1, padding: '12px', borderRadius: '12px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', border: 'none', color: 'white', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                  {traspasoLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-paper-plane"></i>} Transferir Material
+                  {traspasoLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-paper-plane"></i>} Procesar
                 </button>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* MODAL: ESCÁNER DE CÁMARA EN VIVO PARA CÓDIGOS DE BARRA / SN */}
+      {scannerLiveModal.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', zIndex: 300000, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', alignItems: 'center', padding: '16px', boxSizing: 'border-box' }}>
+          
+          {/* Header */}
+          <div style={{ width: '100%', maxWidth: '480px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '1.2rem' }}>📷</span>
+              <h4 style={{ margin: 0, color: 'white', fontSize: '1rem', fontWeight: 800 }}>
+                {scannerLiveModal.title || 'Escáner en Vivo'}
+              </h4>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              {hasTorch && (
+                <button
+                  type="button"
+                  onClick={toggleTorch}
+                  style={{ background: torchOn ? '#fbbf24' : 'rgba(255,255,255,0.15)', color: torchOn ? '#000' : '#fff', border: 'none', width: '38px', height: '38px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}
+                  title="Encender / Apagar Linterna"
+                >
+                  <i className="fa-solid fa-lightbulb"></i>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={cerrarEscanerEnVivo}
+                style={{ background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#fca5a5', width: '38px', height: '38px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 900 }}
+              >
+                &times;
+              </button>
+            </div>
+          </div>
+
+          {/* Viewfinder Container */}
+          <div style={{ position: 'relative', width: '100%', maxWidth: '440px', flex: 1, margin: '16px 0', borderRadius: '24px', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.15)', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <video
+              ref={scannerVideoRef}
+              playsInline
+              muted
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+
+            {/* Target Box Overlay */}
+            <div style={{ position: 'absolute', width: '82%', height: '48%', border: '2px dashed #10b981', borderRadius: '16px', boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.55)', pointerEvents: 'none', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', alignItems: 'center', padding: '10px', boxSizing: 'border-box' }}>
+              <div style={{ width: '100%', height: '2px', background: 'linear-gradient(90deg, transparent, #10b981, transparent)', animation: 'scannerLaser 2s infinite ease-in-out', position: 'absolute', top: 0, left: 0 }} />
+              <span style={{ background: 'rgba(0,0,0,0.7)', color: '#a7f3d0', padding: '4px 10px', borderRadius: '8px', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Enfoca la Serie / Código de Barras
+              </span>
+            </div>
+
+            {cameraError && (
+              <div style={{ position: 'absolute', padding: '20px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid #ef4444', borderRadius: '16px', textAlign: 'center', color: '#fca5a5', maxWidth: '85%' }}>
+                <p style={{ margin: '0 0 12px 0', fontSize: '0.88rem', fontWeight: 700 }}>{cameraError}</p>
+                <button
+                  type="button"
+                  onClick={cerrarEscanerEnVivo}
+                  style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Footer Controls */}
+          <div style={{ width: '100%', maxWidth: '480px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', zIndex: 10 }}>
+            <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.78rem', fontWeight: 700, textAlign: 'center' }}>
+              {scanningStatus}
+            </p>
+            <div style={{ display: 'flex', width: '100%', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={cerrarEscanerEnVivo}
+                style={{ flex: 1, padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontWeight: 800, cursor: 'pointer', fontSize: '0.85rem' }}
+              >
+                Cancelar
+              </button>
+              <label style={{ flex: 1, padding: '12px', borderRadius: '12px', background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', fontWeight: 800, cursor: 'pointer', fontSize: '0.85rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <i className="fa-solid fa-images"></i> Elegir Foto
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      const file = e.target.files[0];
+                      cerrarEscanerEnVivo();
+                      procesarFotoBarcodeParaCampo(file, scannerLiveModal.visitaId, scannerLiveModal.campo, scannerLiveModal.isGpon);
+                    }
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+
         </div>
       )}
 

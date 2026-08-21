@@ -703,9 +703,42 @@ def finalizar_visita(id_visita):
                         # Descontar del inventario del vehículo
                         cursor.execute(query_update_custodia, (int(cant), placa_vehiculo, int(id_mat)))
                         
+        # 3. Registrar equipos retirados si hubo cambio o reemplazo
+        equipos_retirados_data = datos.get('equipos_retirados', [])
+        if not equipos_retirados_data:
+            if datos.get('hubo_cambio_onu') and (datos.get('sn_retirado_onu') or datos.get('motivo_retiro_onu')):
+                equipos_retirados_data.append({
+                    'tipo_equipo': 'ONU',
+                    'numero_serie': datos.get('sn_retirado_onu') or 'SIN_SERIE',
+                    'modelo': datos.get('modelo_retirado_onu') or datos.get('modelo_onu'),
+                    'motivo_retiro': datos.get('motivo_retiro_onu') or 'REEMPLAZO_UPGRADE',
+                    'observacion_retiro': datos.get('obs_retiro_onu') or ''
+                })
+            if datos.get('hubo_cambio_router') and (datos.get('sn_retirado_router') or datos.get('motivo_retiro_router')):
+                equipos_retirados_data.append({
+                    'tipo_equipo': 'ROUTER',
+                    'numero_serie': datos.get('sn_retirado_router') or 'SIN_SERIE',
+                    'modelo': datos.get('modelo_retirado_router') or datos.get('modelo_router'),
+                    'motivo_retiro': datos.get('motivo_retiro_router') or 'REEMPLAZO_UPGRADE',
+                    'observacion_retiro': datos.get('obs_retiro_router') or ''
+                })
+
+        for eq in equipos_retirados_data:
+            raw_sn = eq.get('numero_serie') or ''
+            sn_ret = raw_sn.strip().upper() if isinstance(raw_sn, str) else str(raw_sn)
+            if sn_ret and sn_ret != 'SIN_SERIE':
+                tipo_eq = eq.get('tipo_equipo', 'ONU')
+                mod_ret = eq.get('modelo') or None
+                motivo_ret = eq.get('motivo_retiro', 'REEMPLAZO_UPGRADE')
+                obs_ret = eq.get('observacion_retiro', '')
+                cursor.execute("""
+                    INSERT INTO equipos_retirados_visitas 
+                    (id_visita, tipo_equipo, numero_serie, modelo, motivo_retiro, observacion_retiro, tecnico, placa_vehiculo, estado_custodia, fecha_retiro)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'EN_VEHICULO', NOW())
+                """, (id_visita, tipo_eq, sn_ret, mod_ret, motivo_ret, obs_ret, tecnico_nombre, placa_vehiculo))
+
         # Actualizar estado global del técnico
         usuario = obtener_usuario_autenticado()
-        # tecnico_nombre ya se obtuvo arriba de la visita
         if tecnico_nombre:
             cursor.execute("""
                 UPDATE tecnicos 
@@ -714,7 +747,7 @@ def finalizar_visita(id_visita):
             """, ("Disponible", tecnico_nombre))
             
         conexion.commit()
-        print(f"[Cierre] Visita #{id_visita} finalizada e insumos actualizados.")
+        print(f"[Cierre] Visita #{id_visita} finalizada, insumos y equipos retirados actualizados.")
     except Exception as e:
         conexion.rollback()
         print(f"[Cierre] Error al finalizar visita con materiales: {e}")
@@ -1213,6 +1246,113 @@ def posponer_visita(id_visita):
         cursor.close()
         conexion.close()
 
+@tecnico_bp.route('/api/tecnico/mi_inventario', methods=['GET'])
+def api_tecnico_mi_inventario():
+    usuario = obtener_usuario_autenticado()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        username = usuario.get('username') or session.get('user_name')
+        cursor.execute("SELECT id_tecnico, nombre, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa FROM tecnicos WHERE id_usuario = %s OR nombre = %s OR nombre LIKE %s", (usuario.get('id_usuario'), username, f"%{username}%"))
+        row_tec = cursor.fetchone()
+        
+        if not row_tec:
+            return jsonify({"status": "error", "message": "Técnico no encontrado"}), 404
+            
+        nombre_tecnico = row_tec['nombre']
+        placa = row_tec['placa']
+        
+        # 1. Materiales en el vehículo
+        materiales = []
+        if placa and placa != 'S/P':
+            cursor.execute("""
+                SELECT it.id_material, m.nombre_material, m.codigo_material, m.unidad_medida, m.categoria, it.cantidad_disponible
+                FROM inventario_tecnicos it
+                JOIN materiales m ON it.id_material = m.id_material
+                WHERE it.placa_vehiculo = %s AND it.cantidad_disponible > 0
+                ORDER BY m.nombre_material ASC
+            """, (placa,))
+            materiales = cursor.fetchall()
+            
+        # 2. Equipos retirados en custodia del vehículo
+        cursor.execute("""
+            SELECT er.id_retiro, er.id_visita, er.tipo_equipo, er.numero_serie, er.modelo, 
+                   er.motivo_retiro, er.observacion_retiro, er.fecha_retiro, er.placa_vehiculo,
+                   v.cliente, v.contrato
+            FROM equipos_retirados_visitas er
+            LEFT JOIN visitas_tecnicas v ON er.id_visita = v.id_visita
+            WHERE (er.tecnico = %s OR (er.placa_vehiculo = %s AND er.placa_vehiculo != 'S/P'))
+              AND er.estado_custodia = 'EN_VEHICULO'
+            ORDER BY er.fecha_retiro DESC
+        """, (nombre_tecnico, placa))
+        equipos_retirados = cursor.fetchall()
+        for eq in equipos_retirados:
+            if eq.get('fecha_retiro'):
+                eq['fecha_retiro'] = eq['fecha_retiro'].strftime('%Y-%m-%d %H:%M:%S')
+                
+        return jsonify({
+            "status": "ok",
+            "tecnico": nombre_tecnico,
+            "placa": placa,
+            "materiales": materiales,
+            "equipos_retirados": equipos_retirados
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+@tecnico_bp.route('/api/tecnico/devolver_equipos_bodega', methods=['POST'])
+def api_tecnico_devolver_equipos_bodega():
+    usuario = obtener_usuario_autenticado()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+        
+    data = request.json or {}
+    ids_retiro = data.get('ids_retiro', [])
+    if isinstance(ids_retiro, int):
+        ids_retiro = [ids_retiro]
+        
+    if not ids_retiro:
+        return jsonify({"status": "error", "message": "No se seleccionaron equipos para devolver."}), 400
+        
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de base de datos"}), 500
+        
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        agente = usuario.get('username') or session.get('user_name') or 'SISTEMA'
+        format_strings = ','.join(['%s'] * len(ids_retiro))
+        query = f"""
+            UPDATE equipos_retirados_visitas 
+            SET estado_custodia = 'DEVUELTO_BODEGA', 
+                fecha_devolucion_bodega = NOW(),
+                recibido_por = %s
+            WHERE id_retiro IN ({format_strings})
+        """
+        params = [agente] + [int(x) for x in ids_retiro]
+        cursor.execute(query, tuple(params))
+        conexion.commit()
+        
+        return jsonify({
+            "status": "ok", 
+            "message": f"Se devolvieron {len(ids_retiro)} equipo(s) a Bodega Central exitosamente."
+        })
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
 @tecnico_bp.route('/api/tecnico/traspaso_material', methods=['POST'])
 def traspaso_material_tecnico():
     usuario = obtener_usuario_autenticado()
@@ -1242,6 +1382,43 @@ def traspaso_material_tecnico():
         tecnico_origen_nombre = row_origen['nombre']
         placa_origen = row_origen['placa']
         
+        if placa_origen == 'S/P':
+            return jsonify({"status": "error", "message": "El técnico debe tener una buseta/placa asignada para transferir inventario."}), 400
+
+        # Caso 1: Devolución a Bodega Central
+        if destino_nombre in ['BODEGA_CENTRAL', 'BODEGA CENTRAL', 'BODEGA']:
+            tecnico_destino_nombre = 'BODEGA CENTRAL'
+            placa_destino = 'BODEGA'
+            
+            # Descontar del origen
+            cursor.execute("""
+                INSERT IGNORE INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible)
+                VALUES (%s, %s, 0)
+            """, (placa_origen, int(id_material)))
+            
+            cursor.execute("""
+                UPDATE inventario_tecnicos 
+                SET cantidad_disponible = cantidad_disponible - %s 
+                WHERE placa_vehiculo = %s AND id_material = %s
+            """, (cantidad, placa_origen, int(id_material)))
+            
+            # Sumar al stock de bodega central
+            cursor.execute("""
+                UPDATE materiales 
+                SET stock_bodega = COALESCE(stock_bodega, 0) + %s 
+                WHERE id_material = %s
+            """, (cantidad, int(id_material)))
+            
+            # Registrar log de traspaso
+            cursor.execute("""
+                INSERT INTO traspasos_tecnicos (tecnico_origen, placa_origen, tecnico_destino, placa_destino, id_material, cantidad, agente_registro, fecha_hora)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+            """, (tecnico_origen_nombre, placa_origen, tecnico_destino_nombre, placa_destino, int(id_material), cantidad, tecnico_origen_nombre))
+            
+            conexion.commit()
+            return jsonify({"status": "ok", "message": f"Devolución de {cantidad} unidad(es) a Bodega Central registrada exitosamente."})
+
+        # Caso 2: Traspaso a otro técnico compañero
         cursor.execute("SELECT nombre, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa FROM tecnicos WHERE nombre = %s", (destino_nombre,))
         row_destino = cursor.fetchone()
         if not row_destino:
@@ -1250,8 +1427,8 @@ def traspaso_material_tecnico():
         tecnico_destino_nombre = row_destino['nombre']
         placa_destino = row_destino['placa']
         
-        if placa_origen == 'S/P' or placa_destino == 'S/P':
-            return jsonify({"status": "error", "message": "Ambos técnicos deben tener una buseta/placa asignada para transferir inventario."}), 400
+        if placa_destino == 'S/P':
+            return jsonify({"status": "error", "message": f"El técnico {tecnico_destino_nombre} no tiene una buseta/placa asignada para recibir inventario."}), 400
             
         # Descontar del origen
         cursor.execute("""
@@ -1466,3 +1643,31 @@ def toggle_vehiculo(id_vehiculo):
     finally:
         cursor.close()
         conexion.close()
+
+
+@tecnico_bp.route('/api/tecnico/logout', methods=['POST'])
+def api_tecnico_logout():
+    usuario = obtener_usuario_autenticado()
+    data = request.get_json(silent=True) or {}
+    tecnico_nombre = data.get('tecnico') or (usuario.get('username') if usuario else None)
+    
+    if tecnico_nombre:
+        nombre_limpio = tecnico_nombre.replace('_', ' ')
+        conexion = get_db_connection()
+        if conexion:
+            try:
+                cursor = conexion.cursor()
+                cursor.execute("""
+                    UPDATE tecnicos 
+                    SET estado_actividad = 'Desconectado', 
+                        ultima_conexion = NOW()
+                    WHERE nombre = %s OR UPPER(nombre) = %s
+                """, (nombre_limpio, nombre_limpio.upper()))
+                conexion.commit()
+                cursor.close()
+            except Exception as e:
+                print("Error actualizando estado a Desconectado en logout:", e)
+            finally:
+                conexion.close()
+
+    return jsonify({"status": "ok", "message": "Sesión cerrada correctamente"}), 200

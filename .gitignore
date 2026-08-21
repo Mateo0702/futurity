@@ -27,6 +27,15 @@ static/uploads/*
 
 # Executables and logs
 cloudflared-windows-amd64.exe
+caddy.exe
+*.log
+.node-bin/
+*.raw
+frontend/*.traineddata
+frontend/out_scan.txt
+stripe*.png
+rot*.png
+
 # Backups
 backups/
 *.sql.gz

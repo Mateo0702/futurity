@@ -346,12 +346,13 @@ def api_tecnicos_ubicaciones():
                    alerta_panico,
                    mensaje_panico,
                    CASE 
-                     WHEN latitud_actual IS NOT NULL AND longitud_actual IS NOT NULL AND (ultima_conexion >= DATE_SUB(NOW(), INTERVAL 10 MINUTE) OR alerta_panico = 1) 
-                       THEN 1 
-                     WHEN latitud_actual IS NOT NULL AND longitud_actual IS NOT NULL AND estado_actividad != 'Desconectado'
-                       THEN 2
-                     ELSE 0 
-                   END AS conectado
+                      WHEN latitud_actual IS NOT NULL 
+                       AND longitud_actual IS NOT NULL 
+                       AND estado_actividad NOT IN ('Desconectado', 'DESCONECTADO', 'Inactivo', 'INACTIVO') 
+                       AND (ultima_conexion >= DATE_SUB(NOW(), INTERVAL 15 MINUTE) OR alerta_panico = 1) 
+                        THEN 1 
+                      ELSE 0 
+                    END AS conectado
             FROM tecnicos
             WHERE activo = 1 
               AND area_trabajo = %s
@@ -2333,8 +2334,8 @@ def get_cuadro_mando_share_link():
     secret = current_app.secret_key or "fallback_secret_salt_futurity_2026"
     token = hashlib.sha256(f"{fecha}_{secret}".encode('utf-8')).hexdigest()[:16]
     
-    # Determinar el dominio base del enlace público (SIEMPRE dominio atlas.futurity.com.ec:7565)
-    public_base = os.getenv('PUBLIC_BASE_URL', 'http://atlas.futurity.com.ec:7565').strip()
+    # Determinar el dominio base del enlace público
+    public_base = os.getenv('PUBLIC_BASE_URL', 'https://atlas.futurity.com.ec').strip()
     if not public_base.endswith("/"):
         public_base += "/"
         
@@ -3020,14 +3021,17 @@ def api_bodega_ingreso():
     token = request.headers.get('Authorization')
     user = None
     role = None
+    user_name = 'ADMIN'
     if token and token.startswith("Bearer "):
         from utils_jwt import verify_token
         user = verify_token(token)
         if user:
             role = user.get('role')
+            user_name = user.get('nombre') or user.get('sub') or 'BODEGA'
     elif 'user_id' in session:
         user = {'sub': session['user_id']}
         role = session.get('user_role')
+        user_name = session.get('user_name') or 'BODEGA'
 
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
@@ -3035,27 +3039,87 @@ def api_bodega_ingreso():
         return jsonify({"status": "error", "message": "No tienes privilegios para ingresar insumos a bodega."}), 403
         
     datos = request.get_json() or {}
-    id_material = datos.get('id_material')
-    cantidad = datos.get('cantidad')
     
-    if not id_material or not cantidad or int(cantidad) <= 0:
-        return jsonify({"status": "error", "message": "Parámetros inválidos"}), 400
-        
+    # Check if multiple items array is provided or single item
+    items = datos.get('items')
+    if not items or not isinstance(items, list):
+        id_material = datos.get('id_material')
+        cantidad = datos.get('cantidad')
+        if id_material and cantidad and int(cantidad) > 0:
+            items = [{'id_material': int(id_material), 'cantidad': int(cantidad)}]
+        else:
+            return jsonify({"status": "error", "message": "Debe proporcionar al menos un material válido y cantidad mayor a cero."}), 400
+
+    # Filter valid items
+    valid_items = []
+    for it in items:
+        m_id = it.get('id_material')
+        cant = it.get('cantidad')
+        if m_id and cant and int(cant) > 0:
+            valid_items.append({
+                'id_material': int(m_id),
+                'cantidad': int(cant)
+            })
+
+    if not valid_items:
+        return jsonify({"status": "error", "message": "No hay ítems válidos para procesar."}), 400
+
+    fecha_ingreso_str = datos.get('fecha') or datos.get('fecha_ingreso') or date.today().isoformat()
+    documento = datos.get('documento') or datos.get('factura') or None
+    proveedor = datos.get('proveedor') or None
+    comentario = datos.get('comentario') or datos.get('observacion') or None
+
     conexion = get_db_connection()
     if not conexion:
-        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+        return jsonify({"status": "error", "message": "Error de conexión con la base de datos"}), 500
         
     try:
-        cursor = conexion.cursor()
+        cursor = conexion.cursor(dictionary=True)
+        total_items_count = len(valid_items)
+        total_unidades_count = sum(it['cantidad'] for it in valid_items)
+        
+        # 1. Insert header in compras_ingresos_bodega
         cursor.execute("""
-            UPDATE materiales 
-            SET stock_bodega = stock_bodega + %s 
-            WHERE id_material = %s
-        """, (int(cantidad), int(id_material)))
+            INSERT INTO compras_ingresos_bodega 
+            (fecha_ingreso, documento, proveedor, comentario, registrado_por, total_items, total_unidades)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (fecha_ingreso_str, documento, proveedor, comentario, user_name, total_items_count, total_unidades_count))
+        id_ingreso = cursor.lastrowid
+
+        # 2. Process each item
+        for it in valid_items:
+            m_id = it['id_material']
+            cant = it['cantidad']
+            
+            # Get current stock
+            cursor.execute("SELECT stock_bodega FROM materiales WHERE id_material = %s FOR UPDATE", (m_id,))
+            mat_row = cursor.fetchone()
+            stock_ant = mat_row['stock_bodega'] if mat_row and mat_row['stock_bodega'] is not None else 0
+            stock_nuevo = stock_ant + cant
+
+            # Update material stock
+            cursor.execute("""
+                UPDATE materiales 
+                SET stock_bodega = stock_bodega + %s 
+                WHERE id_material = %s
+            """, (cant, m_id))
+
+            # Insert detail item in compras_ingresos_items
+            cursor.execute("""
+                INSERT INTO compras_ingresos_items 
+                (id_ingreso, id_material, cantidad, stock_anterior, stock_nuevo)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (id_ingreso, m_id, cant, stock_ant, stock_nuevo))
+
         conexion.commit()
-        return jsonify({"status": "ok", "message": "Material ingresado a bodega con éxito"})
+        return jsonify({
+            "status": "ok", 
+            "message": f"Se registraron exitosamente {total_items_count} producto(s) ({total_unidades_count} unidades en total) a Bodega Central.",
+            "id_ingreso": id_ingreso
+        })
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        conexion.rollback()
+        return jsonify({"status": "error", "message": f"Error al procesar ingreso: {str(e)}"}), 500
     finally:
         cursor.close()
         conexion.close()
@@ -3066,14 +3130,17 @@ def api_tecnico_entrega():
     token = request.headers.get('Authorization')
     user = None
     role = None
+    user_name = 'ADMIN'
     if token and token.startswith("Bearer "):
         from utils_jwt import verify_token
         user = verify_token(token)
         if user:
             role = user.get('role')
+            user_name = user.get('nombre') or user.get('sub') or 'BODEGA'
     elif 'user_id' in session:
         user = {'sub': session['user_id']}
         role = session.get('user_role')
+        user_name = session.get('user_name') or 'BODEGA'
 
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
@@ -3081,48 +3148,329 @@ def api_tecnico_entrega():
         return jsonify({"status": "error", "message": "No tienes privilegios para entregar insumos a técnicos."}), 403
         
     datos = request.get_json() or {}
-    placa_vehiculo = datos.get('tecnico_nombre') or datos.get('placa_vehiculo')
-    id_material = datos.get('id_material')
-    cantidad = datos.get('cantidad')
-    
-    if not placa_vehiculo or not id_material or not cantidad or int(cantidad) <= 0:
-        return jsonify({"status": "error", "message": "Parámetros inválidos"}), 400
+    placa_vehiculo = datos.get('placa_vehiculo') or datos.get('tecnico_nombre')
+    tecnico_nombre = datos.get('tecnico_responsable') or datos.get('tecnico_nombre') or placa_vehiculo
+
+    if not placa_vehiculo:
+        return jsonify({"status": "error", "message": "Debe especificar la placa del vehículo destino."}), 400
+
+    # Multiple items vs single item
+    items = datos.get('items')
+    if not items or not isinstance(items, list):
+        id_material = datos.get('id_material')
+        cantidad = datos.get('cantidad')
+        if id_material and cantidad and int(cantidad) > 0:
+            items = [{'id_material': int(id_material), 'cantidad': int(cantidad)}]
+        else:
+            return jsonify({"status": "error", "message": "Debe especificar al menos un material válido con cantidad mayor a cero."}), 400
+
+    valid_items = []
+    for it in items:
+        m_id = it.get('id_material')
+        cant = it.get('cantidad')
+        if m_id and cant and int(cant) > 0:
+            valid_items.append({
+                'id_material': int(m_id),
+                'cantidad': int(cant)
+            })
+
+    if not valid_items:
+        return jsonify({"status": "error", "message": "No hay ítems válidos para entregar."}), 400
         
     conexion = get_db_connection()
     if not conexion:
-        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+        return jsonify({"status": "error", "message": "Error de conexión con la base de datos"}), 500
         
     try:
-        cursor = conexion.cursor()
+        cursor = conexion.cursor(dictionary=True)
         
-        # 1. Validar stock en bodega
-        cursor.execute("SELECT stock_bodega FROM materiales WHERE id_material = %s", (int(id_material),))
-        row = cursor.fetchone()
-        if not row or row[0] < int(cantidad):
-            return jsonify({"status": "error", "message": "Stock insuficiente en bodega"}), 400
+        # 1. Validar que haya stock suficiente para TODOS los ítems antes de proceder
+        for it in valid_items:
+            m_id = it['id_material']
+            cant = it['cantidad']
+            cursor.execute("SELECT nombre_material, stock_bodega, unidad_medida FROM materiales WHERE id_material = %s FOR UPDATE", (m_id,))
+            mat_row = cursor.fetchone()
+            if not mat_row:
+                return jsonify({"status": "error", "message": f"El material ID {m_id} no existe en el catálogo."}), 400
+            stock_disp = mat_row['stock_bodega'] or 0
+            if stock_disp < cant:
+                return jsonify({
+                    "status": "error", 
+                    "message": f"Stock insuficiente en Bodega Central para '{mat_row['nombre_material']}'. Disponible: {stock_disp} {mat_row['unidad_medida']}, Solicitado: {cant} {mat_row['unidad_medida']}."
+                }), 400
+
+        # 2. Registrar cabecera en requisiciones_entregas_placas
+        documento_req = datos.get('documento') or None
+        fecha_entrega_str = datos.get('fecha') or date.today().isoformat()
+        comentario_req = datos.get('comentario') or None
+        
+        cursor.execute("""
+            INSERT INTO requisiciones_entregas_placas
+            (documento_req, placa_vehiculo, tecnico_responsable, fecha_entrega, comentario, registrado_por, total_items, total_unidades)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (documento_req, placa_vehiculo, tecnico_nombre, fecha_entrega_str, comentario_req, user_name, len(valid_items), sum(it['cantidad'] for it in valid_items)))
+        id_requisicion = cursor.lastrowid
+
+        # 3. Descontar de bodega, sumar al vehículo y registrar detalle
+        total_unidades = 0
+        for it in valid_items:
+            m_id = it['id_material']
+            cant = it['cantidad']
+            total_unidades += cant
+
+            # Stock actual antes del descuento
+            cursor.execute("SELECT stock_bodega FROM materiales WHERE id_material = %s FOR UPDATE", (m_id,))
+            mat_cur = cursor.fetchone()
+            stock_disp = mat_cur['stock_bodega'] or 0
+
+            # Descontar de bodega
+            cursor.execute("""
+                UPDATE materiales 
+                SET stock_bodega = stock_bodega - %s 
+                WHERE id_material = %s
+            """, (cant, m_id))
             
-        # 2. Descontar de bodega
-        cursor.execute("""
-            UPDATE materiales 
-            SET stock_bodega = stock_bodega - %s 
-            WHERE id_material = %s
-        """, (int(cantidad), int(id_material)))
-        
-        # 3. Sumar a la placa
-        cursor.execute("""
-            INSERT INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible)
-            VALUES (%s, %s, %s)
-            ON DUPLICATE KEY UPDATE cantidad_disponible = cantidad_disponible + VALUES(cantidad_disponible)
-        """, (placa_vehiculo, int(id_material), int(cantidad)))
+            # Sumar a inventario del vehículo
+            cursor.execute("""
+                INSERT INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE cantidad_disponible = cantidad_disponible + VALUES(cantidad_disponible)
+            """, (placa_vehiculo, m_id, cant))
+
+            # Registrar detalle en requisiciones_entregas_items
+            cursor.execute("""
+                INSERT INTO requisiciones_entregas_items
+                (id_requisicion, id_material, cantidad, stock_bodega_anterior, stock_bodega_nuevo)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (id_requisicion, m_id, cant, stock_disp, stock_disp - cant))
+
+            # Registrar en historial de traspasos
+            cursor.execute("""
+                INSERT INTO traspasos_tecnicos 
+                (tecnico_origen, placa_origen, tecnico_destino, placa_destino, id_material, cantidad, agente_registro)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, ('BODEGA CENTRAL', 'BODEGA', tecnico_nombre, placa_vehiculo, m_id, cant, user_name))
         
         conexion.commit()
-        return jsonify({"status": "ok", "message": "Material entregado a la placa con éxito"})
+        return jsonify({
+            "status": "ok", 
+            "message": f"Se entregaron exitosamente {len(valid_items)} producto(s) ({total_unidades} unidades en total) a la placa {placa_vehiculo}.",
+            "id_requisicion": id_requisicion
+        })
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": f"Error al entregar materiales: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+# ==========================================
+# 🏢 ENDPOINTS DE PROVEEDORES
+# ==========================================
+
+@admin_bp.route('/api/admin/proveedores', methods=['GET'])
+def api_get_proveedores():
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM proveedores WHERE activo = 1 ORDER BY nombre_empresa ASC")
+        rows = cursor.fetchall()
+        return jsonify({"status": "ok", "proveedores": rows})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@admin_bp.route('/api/admin/proveedores', methods=['POST'])
+def api_create_proveedor():
+    datos = request.get_json() or {}
+    nombre_empresa = datos.get('nombre_empresa', '').strip()
+    if not nombre_empresa:
+        return jsonify({"status": "error", "message": "El nombre o razón social de la empresa es obligatorio."}), 400
+
+    ruc = datos.get('ruc', '').strip() or None
+    contacto_nombre = datos.get('contacto_nombre', '').strip() or None
+    telefono = datos.get('telefono', '').strip() or None
+    email = datos.get('email', '').strip() or None
+    direccion = datos.get('direccion', '').strip() or None
+    observaciones = datos.get('observaciones', '').strip() or None
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+    try:
+        cursor = conexion.cursor()
+        cursor.execute("""
+            INSERT INTO proveedores 
+            (ruc, nombre_empresa, contacto_nombre, telefono, email, direccion, observaciones, activo)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 1)
+        """, (ruc, nombre_empresa, contacto_nombre, telefono, email, direccion, observaciones))
+        conexion.commit()
+        return jsonify({"status": "ok", "message": "Proveedor registrado exitosamente."})
     except Exception as e:
         conexion.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()
         conexion.close()
+
+
+@admin_bp.route('/api/admin/proveedores/<int:id_proveedor>', methods=['PUT'])
+def api_update_proveedor(id_proveedor):
+    datos = request.get_json() or {}
+    nombre_empresa = datos.get('nombre_empresa', '').strip()
+    if not nombre_empresa:
+        return jsonify({"status": "error", "message": "El nombre o razón social de la empresa es obligatorio."}), 400
+
+    ruc = datos.get('ruc', '').strip() or None
+    contacto_nombre = datos.get('contacto_nombre', '').strip() or None
+    telefono = datos.get('telefono', '').strip() or None
+    email = datos.get('email', '').strip() or None
+    direccion = datos.get('direccion', '').strip() or None
+    observaciones = datos.get('observaciones', '').strip() or None
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+    try:
+        cursor = conexion.cursor()
+        cursor.execute("""
+            UPDATE proveedores 
+            SET ruc = %s, nombre_empresa = %s, contacto_nombre = %s, telefono = %s, email = %s, direccion = %s, observaciones = %s
+            WHERE id_proveedor = %s
+        """, (ruc, nombre_empresa, contacto_nombre, telefono, email, direccion, observaciones, id_proveedor))
+        conexion.commit()
+        return jsonify({"status": "ok", "message": "Proveedor actualizado exitosamente."})
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@admin_bp.route('/api/admin/proveedores/<int:id_proveedor>', methods=['DELETE'])
+def api_delete_proveedor(id_proveedor):
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+    try:
+        cursor = conexion.cursor()
+        cursor.execute("UPDATE proveedores SET activo = 0 WHERE id_proveedor = %s", (id_proveedor,))
+        conexion.commit()
+        return jsonify({"status": "ok", "message": "Proveedor eliminado exitosamente."})
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+# ==========================================
+# 📦 HISTORIAL DE COMPRAS / INGRESOS BODEGA
+# ==========================================
+
+@admin_bp.route('/api/admin/inventario/compras', methods=['GET'])
+def api_get_historial_compras():
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT id_ingreso, fecha_ingreso, documento, proveedor, comentario, registrado_por, total_items, total_unidades, fecha_registro 
+            FROM compras_ingresos_bodega 
+            ORDER BY fecha_registro DESC 
+            LIMIT 300
+        """)
+        compras = cursor.fetchall()
+        return jsonify({"status": "ok", "compras": compras})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@admin_bp.route('/api/admin/inventario/compras/<int:id_ingreso>', methods=['GET'])
+def api_get_detalle_compra(id_ingreso):
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT ci.id_item, ci.id_material, m.codigo_material, m.nombre_material, m.unidad_medida, 
+                   ci.cantidad, ci.stock_anterior, ci.stock_nuevo
+            FROM compras_ingresos_items ci
+            JOIN materiales m ON ci.id_material = m.id_material
+            WHERE ci.id_ingreso = %s
+            ORDER BY m.nombre_material ASC
+        """, (id_ingreso,))
+        items = cursor.fetchall()
+        return jsonify({"status": "ok", "items": items})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+# ==========================================
+# 🚚 HISTORIAL DE REQUISICIONES / ENTREGAS PLACAS
+# ==========================================
+
+@admin_bp.route('/api/admin/inventario/requisiciones', methods=['GET'])
+def api_get_historial_requisiciones():
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT id_requisicion, documento_req, placa_vehiculo, tecnico_responsable, fecha_entrega, comentario, registrado_por, total_items, total_unidades, fecha_registro
+            FROM requisiciones_entregas_placas
+            ORDER BY fecha_registro DESC
+            LIMIT 300
+        """)
+        reqs = cursor.fetchall()
+        return jsonify({"status": "ok", "requisiciones": reqs})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@admin_bp.route('/api/admin/inventario/requisiciones/<int:id_requisicion>', methods=['GET'])
+def api_get_detalle_requisicion(id_requisicion):
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión"}), 500
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT ri.id_item, ri.id_material, m.codigo_material, m.nombre_material, m.unidad_medida, 
+                   ri.cantidad, ri.stock_bodega_anterior, ri.stock_bodega_nuevo
+            FROM requisiciones_entregas_items ri
+            JOIN materiales m ON ri.id_material = m.id_material
+            WHERE ri.id_requisicion = %s
+            ORDER BY m.nombre_material ASC
+        """, (id_requisicion,))
+        items = cursor.fetchall()
+        return jsonify({"status": "ok", "items": items})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
 
 
 @admin_bp.route('/api/admin/inventario/tecnico/devolucion', methods=['POST'])
@@ -3989,4 +4337,135 @@ def editar_visita(id_visita):
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()
-        conexion.close()
+        conexion.close()
+
+
+@admin_bp.route('/api/admin/inventario/rastreo_sn/<sn>', methods=['GET'])
+def api_rastreo_sn(sn):
+    """
+    Rastreador global de número de serie (ONU / Router)
+    Busca en directorio de clientes (activos), visitas técnicas y equipos retirados.
+    """
+    sn_clean = sn.strip()
+    if not sn_clean:
+        return jsonify({"status": "error", "message": "Número de serie no especificado"}), 400
+
+    conexion = get_db_connection()
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        like_pattern = f"%{sn_clean}%"
+        
+        # 1. Buscar en directorio_clientes
+        sql_clientes = """
+            SELECT contrato, nombre_cliente, cedula, direccion,
+                   numero_serie AS onu_sn, router_principal, numero_serie_router AS router_sn,
+                   router_secundario, numero_serie_router_secundario AS router2_sn
+            FROM directorio_clientes
+            WHERE numero_serie LIKE %s 
+               OR numero_serie_router LIKE %s 
+               OR numero_serie_router_secundario LIKE %s
+            LIMIT 5
+        """
+        cursor.execute(sql_clientes, (like_pattern, like_pattern, like_pattern))
+        clientes_matches = cursor.fetchall()
+
+        # 2. Buscar en equipos_retirados_visitas
+        sql_retirados = """
+            SELECT id_retiro, id_visita, tipo_equipo, numero_serie, modelo,
+                   motivo_retiro, observacion_retiro, tecnico, placa_vehiculo,
+                   estado_custodia, fecha_retiro, fecha_devolucion_bodega, recibido_por
+            FROM equipos_retirados_visitas
+            WHERE numero_serie LIKE %s
+            ORDER BY fecha_retiro DESC
+            LIMIT 10
+        """
+        cursor.execute(sql_retirados, (like_pattern,))
+        retirados_matches = cursor.fetchall()
+        for r in retirados_matches:
+            if r.get('fecha_retiro'):
+                r['fecha_retiro'] = str(r['fecha_retiro'])
+            if r.get('fecha_devolucion_bodega'):
+                r['fecha_devolucion_bodega'] = str(r['fecha_devolucion_bodega'])
+
+        # 3. Buscar en visitas_tecnicas
+        sql_visitas = """
+            SELECT id_visita, contrato, cliente, direccion, tecnico_principal, tecnico_apoyo,
+                   fecha_programada, estado, numero_serie_onu, numero_serie_router,
+                   numero_serie_router_secundario, modelo_onu, modelo_router
+            FROM visitas_tecnicas
+            WHERE numero_serie_onu LIKE %s 
+               OR numero_serie_router LIKE %s 
+               OR numero_serie_router_secundario LIKE %s
+            ORDER BY fecha_programada DESC
+            LIMIT 10
+        """
+        cursor.execute(sql_visitas, (like_pattern, like_pattern, like_pattern))
+        visitas_matches = cursor.fetchall()
+        for v in visitas_matches:
+            if v.get('fecha_programada'):
+                v['fecha_programada'] = str(v['fecha_programada'])
+
+        # Determinar estado principal
+        estado_global = "NO_ENCONTRADO"
+        resumen = {}
+
+        if clientes_matches:
+            c = clientes_matches[0]
+            tipo_coincide = "ONU" if sn_clean.lower() in (c.get('onu_sn') or '').lower() else "ROUTER"
+            estado_global = "INSTALADO_EN_CLIENTE"
+            resumen = {
+                "tipo": "CLIENTE_ACTIVO",
+                "contrato": c.get('contrato'),
+                "cliente": c.get('nombre_cliente'),
+                "cedula": c.get('cedula'),
+                "direccion": c.get('direccion'),
+                "equipo_coincide": tipo_coincide,
+                "onu_sn": c.get('onu_sn'),
+                "router_sn": c.get('router_sn')
+            }
+        elif retirados_matches:
+            r = retirados_matches[0]
+            if r.get('estado_custodia') == 'EN_VEHICULO':
+                estado_global = "RETIRADO_EN_CUSTODIA"
+            else:
+                estado_global = "RETIRADO_DEVUELTO_BODEGA"
+            resumen = {
+                "tipo": "EQUIPO_RETIRADO",
+                "tecnico": r.get('tecnico'),
+                "placa": r.get('placa_vehiculo'),
+                "estado_custodia": r.get('estado_custodia'),
+                "motivo": r.get('motivo_retiro'),
+                "observacion": r.get('observacion_retiro'),
+                "fecha_retiro": r.get('fecha_retiro'),
+                "fecha_devolucion": r.get('fecha_devolucion_bodega'),
+                "recibido_por": r.get('recibido_por')
+            }
+        elif visitas_matches:
+            v = visitas_matches[0]
+            estado_global = "REGISTRADO_EN_VISITA"
+            resumen = {
+                "tipo": "VISITA_TECNICA",
+                "id_visita": v.get('id_visita'),
+                "contrato": v.get('contrato'),
+                "cliente": v.get('cliente'),
+                "tecnico": v.get('tecnico_principal'),
+                "fecha": v.get('fecha_programada'),
+                "estado_visita": v.get('estado')
+            }
+
+        return jsonify({
+            "status": "ok",
+            "sn_buscado": sn_clean,
+            "estado_global": estado_global,
+            "resumen": resumen,
+            "clientes": clientes_matches,
+            "retirados": retirados_matches,
+            "visitas": visitas_matches
+        })
+    except Exception as e:
+        print(f"Error en api_rastreo_sn: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+

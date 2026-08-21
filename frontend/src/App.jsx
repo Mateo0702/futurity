@@ -156,7 +156,21 @@ function App() {
     setUser(newUser);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      if (token) {
+        await fetch('/api/tecnico/logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ tecnico: user?.nombre || user?.username })
+        });
+      }
+    } catch (e) {
+      console.warn("Error notificando logout:", e);
+    }
     localStorage.clear();
     sessionStorage.clear();
     if (window.AndroidBridge) {

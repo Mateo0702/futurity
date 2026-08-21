@@ -152,7 +152,7 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
     let ocupados = 0;
 
     list.forEach(u => {
-      if (u.conectado === 1 || u.conectado === 2) {
+      if (u.conectado === 1) {
         activos++;
         if (u.estado?.includes('Trabajando') || u.estado?.includes('En camino')) {
           ocupados++;
@@ -221,10 +221,10 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
         else if (difSegs > 0) tiempoTexto = `Hace ${difSegs}s`;
       }
 
-      if (u.conectado === 1 || u.conectado === 2) {
+      if (u.conectado === 1) {
         currentActiveKeys.push(key);
         let icono = iconoOffline;
-        let opacityVal = u.conectado === 2 ? 0.6 : 1.0;
+        let opacityVal = 1.0;
 
         if (u.alerta_panico) {
           icono = iconoPanico;
@@ -389,7 +389,7 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', flexGrow: 1, paddingRight: '4px' }}>
             {ubicaciones.length > 0 ? (
               ubicaciones.map((u, idx) => {
-                const isOnline = u.conectado === 1 || u.conectado === 2;
+                const isOnline = u.conectado === 1;
                 const perfilUrl = `/static/uploads/${u.foto_perfil || 'default_avatar.png'}`;
                 const isPanic = u.alerta_panico === 1;
 
