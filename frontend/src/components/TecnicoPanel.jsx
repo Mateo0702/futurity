@@ -1778,7 +1778,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
   return (
 
-    <div className="panel-container tecnico-scroll-container" style={{ padding: '16px', maxWidth: '800px', margin: '0 auto', width: '100%', boxSizing: 'border-box', overscrollBehaviorY: 'none', overscrollBehavior: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}>
+    <div className="panel-container tecnico-scroll-container" style={{ padding: '16px 16px 90px 16px', maxWidth: '800px', margin: '0 auto', width: '100%', minHeight: '100%', boxSizing: 'border-box', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}>
       
       {/* Clean Top Header (100% Mobile Responsive) */}
       <div style={{

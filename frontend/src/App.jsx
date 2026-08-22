@@ -293,7 +293,9 @@ function App() {
     <>
       <ToastContainer />
       {token && user && ((user.rol === 'TECNICO' || user.role === 'TECNICO' || user.user_role === 'TECNICO') || activeTab === 'tecnico-panel') ? (
-        <TecnicoPanel token={token} user={user} tecnicoNombreParam={tecnicoNombre} onLogout={handleLogout} />
+        <div className="tecnico-panel-wrapper">
+          <TecnicoPanel token={token} user={user} tecnicoNombreParam={tecnicoNombre} onLogout={handleLogout} />
+        </div>
       ) : token && user ? (
         <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
           {/* Barra Lateral (Sidebar) */}

@@ -49,24 +49,31 @@ input, select, textarea, button, .form-control, .form-select {
 html, body {
   background-color: var(--bg-color);
   color: var(--text-main);
-  overscroll-behavior-y: none !important;
-  overscroll-behavior-x: none !important;
-  overscroll-behavior: none !important;
   -webkit-overflow-scrolling: touch;
 }
 
 body {
   display: flex;
   height: 100vh;
+  width: 100vw;
   overflow: hidden;
 }
 
 #root {
   width: 100%;
   height: 100%;
-  overscroll-behavior-y: none !important;
-  overscroll-behavior-x: none !important;
-  overscroll-behavior: none !important;
+  overflow: hidden;
+}
+
+/* Contenedor principal de Técnico con scroll vertical asegurado */
+.tecnico-panel-wrapper {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
 }
 
 /* Anti Pull-to-Refresh y Scroll Control en Dispositivos Móviles Android/iOS */
@@ -75,11 +82,9 @@ body {
 .modal-scrollable-content,
 .panel-container,
 .modal-body {
-  overscroll-behavior-y: none !important;
-  overscroll-behavior-x: none !important;
-  overscroll-behavior: none !important;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
+  overscroll-behavior-y: contain;
 }
 
 /* Evitar cualquier gesto de recarga o arrastre en el canvas de firma */
