@@ -699,6 +699,116 @@ def buscar_completo_json():
         conn.close()
 
 
+@atenciones_bp.route('/api/cliente/actualizar_datos_tecnicos', methods=['POST'])
+def actualizar_datos_tecnicos_cliente():
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role')}
+
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    user_role = user.get('role') or user.get('rol')
+    if user_role not in ['ADMIN', 'ASESOR', 'ATC', 'CALIDAD', 'BODEGA']:
+        return jsonify({"status": "error", "message": "No tienes permisos para modificar datos técnicos de clientes"}), 403
+
+    datos = request.get_json() or {}
+    contrato = str(datos.get('contrato', '')).strip()
+    if not contrato:
+        return jsonify({"status": "error", "message": "Falta el número de contrato"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+
+    cursor = conn.cursor(dictionary=True)
+    try:
+        from utils import normalizar_gpon_sn, MAPEO_NODOS
+        raw_sn = datos.get('numero_serie') or ''
+        sn_normalizado = normalizar_gpon_sn(raw_sn) if raw_sn else ''
+        
+        ip_cliente = str(datos.get('ip_cliente', '')).strip()
+        ip_nodo = str(datos.get('ip_nodo', '')).strip()
+        modelo_ont = str(datos.get('modelo_ont', '')).strip()
+        router_principal = str(datos.get('router_principal', '')).strip()
+        numero_serie_router = str(datos.get('numero_serie_router', '')).strip().upper()
+        router_secundario = str(datos.get('router_secundario', '')).strip()
+        numero_serie_router_secundario = str(datos.get('numero_serie_router_secundario', '')).strip().upper()
+        tipo_mesh = str(datos.get('tipo_mesh', '')).strip()
+        modo_acceso = str(datos.get('modo_acceso', '')).strip()
+        cantidad_routers = int(datos.get('cantidad_routers', 1)) if datos.get('cantidad_routers') else 1
+
+        c_val = contrato.upper()
+        c_clean = c_val.lstrip('0')
+
+        query_update = """
+            UPDATE directorio_clientes
+            SET ip_cliente = %s,
+                ip_nodo = %s,
+                numero_serie = %s,
+                modelo_ont = %s,
+                router_principal = %s,
+                numero_serie_router = %s,
+                router_secundario = %s,
+                numero_serie_router_secundario = %s,
+                tipo_mesh = %s,
+                cantidad_routers = %s,
+                modo_acceso = %s
+            WHERE UPPER(contrato) = %s OR UPPER(contrato) = %s
+        """
+        cursor.execute(query_update, (
+            ip_cliente or None,
+            ip_nodo or None,
+            sn_normalizado or None,
+            modelo_ont or None,
+            router_principal or None,
+            numero_serie_router or None,
+            router_secundario or None,
+            numero_serie_router_secundario or None,
+            tipo_mesh or None,
+            cantidad_routers,
+            modo_acceso or None,
+            c_val, c_clean
+        ))
+        conn.commit()
+
+        # Consultar los datos actualizados para responder
+        cursor.execute("""
+            SELECT contrato, cedula, empresa, nombre_cliente AS cliente, zona AS sector, 
+                   telefono1, telefono2, telefono3, fecha_instalacion,
+                   total_mensual, antiguedad, numero_serie, producto, direccion, forma_pago,
+                   velocidad_mbps, ip_cliente, ip_nodo, vendedor, email,
+                   modelo_ont, router_principal, numero_serie_router, router_secundario, numero_serie_router_secundario, tipo_mesh,
+                   cantidad_routers, modo_acceso
+            FROM directorio_clientes 
+            WHERE UPPER(contrato) = %s OR UPPER(contrato) = %s
+            LIMIT 1
+        """, (c_val, c_clean))
+        updated_row = cursor.fetchone()
+
+        nodo_nombre = MAPEO_NODOS.get(updated_row.get('ip_nodo'), updated_row.get('ip_nodo')) if updated_row else ''
+
+        return jsonify({
+            "status": "success",
+            "message": f"Datos técnicos del contrato #{contrato} actualizados correctamente.",
+            "cliente_actualizado": {
+                **updated_row,
+                "nodo_nombre": nodo_nombre
+            } if updated_row else {}
+        })
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"status": "error", "message": f"Error al actualizar datos técnicos: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @atenciones_bp.route('/api/admin/smartolt/diagnostico/<sn>', methods=['GET'])
 def diagnostico_smartolt(sn):
     token = request.headers.get('Authorization')

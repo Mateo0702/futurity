@@ -12,7 +12,86 @@ function BuscadorClienteTab({ token }) {
   const [diagnosticResult, setDiagnosticResult] = useState(null);
   const [diagnosticError, setDiagnosticError] = useState('');
 
+  // Technical Edit Modal states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editMessage, setEditMessage] = useState({ type: '', text: '' });
+  const [editForm, setEditForm] = useState({
+    contrato: '',
+    ip_cliente: '',
+    ip_nodo: '',
+    numero_serie: '',
+    modelo_ont: '',
+    router_principal: '',
+    numero_serie_router: '',
+    router_secundario: '',
+    numero_serie_router_secundario: '',
+    tipo_mesh: '',
+    cantidad_routers: 1,
+    modo_acceso: ''
+  });
+
   const searchTimeoutRef = useRef(null);
+
+  const handleOpenEditModal = (client) => {
+    if (!client) return;
+    setEditForm({
+      contrato: client.contrato || '',
+      ip_cliente: client.ip_cliente || '',
+      ip_nodo: client.ip_nodo || '',
+      numero_serie: client.numero_serie === 'S/N' ? '' : (client.numero_serie || ''),
+      modelo_ont: client.modelo_ont || '',
+      router_principal: client.router_principal || '',
+      numero_serie_router: client.numero_serie_router || '',
+      router_secundario: client.router_secundario || '',
+      numero_serie_router_secundario: client.numero_serie_router_secundario || '',
+      tipo_mesh: client.tipo_mesh || '',
+      cantidad_routers: client.cantidad_routers || 1,
+      modo_acceso: client.modo_acceso || ''
+    });
+    setEditMessage({ type: '', text: '' });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    setIsSavingEdit(true);
+    setEditMessage({ type: '', text: '' });
+
+    try {
+      const res = await fetch('/api/cliente/actualizar_datos_tecnicos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(editForm)
+      });
+      const data = await res.json();
+
+      if (res.ok && data.status === 'success') {
+        setEditMessage({ type: 'success', text: data.message || 'Datos actualizados con éxito.' });
+        // Actualizar el estado del cliente seleccionado en pantalla
+        if (selectedClient && data.cliente_actualizado) {
+          setSelectedClient(prev => ({
+            ...prev,
+            ...data.cliente_actualizado,
+            numero_serie: data.cliente_actualizado.numero_serie || 'S/N'
+          }));
+        }
+        setTimeout(() => {
+          setShowEditModal(false);
+        }, 1200);
+      } else {
+        setEditMessage({ type: 'error', text: data.message || 'Error al guardar los cambios.' });
+      }
+    } catch (err) {
+      console.error("Error al actualizar datos técnicos:", err);
+      setEditMessage({ type: 'error', text: 'Error de conexión con el servidor.' });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   // Debounced Search Logic
   const handleSearchInput = (val) => {
@@ -220,11 +299,35 @@ function BuscadorClienteTab({ token }) {
                     {selectedClient.cliente}
                   </h3>
                 </div>
-                {selectedClient.cedula && (
-                  <span style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', fontWeight: 800, fontSize: '0.82rem', padding: '5px 12px', borderRadius: '10px' }}>
-                    🪪 {selectedClient.cedula}
-                  </span>
-                )}
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {selectedClient.cedula && (
+                    <span style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', fontWeight: 800, fontSize: '0.82rem', padding: '5px 12px', borderRadius: '10px' }}>
+                      🪪 {selectedClient.cedula}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditModal(selectedClient)}
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.15) 0%, rgba(3, 105, 161, 0.25) 100%)',
+                      border: '1px solid rgba(2, 132, 199, 0.4)',
+                      color: '#0284c7',
+                      fontWeight: 800,
+                      fontSize: '0.82rem',
+                      padding: '6px 14px',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 8px rgba(2, 132, 199, 0.15)'
+                    }}
+                    title="Modificar IP, Equipos, SN o Nodo de este cliente"
+                  >
+                    <i className="fa-solid fa-pen-to-square"></i>
+                    <span>✏️ Editar Datos Técnicos</span>
+                  </button>
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 20px' }}>
@@ -247,8 +350,18 @@ function BuscadorClienteTab({ token }) {
                   </span>
                 </div>
                 <div>
-                  <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>🌐 IP Cliente</strong>
-                  <span style={{ color: 'var(--text-main)', fontSize: '0.92rem', fontWeight: 700 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>🌐 IP Cliente</strong>
+                    <button 
+                      type="button" 
+                      onClick={() => handleOpenEditModal(selectedClient)}
+                      style={{ background: 'transparent', border: 'none', color: '#0284c7', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, padding: 0 }}
+                      title="Editar IP"
+                    >
+                      ✏️
+                    </button>
+                  </div>
+                  <span style={{ color: 'var(--text-main)', fontSize: '0.92rem', fontWeight: 800 }}>
                     {selectedClient.ip_cliente || 'N/D'}
                   </span>
                 </div>
@@ -511,6 +624,318 @@ function BuscadorClienteTab({ token }) {
           <p style={{ margin: '8px 0 0 0', color: 'var(--sidebar-text)', fontSize: '0.95rem', fontWeight: 500 }}>
             Ingresa el número de contrato, nombre, teléfono o identificación en el buscador superior para desplegar su ficha técnica.
           </p>
+        </div>
+      )}
+
+      {/* MODAL DE EDICIÓN DE DATOS TÉCNICOS E IP */}
+      {showEditModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'var(--card-bg)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '24px',
+            width: '100%',
+            maxWidth: '680px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'rgba(255, 255, 255, 0.02)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'rgba(2, 132, 199, 0.15)', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem' }}>
+                  <i className="fa-solid fa-network-wired"></i>
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                    Editar Datos Técnicos & IP
+                  </h3>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
+                    Contrato #{editForm.contrato} — {selectedClient?.cliente}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--sidebar-text)', fontSize: '1.2rem', cursor: 'pointer', padding: '4px 8px' }}
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            {/* Modal Form Body */}
+            <form onSubmit={handleSaveEdit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Alert Feedback */}
+              {editMessage.text && (
+                <div style={{
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  fontSize: '0.88rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: editMessage.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                  border: `1px solid ${editMessage.type === 'success' ? '#10b981' : '#ef4444'}`,
+                  color: editMessage.type === 'success' ? '#34d399' : '#f87171'
+                }}>
+                  <i className={`fa-solid ${editMessage.type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation'}`}></i>
+                  <span>{editMessage.text}</span>
+                </div>
+              )}
+
+              {/* SECCIÓN 1: RED E IP */}
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#0284c7', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <i className="fa-solid fa-globe"></i> 1. Red & Conectividad IP
+                </h4>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      🌐 IP Cliente / Dispositivo:
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.ip_cliente}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, ip_cliente: e.target.value.trim() }))}
+                      placeholder="Ej. 10.120.118.48"
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      🏢 IP Nodo / OLT:
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.ip_nodo}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, ip_nodo: e.target.value.trim() }))}
+                      placeholder="Ej. 10.101.1.18"
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      ⚙️ Modo de Acceso:
+                    </label>
+                    <select
+                      value={editForm.modo_acceso}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, modo_acceso: e.target.value }))}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700, boxSizing: 'border-box' }}
+                    >
+                      <option value="">-- No especificado --</option>
+                      <option value="ROUTER (DHCP / PPPoE)">ROUTER (DHCP / PPPoE)</option>
+                      <option value="BRIDGE">BRIDGE</option>
+                      <option value="IP ESTATICA">IP ESTÁTICA</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECCIÓN 2: ONT / ONU */}
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#10b981', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <i className="fa-solid fa-server"></i> 2. Equipo ONT / ONU
+                </h4>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      🟢 Modelo ONT / ONU:
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.modelo_ont}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, modelo_ont: e.target.value }))}
+                      placeholder="Ej. HUAWEI, TP-LINK XX530V..."
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      🏷️ Serie GPON (SN ONU):
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.numero_serie}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, numero_serie: e.target.value.toUpperCase() }))}
+                      placeholder="Ej. HWTC0811D192..."
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: '#d97706', fontSize: '0.9rem', fontWeight: 800, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SECCIÓN 3: ROUTERS WI-FI */}
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#8b5cf6', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <i className="fa-solid fa-wifi"></i> 3. Routers Wi-Fi & Mesh
+                </h4>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      📶 Router Principal:
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.router_principal}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, router_principal: e.target.value }))}
+                      placeholder="Ej. Router Huawei AX3 / TP-Link EX511"
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      Serie / MAC Router Principal:
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.numero_serie_router}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, numero_serie_router: e.target.value.toUpperCase() }))}
+                      placeholder="Opcional"
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      🔁 Router Secundario / Mesh:
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.router_secundario}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, router_secundario: e.target.value }))}
+                      placeholder="Dejar vacío si no tiene"
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      Serie Router Secundario:
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.numero_serie_router_secundario}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, numero_serie_router_secundario: e.target.value.toUpperCase() }))}
+                      placeholder="Opcional"
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      Tipo Conexión Mesh:
+                    </label>
+                    <select
+                      value={editForm.tipo_mesh}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, tipo_mesh: e.target.value }))}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700, boxSizing: 'border-box' }}
+                    >
+                      <option value="">-- Ninguno --</option>
+                      <option value="CABLEADO">🔌 CABLEADO</option>
+                      <option value="INALAMBRICO (MESH)">📶 INALÁMBRICO (MESH)</option>
+                      <option value="REDES DISTINTAS (AP)">🔀 REDES DISTINTAS (AP)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      Cantidad Total Routers:
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={editForm.cantidad_routers}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, cantidad_routers: parseInt(e.target.value) || 1 }))}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box', textAlign: 'center' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  disabled={isSavingEdit}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: '12px',
+                    border: '1px solid var(--border-color)',
+                    background: 'transparent',
+                    color: 'var(--sidebar-text)',
+                    fontWeight: 750,
+                    fontSize: '0.9rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  style={{
+                    padding: '10px 22px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                    color: 'white',
+                    fontWeight: 800,
+                    fontSize: '0.9rem',
+                    cursor: isSavingEdit ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 14px rgba(2, 132, 199, 0.3)'
+                  }}
+                >
+                  {isSavingEdit ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin"></i>
+                      <span>Guardando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-floppy-disk"></i>
+                      <span>Guardar Cambios</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
