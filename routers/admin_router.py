@@ -1091,6 +1091,23 @@ def format_datetime_val(dt_val):
         return str(dt_val)
 
 
+def normalizar_servicio_excel_calidad(serv_raw):
+    if not serv_raw:
+        return "INTERNET_GPON"
+    s = str(serv_raw).strip().upper()
+    if 'COMBO' in s:
+        if 'HFC' in s:
+            return 'COMBO_HFC'
+        return 'COMBO_GPON'
+    elif 'INTER' in s or 'MEGAS' in s or 'NET' in s or 'GPON' in s:
+        if 'HFC' in s:
+            return 'INTERNET_HFC'
+        return 'INTERNET_GPON'
+    elif 'TV' in s or 'CABLE' in s:
+        return 'TV'
+    return s
+
+
 def generar_excel_calidad(visitas, fecha_str):
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -1146,6 +1163,7 @@ def generar_excel_calidad(visitas, fecha_str):
         # Formatear fechas de forma segura
         f_reg = format_datetime_val(v.get('fecha_registro'))
         f_fin = format_datetime_val(v.get('hora_fin_visita'))
+        serv_formateado = normalizar_servicio_excel_calidad(v.get('servicio'))
         
         row_data = [
             f_reg,
@@ -1153,7 +1171,7 @@ def generar_excel_calidad(visitas, fecha_str):
             str(v.get('cliente') or '').upper(),
             str(v.get('telefonos') or ''),
             str(v.get('sector') or '').upper(),
-            str(v.get('servicio') or '').upper(),
+            serv_formateado,
             str(v.get('solucion_tecnico') or '').upper(),
             str(v.get('observacion_tecnico') or ''),
             str(v.get('tecnico_principal') or '').upper(),
