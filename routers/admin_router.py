@@ -1095,17 +1095,28 @@ def normalizar_servicio_excel_calidad(serv_raw):
     if not serv_raw:
         return "INTERNET_GPON"
     s = str(serv_raw).strip().upper()
+    
+    # 1. Si es COMBO -> Siempre COMBO_GPON
     if 'COMBO' in s:
-        if 'HFC' in s:
-            return 'COMBO_HFC'
         return 'COMBO_GPON'
-    elif 'INTER' in s or 'MEGAS' in s or 'NET' in s or 'GPON' in s:
-        if 'HFC' in s:
-            return 'INTERNET_HFC'
+        
+    # 2. Si es CABLE / TELEVISIÓN -> CABLE_HFC o CABLE_GPON
+    if 'CABLE' in s or 'TV' in s or 'CANAL' in s or 'TELEVISION' in s:
+        if 'HFC' in s or 'COAX' in s or 'ANALOG' in s:
+            return 'CABLE_HFC'
+        return 'CABLE_GPON'
+        
+    # 3. Si es INTERNET -> Siempre INTERNET_GPON
+    if any(k in s for k in ['INTER', 'MEGA', 'GBPS', 'MBPS', 'GPON', 'NET', 'CONECTIVIDAD', 'PYME', 'HOME', 'HOUSE']):
         return 'INTERNET_GPON'
-    elif 'TV' in s or 'CABLE' in s:
-        return 'TV'
-    return s
+        
+    # 4. Otros casos
+    if 'RADIO' in s:
+        return 'RADIO'
+    if 'SMART HOME' in s:
+        return 'SMART HOME'
+        
+    return 'INTERNET_GPON'
 
 
 def generar_excel_calidad(visitas, fecha_str):
