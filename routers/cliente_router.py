@@ -402,7 +402,7 @@ def publico_cuadro_mando(fecha, token):
         manana = (fecha_dt + timedelta(days=1)).isoformat()
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
-            WHERE fecha_programada = %s AND (estado != 'CANCELADA' OR estado IS NULL)
+            WHERE fecha_programada = %s AND (estado = 'PENDIENTE' OR estado IS NULL)
         """, (manana,))
         kpi_pendientes_manana = cursor.fetchone()['total'] or 0
         
