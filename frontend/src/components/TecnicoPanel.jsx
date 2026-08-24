@@ -3268,14 +3268,14 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
       {/* MODAL: REGISTRAR EMERGENCIA / PANICO */}
       {showPanicModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 200000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
-          <div style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '16px', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #334155', background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 200000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px', boxSizing: 'border-box' }}>
+          <div style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '16px', width: '100%', maxWidth: '420px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #334155', background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)', flexShrink: 0 }}>
               <h5 style={{ margin: 0, color: 'white', fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <i className="fa-solid fa-triangle-exclamation fa-beat"></i> Declarar Emergencia
               </h5>
             </div>
-            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain', flex: 1 }}>
               <p style={{ margin: 0, color: '#cbd5e1', fontSize: '0.85rem', lineHeight: 1.4 }}>
                 Seleccione el motivo del auxilio en ruta. Esto notificará inmediatamente al panel del dashboard administrativo.
               </p>
@@ -3320,13 +3320,13 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
       {/* MODAL: POSPONER VISITA */}
       {showPosponerModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 200000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
-          <div style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '16px', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #334155', background: '#4b5563' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 200000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px', boxSizing: 'border-box' }}>
+          <div style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '16px', width: '100%', maxWidth: '420px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #334155', background: '#4b5563', flexShrink: 0 }}>
               <h5 style={{ margin: 0, color: 'white', fontSize: '1.05rem', fontWeight: 800 }}><i className="fa-solid fa-clock"></i> Posponer Visita</h5>
             </div>
-            <form onSubmit={posponerVisitaSubmit} style={{ margin: 0 }}>
-              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <form onSubmit={posponerVisitaSubmit} style={{ margin: 0, display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain', flex: 1 }}>
                 <p style={{ margin: 0, color: '#cbd5e1', fontSize: '0.82rem', lineHeight: 1.4 }}>
                   La visita regresará al estado de pendiente de hoy para que puedas atender otras prioridades y resolverla más tarde.
                 </p>
@@ -3409,7 +3409,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          padding: '20px',
+          padding: '16px',
           boxSizing: 'border-box'
         }}>
           <div style={{
@@ -3417,7 +3417,8 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
             border: '1px solid rgba(255,255,255,0.12)',
             borderRadius: '24px',
             width: '100%',
-            maxWidth: '400px',
+            maxWidth: '420px',
+            maxHeight: '90vh',
             display: 'flex',
             flexDirection: 'column',
             boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
@@ -3426,12 +3427,13 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
           }}>
             {/* Modal Header */}
             <div style={{
-              padding: '20px 24px',
+              padding: '18px 22px',
               background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
               borderBottom: '1px solid rgba(255,255,255,0.08)',
               display: 'flex',
               justifyContent: 'space-between',
-              alignItems: 'center'
+              alignItems: 'center',
+              flexShrink: 0
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
@@ -3444,7 +3446,8 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                   justifyContent: 'center',
                   color: 'white',
                   fontWeight: 900,
-                  fontSize: '1.1rem'
+                  fontSize: '1.1rem',
+                  flexShrink: 0
                 }}>
                   {fotoPerfil && fotoPerfil !== 'default_avatar.png' ? (
                     <img 
@@ -3463,15 +3466,26 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setShowProfileModal(false)}
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.4rem', cursor: 'pointer', padding: '4px' }}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.6rem', cursor: 'pointer', padding: '4px 8px', lineHeight: 1 }}
               >
-                ×
+                &times;
               </button>
             </div>
 
-            {/* Modal Options */}
-            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Modal Options (Con scroll táctil completo en móviles) */}
+            <div style={{
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              overflowY: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              touchAction: 'pan-y',
+              overscrollBehavior: 'contain',
+              flex: 1
+            }}>
               
               {/* Descanso Status */}
               <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '16px' }}>
@@ -3536,7 +3550,6 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                 )}
               </div>
 
-              {/* Traspaso de Material entre Técnicos */}
               {/* Mi Vehículo / Bodega Móvil */}
               <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '16px' }}>
                 <label style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -3576,7 +3589,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
               <button
                 type="button"
                 onClick={() => { setShowProfileModal(false); onLogout(); }}
-                style={{ width: '100%', padding: '12px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.88rem', marginTop: '4px' }}
+                style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.18)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#fca5a5', fontWeight: 850, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.92rem', marginTop: '6px', marginBottom: '10px', flexShrink: 0 }}
               >
                 <i className="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
               </button>
@@ -3784,16 +3797,16 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
       {/* MODAL: TRASPASO DE MATERIAL ENTRE TÉCNICOS / BODEGA */}
       {showTraspasoModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: 200000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
-          <div style={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '24px', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 40px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
-            <div style={{ padding: '20px 24px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: 200000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px', boxSizing: 'border-box' }}>
+          <div style={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '24px', width: '100%', maxWidth: '420px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 40px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
+            <div style={{ padding: '18px 22px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <h4 style={{ margin: 0, color: 'white', fontSize: '1.05rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <i className="fa-solid fa-arrow-right-arrow-left" style={{ color: '#10b981' }}></i> Transferencia o Devolución
               </h4>
-              <button onClick={() => setShowTraspasoModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.4rem', cursor: 'pointer', padding: '4px' }}>&times;</button>
+              <button type="button" onClick={() => setShowTraspasoModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.6rem', cursor: 'pointer', padding: '4px 8px', lineHeight: 1 }}>&times;</button>
             </div>
 
-            <form onSubmit={handleTraspasoSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <form onSubmit={handleTraspasoSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain', flex: 1 }}>
               <div>
                 <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>Destino (Quien recibe):</label>
                 <select
