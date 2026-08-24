@@ -1886,7 +1886,7 @@ def preview_reporte_dia_siguiente():
                 problema,
                 estado
             FROM visitas_tecnicas
-            WHERE fecha_programada = %s AND estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA', 'FINALIZADA')
+            WHERE fecha_programada = %s AND (estado = 'PENDIENTE' OR estado IS NULL)
         """
         cursor.execute(query, (target_date,))
         rows = cursor.fetchall()
@@ -1972,7 +1972,7 @@ def download_excel_reporte_dia_siguiente():
                 problema,
                 estado
             FROM visitas_tecnicas
-            WHERE fecha_programada = %s AND estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA', 'FINALIZADA')
+            WHERE fecha_programada = %s AND (estado = 'PENDIENTE' OR estado IS NULL)
         """
         cursor.execute(query, (target_date,))
         rows = cursor.fetchall()
