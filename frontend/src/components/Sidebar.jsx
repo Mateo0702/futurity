@@ -29,19 +29,22 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
 
   const isVisible = (tab) => {
     if (tab === 'visitas') {
-      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC'].includes(role);
+      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'ATC_AUDITOR'].includes(role);
     }
     if (tab === 'mapa-tecnicos' || tab === 'registro') {
       return ['ADMIN', 'ASESOR', 'CALIDAD'].includes(role);
     }
     if (tab === 'registro-atencion' || tab === 'buscar-cliente') {
-      return ['ADMIN', 'ASESOR', 'ATC'].includes(role);
+      return ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR'].includes(role);
     }
     if (tab === 'metricas') {
-      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC'].includes(role);
+      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'ATC_AUDITOR'].includes(role);
     }
     if (tab === 'reportes' || tab === 'control-calidad') {
       return ['ADMIN', 'ASESOR', 'CALIDAD'].includes(role);
+    }
+    if (tab === 'auditoria-atc') {
+      return ['ADMIN', 'ATC_AUDITOR'].includes(role);
     }
     if (tab === 'inventario') {
       return ['ADMIN', 'BODEGA'].includes(role);
@@ -314,6 +317,16 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
           >
             <i className="fa-solid fa-star" style={{ fontSize: '1.1rem', width: '20px' }}></i>
             <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>Control de Calidad</span>
+          </div>
+        )}
+
+        {isVisible('auditoria-atc') && (
+          <div
+            className={`nav-item ${activeTab === 'auditoria-atc' ? 'active' : ''}`}
+            onClick={() => onTabChange('auditoria-atc')}
+          >
+            <i className="fa-solid fa-phone-volume" style={{ fontSize: '1.1rem', width: '20px', color: '#10b981' }}></i>
+            <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline', fontWeight: 'bold' }}>Auditoría ATC</span>
           </div>
         )}
 

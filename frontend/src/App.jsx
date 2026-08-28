@@ -9,6 +9,7 @@ import BuscadorClienteTab from './components/BuscadorClienteTab';
 import UsuariosTab from './components/UsuariosTab';
 import MapaTecnicosTab from './components/MapaTecnicosTab';
 import ControlCalidadTab from './components/ControlCalidadTab';
+import AuditoriaAtcTab from './components/AuditoriaAtcTab';
 import ReportesTab from './components/ReportesTab';
 import PublicoCuadroMando from './components/PublicoCuadroMando';
 import InventarioTab from './components/InventarioTab';
@@ -265,6 +266,9 @@ function App() {
     }
     if (activeTab === 'control-calidad') {
       return <ControlCalidadTab token={token} />;
+    }
+    if (activeTab === 'auditoria-atc') {
+      return <AuditoriaAtcTab token={token} user={user} />;
     }
     if (activeTab === 'usuarios') {
       return <UsuariosTab token={token} user={user} />;

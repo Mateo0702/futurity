@@ -209,10 +209,20 @@ def registrar_atencion():
             accion, motivo, agente, observacion, olt, ont, router, timer_minutos
         )
         cursor.execute(query_insert, datos)
+        id_atencion = cursor.lastrowid
         conn.commit()
         
+        # Asignación automática equitativa a auditor ATC (Round-Robin)
+        try:
+            asignar_auditoria_atencion(
+                conn, cursor, id_atencion, contrato, cliente, telefono1, telefono2,
+                sector, motivo, agente, f_dt.isoformat()
+            )
+            conn.commit()
+        except Exception as ex_aud:
+            print(f"Error en asignación automática de auditoría: {ex_aud}")
+
         # Devolver ID y éxito
-        id_atencion = cursor.lastrowid
         return jsonify({
             "status": "success", 
             "message": "Atención registrada exitosamente",
@@ -482,13 +492,14 @@ def registrar_atenciones_masivo():
     if not contratos_list:
         return jsonify({"status": "error", "message": "No se proporcionó ningún contrato válido para procesar."}), 400
 
-    # Eliminar duplicados manteniendo el orden
+    # Eliminar duplicados manteniendo el orden y normalizando a mayúsculas
     contratos_unicos = []
     seen = set()
     for c in contratos_list:
-        if c not in seen:
-            seen.add(c)
-            contratos_unicos.append(c)
+        c_norm = str(c).strip().upper()
+        if c_norm and c_norm not in seen:
+            seen.add(c_norm)
+            contratos_unicos.append(c_norm)
 
     # Parámetros comunes
     fecha_val = data.get('fecha') or date.today().isoformat()
@@ -520,15 +531,15 @@ def registrar_atenciones_masivo():
     no_encontrados = []
 
     try:
-        # Pre-cargar directorio de clientes para los contratos solicitados
+        # Pre-cargar directorio de clientes para los contratos solicitados (flexible case-insensitive)
         format_strings = ','.join(['%s'] * len(contratos_unicos))
         query_directorio = f"""
             SELECT contrato, nombre_cliente, zona, telefono1, telefono2, fecha_instalacion
             FROM directorio_clientes
-            WHERE contrato IN ({format_strings})
+            WHERE UPPER(TRIM(contrato)) IN ({format_strings})
         """
         cursor.execute(query_directorio, tuple(contratos_unicos))
-        clientes_db = {str(row['contrato']).strip(): row for row in cursor.fetchall()}
+        clientes_db = {str(row['contrato']).strip().upper(): row for row in cursor.fetchall()}
 
         query_insert = """
             INSERT INTO atenciones (
@@ -574,6 +585,34 @@ def registrar_atenciones_masivo():
         conn.commit()
         registrados = cursor_exec.rowcount
         cursor_exec.close()
+
+        # Asignar automáticamente los nuevos tickets a auditoría
+        try:
+            cur_sync = conn.cursor(dictionary=True)
+            cur_sync.execute("""
+                SELECT a.id_atencion, a.contrato, a.cliente, a.telefono1, a.telefono2, a.sector, a.motivo, a.agente, a.fecha
+                FROM atenciones a
+                LEFT JOIN auditoria_calidad_atenciones aud ON a.id_atencion = aud.id_atencion
+                WHERE a.fecha = %s AND aud.id_auditoria IS NULL
+                ORDER BY a.id_atencion ASC
+            """, (f_dt.isoformat(),))
+            pendientes = cur_sync.fetchall()
+
+            cur_sync.execute("SELECT nombre FROM usuarios_callcenter WHERE rol = 'ATC_AUDITOR' AND activo = 1 ORDER BY id_usuario ASC")
+            auditores = [r['nombre'] for r in cur_sync.fetchall()] or ['Andrea Mendoza', 'Jennifer Atancuri']
+
+            for idx, a in enumerate(pendientes):
+                aud = auditores[idx % len(auditores)]
+                cur_sync.execute("""
+                    INSERT INTO auditoria_calidad_atenciones (
+                        id_atencion, contrato, cliente, telefono1, telefono2, sector, motivo_atencion,
+                        agente_evaluado, auditor_asignado, fecha_atencion, estado_contacto
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE')
+                """, (a['id_atencion'], a['contrato'], a['cliente'], a['telefono1'], a['telefono2'], a['sector'], a['motivo'], a['agente'], aud, a['fecha']))
+            conn.commit()
+            cur_sync.close()
+        except Exception as ex_sync:
+            print(f"Error asignando auditoria tras carga masiva: {ex_sync}")
 
         return jsonify({
             "status": "success",
@@ -936,5 +975,399 @@ def diagnostico_smartolt(sn):
         "olt_name": olt_name
     }
     return jsonify({"status": "success", "diagnostico": diagnostico})
+
+
+# ==========================================================
+# GESTIÓN Y AUDITORÍA DE CALIDAD ATC (CALL CENTER)
+# ==========================================================
+
+def asignar_auditoria_atencion(conn, cursor, id_atencion, contrato, cliente, telefono1, telefono2, sector, motivo, agente, fecha_atencion):
+    """
+    Asigna una atención registrada al auditor con menor carga del día (Round-Robin entre rol ATC_AUDITOR).
+    """
+    try:
+        c_aud = conn.cursor(dictionary=True)
+        c_aud.execute("SELECT nombre FROM usuarios_callcenter WHERE rol = 'ATC_AUDITOR' AND activo = 1 ORDER BY id_usuario ASC")
+        auditores = [r['nombre'] for r in c_aud.fetchall()]
+        c_aud.close()
+
+        if not auditores:
+            auditores = ['Andrea Mendoza', 'Jennifer Atancuri']
+
+        # Balanceo exacto: contar tickets asignados hoy a cada auditor
+        c_count = conn.cursor(dictionary=True)
+        c_count.execute("""
+            SELECT auditor_asignado, COUNT(*) as total
+            FROM auditoria_calidad_atenciones
+            WHERE fecha_atencion = %s AND auditor_asignado IS NOT NULL
+            GROUP BY auditor_asignado
+        """, (fecha_atencion,))
+        conteo = {r['auditor_asignado']: r['total'] for r in c_count.fetchall()}
+        c_count.close()
+
+        auditor_elegido = min(auditores, key=lambda a: conteo.get(a, 0))
+
+        cursor.execute("""
+            INSERT INTO auditoria_calidad_atenciones (
+                id_atencion, contrato, cliente, telefono1, telefono2, sector, motivo_atencion,
+                agente_evaluado, auditor_asignado, fecha_atencion, estado_contacto
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE')
+            ON DUPLICATE KEY UPDATE
+                contrato = VALUES(contrato),
+                cliente = VALUES(cliente),
+                telefono1 = VALUES(telefono1),
+                telefono2 = VALUES(telefono2),
+                sector = VALUES(sector),
+                motivo_atencion = VALUES(motivo_atencion),
+                agente_evaluado = VALUES(agente_evaluado)
+        """, (id_atencion, contrato, cliente, telefono1, telefono2, sector, motivo, agente, auditor_elegido, fecha_atencion))
+    except Exception as e:
+        print(f"Error asignando auditoria para atencion #{id_atencion}: {e}")
+
+
+@atenciones_bp.route('/api/atc/auditoria/lista', methods=['GET'])
+def api_atc_auditoria_lista():
+    user = obtener_usuario_actual(request)
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if user.get('rol') not in ['ADMIN', 'ATC_AUDITOR', 'CALIDAD']:
+        return jsonify({"status": "error", "message": "Acceso restringido a auditores ATC."}), 403
+
+    fecha = request.args.get('fecha', date.today().isoformat()).strip()
+    filtro_auditor = request.args.get('filtro_auditor', 'MIS_ASIGNADAS').strip()
+    estado = request.args.get('estado', '').strip()
+    search = request.args.get('search', '').strip()
+    user_name = user.get('nombre', '')
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de base de datos"}), 500
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        query = "SELECT * FROM auditoria_calidad_atenciones WHERE 1=1"
+        params = []
+
+        if fecha:
+            query += " AND fecha_atencion = %s"
+            params.append(fecha)
+
+        if filtro_auditor == 'MIS_ASIGNADAS':
+            query += " AND (auditor_asignado = %s OR auditor_gestion = %s)"
+            params.extend([user_name, user_name])
+        elif filtro_auditor != 'TODAS' and filtro_auditor:
+            query += " AND auditor_asignado = %s"
+            params.append(filtro_auditor)
+
+        if estado:
+            query += " AND estado_contacto = %s"
+            params.append(estado)
+
+        if search:
+            query += " AND (cliente LIKE %s OR contrato LIKE %s OR agente_evaluado LIKE %s OR telefono1 LIKE %s OR telefono2 LIKE %s)"
+            search_p = f"%{search}%"
+            params.extend([search_p, search_p, search_p, search_p, search_p])
+
+        query += " ORDER BY id_auditoria ASC"
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall()
+
+        for r in rows:
+            if r.get('fecha_atencion') and hasattr(r['fecha_atencion'], 'isoformat'):
+                r['fecha_atencion'] = r['fecha_atencion'].isoformat()
+            if r.get('fecha_gestion') and hasattr(r['fecha_gestion'], 'isoformat'):
+                r['fecha_gestion'] = r['fecha_gestion'].isoformat()
+            if r.get('fecha_creacion') and hasattr(r['fecha_creacion'], 'isoformat'):
+                r['fecha_creacion'] = r['fecha_creacion'].isoformat()
+            if r.get('promedio_total') is not None:
+                r['promedio_total'] = float(r['promedio_total'])
+
+        return jsonify({"status": "ok", "auditorias": rows, "total": len(rows)})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@atenciones_bp.route('/api/atc/auditoria/guardar', methods=['POST'])
+def api_atc_auditoria_guardar():
+    user = obtener_usuario_actual(request)
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if user.get('rol') not in ['ADMIN', 'ATC_AUDITOR', 'CALIDAD']:
+        return jsonify({"status": "error", "message": "Acceso restringido a auditores ATC."}), 403
+
+    data = request.get_json() or {}
+    id_auditoria = data.get('id_auditoria')
+    estado_contacto = (data.get('estado_contacto') or 'PENDIENTE').strip().upper()
+    user_name = user.get('nombre', 'Auditor ATC')
+
+    if not id_auditoria:
+        return jsonify({"status": "error", "message": "ID de auditoría es requerido"}), 400
+
+    p1 = data.get('p1_claridad')
+    p2 = data.get('p2_amabilidad')
+    p3 = data.get('p3_rapidez')
+    p4 = data.get('p4_efectividad')
+    p5 = data.get('p5_satisfaccion')
+    p6 = data.get('p6_facilidad')
+
+    # Convertir a enteros válidos (1 a 10)
+    scores = []
+    parsed_p = []
+    for p in [p1, p2, p3, p4, p5, p6]:
+        try:
+            if p is not None and str(p).strip() != '':
+                val = int(p)
+                if 1 <= val <= 10:
+                    scores.append(val)
+                    parsed_p.append(val)
+                else:
+                    parsed_p.append(None)
+            else:
+                parsed_p.append(None)
+        except (ValueError, TypeError):
+            parsed_p.append(None)
+
+    promedio_total = round(sum(scores) / len(scores), 2) if scores else None
+
+    respuesta_facilidad = (data.get('respuesta_facilidad') or '').strip() or None
+    recomendacion_cliente = (data.get('recomendacion_cliente') or '').strip() or None
+    observaciones = (data.get('observaciones') or '').strip() or None
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de base de datos"}), 500
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE auditoria_calidad_atenciones
+            SET estado_contacto = %s,
+                p1_claridad = %s,
+                p2_amabilidad = %s,
+                p3_rapidez = %s,
+                p4_efectividad = %s,
+                p5_satisfaccion = %s,
+                p6_facilidad = %s,
+                promedio_total = %s,
+                respuesta_facilidad = %s,
+                recomendacion_cliente = %s,
+                observaciones = %s,
+                auditor_gestion = %s,
+                fecha_gestion = NOW(),
+                intentos_llamada = intentos_llamada + 1
+            WHERE id_auditoria = %s
+        """, (
+            estado_contacto, parsed_p[0], parsed_p[1], parsed_p[2], parsed_p[3], parsed_p[4], parsed_p[5],
+            promedio_total, respuesta_facilidad, recomendacion_cliente, observaciones,
+            user_name, id_auditoria
+        ))
+        conn.commit()
+        return jsonify({
+            "status": "ok",
+            "message": "Auditoría guardada exitosamente.",
+            "promedio_total": promedio_total
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@atenciones_bp.route('/api/atc/auditoria/metricas', methods=['GET'])
+def api_atc_auditoria_metricas():
+    user = obtener_usuario_actual(request)
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+
+    fecha_inicio = request.args.get('fecha_inicio', date.today().isoformat()).strip()
+    fecha_fin = request.args.get('fecha_fin', date.today().isoformat()).strip()
+    auditor_filter = request.args.get('auditor', '').strip()
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de base de datos"}), 500
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+
+        # 1. Métricas de Contactabilidad
+        query_cont = """
+            SELECT 
+                COUNT(*) as total_asignadas,
+                SUM(CASE WHEN estado_contacto = 'CONTESTO' THEN 1 ELSE 0 END) as contestaron,
+                SUM(CASE WHEN estado_contacto = 'NO_CONTESTA' THEN 1 ELSE 0 END) as no_contestaron,
+                SUM(CASE WHEN estado_contacto = 'NUMERO_EQUIVOCADO' THEN 1 ELSE 0 END) as equivocados,
+                SUM(CASE WHEN estado_contacto = 'FUERA_SERVICIO' THEN 1 ELSE 0 END) as fuera_servicio,
+                SUM(CASE WHEN estado_contacto = 'PENDIENTE' THEN 1 ELSE 0 END) as pendientes
+            FROM auditoria_calidad_atenciones
+            WHERE fecha_atencion BETWEEN %s AND %s
+        """
+        params_cont = [fecha_inicio, fecha_fin]
+        if auditor_filter:
+            query_cont += " AND (auditor_asignado = %s OR auditor_gestion = %s)"
+            params_cont.extend([auditor_filter, auditor_filter])
+
+        cursor.execute(query_cont, tuple(params_cont))
+        contact_row = cursor.fetchone() or {}
+
+        tot_asig = contact_row.get('total_asignadas', 0) or 0
+        tot_cont = contact_row.get('contestaron', 0) or 0
+        tot_nocont = contact_row.get('no_contestaron', 0) or 0
+        tot_equiv = contact_row.get('equivocados', 0) or 0
+        tot_fuera = contact_row.get('fuera_servicio', 0) or 0
+        tot_pend = contact_row.get('pendientes', 0) or 0
+        pct_cont = round((tot_cont / tot_asig * 100), 1) if tot_asig > 0 else 0.0
+
+        # 2. Promedios por Pregunta y Global
+        query_prom = """
+            SELECT 
+                ROUND(AVG(p1_claridad), 2) as p1_claridad,
+                ROUND(AVG(p2_amabilidad), 2) as p2_amabilidad,
+                ROUND(AVG(p3_rapidez), 2) as p3_rapidez,
+                ROUND(AVG(p4_efectividad), 2) as p4_efectividad,
+                ROUND(AVG(p5_satisfaccion), 2) as p5_satisfaccion,
+                ROUND(AVG(p6_facilidad), 2) as p6_facilidad,
+                ROUND(AVG(promedio_total), 2) as promedio_global,
+                COUNT(promedio_total) as total_calificadas
+            FROM auditoria_calidad_atenciones
+            WHERE fecha_atencion BETWEEN %s AND %s AND estado_contacto = 'CONTESTO'
+        """
+        params_prom = [fecha_inicio, fecha_fin]
+        if auditor_filter:
+            query_prom += " AND (auditor_asignado = %s OR auditor_gestion = %s)"
+            params_prom.extend([auditor_filter, auditor_filter])
+
+        cursor.execute(query_prom, tuple(params_prom))
+        prom_row = cursor.fetchone() or {}
+
+        # 3. Ranking de Calificación por Asesor Evaluado
+        query_asesores = """
+            SELECT 
+                agente_evaluado as agente,
+                COUNT(*) as total_evaluadas,
+                ROUND(AVG(promedio_total), 2) as promedio_total,
+                ROUND(AVG(p1_claridad), 2) as p1_claridad,
+                ROUND(AVG(p2_amabilidad), 2) as p2_amabilidad,
+                ROUND(AVG(p3_rapidez), 2) as p3_rapidez,
+                ROUND(AVG(p4_efectividad), 2) as p4_efectividad,
+                ROUND(AVG(p5_satisfaccion), 2) as p5_satisfaccion,
+                ROUND(AVG(p6_facilidad), 2) as p6_facilidad
+            FROM auditoria_calidad_atenciones
+            WHERE fecha_atencion BETWEEN %s AND %s 
+              AND estado_contacto = 'CONTESTO'
+              AND agente_evaluado IS NOT NULL 
+              AND agente_evaluado != ''
+            GROUP BY agente_evaluado
+            ORDER BY promedio_total DESC, total_evaluadas DESC
+        """
+        cursor.execute(query_asesores, (fecha_inicio, fecha_fin))
+        ranking_asesores = cursor.fetchall()
+        for r in ranking_asesores:
+            for k in ['promedio_total', 'p1_claridad', 'p2_amabilidad', 'p3_rapidez', 'p4_efectividad', 'p5_satisfaccion', 'p6_facilidad']:
+                if r.get(k) is not None:
+                    r[k] = float(r[k])
+
+        # 4. Productividad por Auditor ATC
+        query_auditores = """
+            SELECT 
+                COALESCE(auditor_gestion, auditor_asignado) as auditor,
+                COUNT(*) as total_asignadas,
+                SUM(CASE WHEN estado_contacto = 'CONTESTO' THEN 1 ELSE 0 END) as contestadas,
+                SUM(CASE WHEN estado_contacto = 'NO_CONTESTA' THEN 1 ELSE 0 END) as no_contestadas,
+                SUM(CASE WHEN estado_contacto = 'PENDIENTE' THEN 1 ELSE 0 END) as pendientes,
+                ROUND(AVG(CASE WHEN estado_contacto = 'CONTESTO' THEN promedio_total ELSE NULL END), 2) as promedio_calificado
+            FROM auditoria_calidad_atenciones
+            WHERE fecha_atencion BETWEEN %s AND %s
+            GROUP BY COALESCE(auditor_gestion, auditor_asignado)
+            ORDER BY total_asignadas DESC
+        """
+        cursor.execute(query_auditores, (fecha_inicio, fecha_fin))
+        ranking_auditores = cursor.fetchall()
+        for a in ranking_auditores:
+            if a.get('promedio_calificado') is not None:
+                a['promedio_calificado'] = float(a['promedio_calificado'])
+
+        return jsonify({
+            "status": "ok",
+            "contactabilidad": {
+                "total_asignadas": tot_asig,
+                "contestaron": tot_cont,
+                "no_contestaron": tot_nocont,
+                "equivocados": tot_equiv,
+                "fuera_servicio": tot_fuera,
+                "pendientes": tot_pend,
+                "pct_contestaron": pct_cont
+            },
+            "promedios_preguntas": {
+                "p1_claridad": float(prom_row.get('p1_claridad') or 0.0),
+                "p2_amabilidad": float(prom_row.get('p2_amabilidad') or 0.0),
+                "p3_rapidez": float(prom_row.get('p3_rapidez') or 0.0),
+                "p4_efectividad": float(prom_row.get('p4_efectividad') or 0.0),
+                "p5_satisfaccion": float(prom_row.get('p5_satisfaccion') or 0.0),
+                "p6_facilidad": float(prom_row.get('p6_facilidad') or 0.0),
+                "promedio_global": float(prom_row.get('promedio_global') or 0.0),
+                "total_calificadas": prom_row.get('total_calificadas', 0)
+            },
+            "ranking_asesores": ranking_asesores,
+            "ranking_auditores": ranking_auditores
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@atenciones_bp.route('/api/atc/auditoria/sincronizar_dia', methods=['POST'])
+def api_atc_auditoria_sincronizar_dia():
+    user = obtener_usuario_actual(request)
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+
+    data = request.get_json() or {}
+    fecha = (data.get('fecha') or date.today().isoformat()).strip()
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de base de datos"}), 500
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT a.id_atencion, a.contrato, a.cliente, a.telefono1, a.telefono2, a.sector, a.motivo, a.agente, a.fecha
+            FROM atenciones a
+            LEFT JOIN auditoria_calidad_atenciones aud ON a.id_atencion = aud.id_atencion
+            WHERE a.fecha = %s AND aud.id_auditoria IS NULL
+            ORDER BY a.id_atencion ASC
+        """, (fecha,))
+        pendientes = cursor.fetchall()
+
+        cursor.execute("SELECT nombre FROM usuarios_callcenter WHERE rol = 'ATC_AUDITOR' AND activo = 1 ORDER BY id_usuario ASC")
+        auditores = [r['nombre'] for r in cursor.fetchall()]
+        if not auditores:
+            auditores = ['Andrea Mendoza', 'Jennifer Atancuri']
+
+        for idx, a in enumerate(pendientes):
+            auditor = auditores[idx % len(auditores)]
+            cursor.execute("""
+                INSERT INTO auditoria_calidad_atenciones (
+                    id_atencion, contrato, cliente, telefono1, telefono2, sector, motivo_atencion,
+                    agente_evaluado, auditor_asignado, fecha_atencion, estado_contacto
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE')
+            """, (a['id_atencion'], a['contrato'], a['cliente'], a['telefono1'], a['telefono2'], a['sector'], a['motivo'], a['agente'], auditor, a['fecha']))
+
+        conn.commit()
+        return jsonify({"status": "ok", "message": f"Se sincronizaron y asignaron {len(pendientes)} tickets para el {fecha}."})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 

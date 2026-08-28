@@ -41,3 +41,14 @@ backups/
 *.sql.gz
 *.zip
 
+# IDEs & OS
+.idea/
+*.iml
+.vscode/
+
+# Flutter App en fase de prueba
+futurity_mobile_test/
+static/app/
+
+
+

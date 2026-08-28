@@ -39,8 +39,8 @@ export default function SeguimientoCliente({ token }) {
             const coords = [result.lat, result.lon];
             if (!mapInstanceRef.current) {
               const map = window.L.map(mapRef.current).setView(coords, 16);
-              window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
+              window.L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+                attribution: '&copy; Google Maps'
               }).addTo(map);
 
               const iconoTecnico = window.L.icon({

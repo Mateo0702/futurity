@@ -259,30 +259,27 @@ function Login({ onLoginSuccess }) {
         {/* Panel Izquierdo: Visual & Características */}
         <div className="login-split-left">
           <div className="login-left-content">
-            <div className="login-shield-container">
-              <div className="login-shield-glow"></div>
-              <svg className="login-shield-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M50 12 L82 22 C82 52 68 76 50 88 C32 76 18 52 18 22 Z" fill="url(#shield-grad)" stroke="url(#stroke-grad)" strokeWidth="2.5" />
-                <rect x="38" y="48" width="24" height="18" rx="4" fill="#ffffff" />
-                <path d="M43 48 V41 C43 37.1 46.1 34 50 34 C53.9 34 57 37.1 57 41 V48" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" />
-                <circle cx="50" cy="56" r="2.5" fill="#e11d48" />
-                <path d="M50 58.5 V62" stroke="#e11d48" strokeWidth="2" strokeLinecap="round" />
-                <defs>
-                  <linearGradient id="shield-grad" x1="50" y1="12" x2="50" y2="88" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stopColor="#fb7185" stopOpacity="0.6"/>
-                    <stop offset="100%" stopColor="#e11d48" stopOpacity="0.15"/>
-                  </linearGradient>
-                  <linearGradient id="stroke-grad" x1="50" y1="12" x2="50" y2="88" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stopColor="#fda4af" stopOpacity="0.9"/>
-                    <stop offset="100%" stopColor="#be123c" stopOpacity="0.3"/>
-                  </linearGradient>
-                </defs>
-              </svg>
+            <div className="login-shield-container" style={{ width: '130px', height: '130px', margin: '0 auto 20px auto', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="login-shield-glow" style={{ position: 'absolute', inset: '-10px', background: 'radial-gradient(circle, rgba(59, 130, 246, 0.35) 0%, rgba(225, 29, 72, 0.15) 60%, transparent 80%)', filter: 'blur(20px)', borderRadius: '50%', zIndex: 0 }}></div>
+              <img
+                src="/img/new_atlas.png"
+                alt="Atlas Platform Logo"
+                style={{
+                  width: '110px',
+                  height: '110px',
+                  objectFit: 'contain',
+                  position: 'relative',
+                  zIndex: 1,
+                  filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.4))'
+                }}
+              />
             </div>
-            <h1 className="login-left-title" style={{ fontWeight: 800, color: 'white' }}>
-              Futurity <span style={{ background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 900 }}>Atlas</span>
+            <h1 className="login-left-title" style={{ fontWeight: 800, color: 'white', letterSpacing: '-0.5px' }}>
+              <span style={{ background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #f43f5e 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 900, fontSize: '2.2rem' }}>ATLAS</span>
             </h1>
-            <p className="login-left-desc">Optimización inteligente de rutas, monitoreo en vivo y control de calidad.</p>
+            <p className="login-left-desc" style={{ fontSize: '0.9rem', color: '#cbd5e1', lineHeight: 1.5, maxWidth: '280px', margin: '0 auto' }}>
+              Plataforma inteligente de optimización de rutas, trazabilidad de equipos y control de calidad para ISPs.
+            </p>
           </div>
 
           {/* Características del sistema al pie */}
@@ -308,10 +305,8 @@ function Login({ onLoginSuccess }) {
             <div className="login-feature-item">
               <div className="login-feature-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="9" cy="7" r="4"></circle>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                  <line x1="12" y1="18" x2="12.01" y2="18"></line>
                 </svg>
               </div>
               <div className="login-feature-title">Móvil</div>
@@ -322,9 +317,9 @@ function Login({ onLoginSuccess }) {
 
         {/* Panel Derecho: Formulario de Login */}
         <div className="login-split-right">
-          <div className="login-logo-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '20px' }}>
-            <img src="/img/logo_futurity.png" alt="Futurity Logo" style={{ height: '42px', objectFit: 'contain' }} />
-            <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-main)' }}>
+          <div className="login-logo-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '20px' }}>
+            <img src="/img/logo_futurity.png" alt="Futurity Logo" style={{ height: '36px', objectFit: 'contain' }} />
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-main)' }}>
               Futurity <span style={{ background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 900 }}>Atlas</span>
             </span>
           </div>

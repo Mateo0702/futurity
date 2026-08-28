@@ -104,8 +104,8 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
       zoomControl: true
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
+    L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+      attribution: '&copy; Google Maps'
     }).addTo(map);
 
     mapInstanceRef.current = map;

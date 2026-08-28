@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } from '@zxing/library';
 import { createWorker } from 'tesseract.js';
-
-
-
+import FirmaCanvasModal from './FirmaCanvasModal';
 
 function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   const tecnicoName = tecnicoNombreParam || user?.nombre || '';
@@ -58,6 +56,9 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrToken, setQrToken] = useState('');
   const [qrClienteName, setQrClienteName] = useState('');
+
+  // Main Navigation Tab State ('agenda' | 'pedidos' | 'vehiculo')
+  const [activeMainTab, setActiveMainTab] = useState('agenda');
 
   // Inventario Móvil / Vehículo State
   const [showInventarioVehiculoModal, setShowInventarioVehiculoModal] = useState(false);
@@ -126,6 +127,123 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   const [tecnicosLista, setTecnicosLista] = useState([]);
   const [traspasoForm, setTraspasoForm] = useState({ tecnico_destino_nombre: '', id_material: '', cantidad: '' });
   const [traspasoLoading, setTraspasoLoading] = useState(false);
+
+  // Solicitud a Bodega Modal State
+  const [showSolicitudBodegaModal, setShowSolicitudBodegaModal] = useState(false);
+  const [solicitudBodegaItems, setSolicitudBodegaItems] = useState([{ id_material: '', cantidad_solicitada: 1 }]);
+  const [solicitudBodegaObs, setSolicitudBodegaObs] = useState('');
+  const [enviandoSolicitudBodega, setEnviandoSolicitudBodega] = useState(false);
+
+  const handleAddItemSolicitudBodega = () => {
+    setSolicitudBodegaItems([...solicitudBodegaItems, { id_material: '', cantidad_solicitada: 1 }]);
+  };
+
+  const handleRemoveItemSolicitudBodega = (idx) => {
+    setSolicitudBodegaItems(solicitudBodegaItems.filter((_, i) => i !== idx));
+  };
+
+  const handleItemChangeSolicitudBodega = (idx, field, val) => {
+    const next = [...solicitudBodegaItems];
+    next[idx][field] = val;
+    setSolicitudBodegaItems(next);
+  };
+
+  const handleEnviarSolicitudBodegaSubmit = async (e) => {
+    if (e) e.preventDefault();
+    const placaActual = inventarioVehiculoData.placa;
+    if (!placaActual || placaActual === 'S/P') {
+      alert("No tienes una placa asignada para solicitar materiales. Contacta al administrador.");
+      return;
+    }
+    const validItems = solicitudBodegaItems.filter(it => it.id_material && Number(it.cantidad_solicitada) > 0);
+    if (validItems.length === 0) {
+      alert("Agrega al menos un material con cantidad válida.");
+      return;
+    }
+
+    setEnviandoSolicitudBodega(true);
+    try {
+      const res = await fetch('/api/admin/requisiciones/crear', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          placa_vehiculo: placaActual,
+          nombre_tecnico: tecnicoRealName,
+          items: validItems,
+          observaciones: solicitudBodegaObs
+        })
+      });
+      const data = await res.json();
+      if (data?.status === 'ok') {
+        alert(data.message || "¡Solicitud enviada a bodega exitosamente!");
+        setShowSolicitudBodegaModal(false);
+        await cargarMisRequisiciones();
+      } else {
+        alert(data?.message || "Error al enviar solicitud a bodega.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error de conexión al enviar la solicitud.");
+    } finally {
+      setEnviandoSolicitudBodega(false);
+    }
+  };
+
+  // Mis Requisiciones (Seguimiento y Firma en Celular) State
+  const [misRequisiciones, setMisRequisiciones] = useState([]);
+  const [totalListasParaFirmar, setTotalListasParaFirmar] = useState(0);
+  const [selectedReqParaFirmar, setSelectedReqParaFirmar] = useState(null);
+  const [showFirmaReqModal, setShowFirmaReqModal] = useState(false);
+
+  const cargarMisRequisiciones = async () => {
+    try {
+      const res = await fetch('/api/tecnico/mis_requisiciones', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        setMisRequisiciones(data.requisiciones || []);
+        setTotalListasParaFirmar(data.total_listas_para_firmar || 0);
+      }
+    } catch (e) {
+      console.error("Error al cargar requisiciones del técnico:", e);
+    }
+  };
+
+  const handleAbrirFirmaReq = (req) => {
+    setSelectedReqParaFirmar(req);
+    setShowFirmaReqModal(true);
+  };
+
+  const handleGuardarFirmaReq = async (firmaBase64) => {
+    if (!selectedReqParaFirmar) return;
+    try {
+      const res = await fetch(`/api/tecnico/requisiciones/${selectedReqParaFirmar.id_requisicion}/firmar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ firma_tecnico: firmaBase64 })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        setShowFirmaReqModal(false);
+        setSelectedReqParaFirmar(null);
+        alert(data.message || "¡Firma registrada con éxito! Materiales ingresados a tu vehículo.");
+        await cargarInventarioVehiculo();
+        await cargarMisRequisiciones();
+      } else {
+        alert(data.message || "Error al registrar la firma.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error de conexión al guardar la firma.");
+    }
+  };
 
   // Live Camera Scanner State
   const [scannerLiveModal, setScannerLiveModal] = useState({
@@ -260,6 +378,10 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         setCatalogoOnt(data.catalogo_ont || []);
         setCatalogoRouter(data.catalogo_router || []);
         setTecnicosLista(data.tecnicos_lista || []);
+
+        // Cargar requisiciones activas y estado de entregas
+        cargarMisRequisiciones();
+        cargarInventarioVehiculo();
 
         // Sync activeVisita with fresh server state
         setActiveVisita(prevActive => {
@@ -1887,9 +2009,8 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
               color: estadoActividad === 'En Descanso' ? '#f59e0b' : '#10b981',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              minWidth: 0
-            }} title={estadoActividad}>
+              textOverflow: 'ellipsis'
+            }}>
               {estadoActividad}
             </span>
           </div>
@@ -1898,31 +2019,10 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
             <button 
               type="button" 
               onClick={() => {
-                setShowInventarioVehiculoModal(true);
+                cargarDatosPanel();
+                cargarMisRequisiciones();
                 cargarInventarioVehiculo();
-              }}
-              style={{
-                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.25) 100%)',
-                border: '1px solid rgba(59, 130, 246, 0.4)',
-                color: '#60a5fa',
-                fontWeight: 800,
-                fontSize: '0.78rem',
-                padding: '6px 12px',
-                borderRadius: '10px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                flexShrink: 0
-              }}
-            >
-              <i className="fa-solid fa-truck-moving"></i>
-              <span>📦 Mi Vehículo</span>
-            </button>
-
-            <button 
-              type="button" 
-              onClick={cargarDatosPanel} 
+              }} 
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -1942,81 +2042,473 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
           </div>
         </div>
 
+        {/* TOP LEVEL NAVIGATION TABS */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1.2fr 1fr',
+          background: 'rgba(15, 23, 42, 0.7)',
+          borderRadius: '14px',
+          border: '1px solid var(--border-color)',
+          padding: '4px',
+          marginTop: '10px',
+          gap: '4px'
+        }}>
+          <button
+            type="button"
+            onClick={() => setActiveMainTab('agenda')}
+            style={{
+              padding: '9px 4px',
+              borderRadius: '10px',
+              border: 'none',
+              background: activeMainTab === 'agenda' ? 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)' : 'transparent',
+              color: activeMainTab === 'agenda' ? '#ffffff' : '#94a3b8',
+              fontWeight: 800,
+              fontSize: '0.78rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '5px',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <i className="fa-solid fa-calendar-day"></i> Agenda ({visitas.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMainTab('pedidos');
+              cargarMisRequisiciones();
+            }}
+            style={{
+              padding: '9px 4px',
+              borderRadius: '10px',
+              border: 'none',
+              background: activeMainTab === 'pedidos' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
+              color: activeMainTab === 'pedidos' ? '#ffffff' : '#94a3b8',
+              fontWeight: 800,
+              fontSize: '0.78rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '5px',
+              transition: 'all 0.2s ease',
+              position: 'relative'
+            }}
+          >
+            <i className="fa-solid fa-boxes-packing"></i> Pedidos ({misRequisiciones.length})
+            {totalListasParaFirmar > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '-4px',
+                right: '4px',
+                background: '#10b981',
+                color: 'white',
+                fontSize: '0.65rem',
+                fontWeight: 900,
+                borderRadius: '8px',
+                padding: '1px 5px',
+                boxShadow: '0 2px 6px rgba(16,185,129,0.5)'
+              }}>
+                {totalListasParaFirmar} FIRMAR
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMainTab('vehiculo');
+              cargarInventarioVehiculo();
+            }}
+            style={{
+              padding: '9px 4px',
+              borderRadius: '10px',
+              border: 'none',
+              background: activeMainTab === 'vehiculo' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'transparent',
+              color: activeMainTab === 'vehiculo' ? '#ffffff' : '#94a3b8',
+              fontWeight: 800,
+              fontSize: '0.78rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '5px',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <i className="fa-solid fa-truck-moving"></i> Mi Vehículo
+          </button>
+        </div>
+
       </div>
 
       {/* Main Content Area */}
       <div className="main-content" style={{ width: '100%', padding: 0 }}>
 
-        {/* List of visits */}
-        {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-            <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '2rem', color: 'var(--primary)', marginBottom: '12px' }}></i>
-            <p style={{ margin: 0, color: 'var(--sidebar-text)', fontWeight: 700 }}>Cargando agenda de hoy...</p>
-          </div>
-        ) : visitas.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-            <i className="fa-solid fa-calendar-check" style={{ fontSize: '3rem', color: 'var(--sidebar-text)', marginBottom: '15px', opacity: 0.4 }}></i>
-            <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)', fontWeight: 800 }}>No hay visitas pendientes</h3>
-            <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: 'var(--sidebar-text)', fontWeight: 500 }}>
-              {areaTrabajo === 'INSTALACIONES' ? 'No tienes instalaciones asignadas para hoy.' : 'No tienes visitas de soporte técnico asignadas para hoy.'} ¡Buen trabajo!
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            {visitas.map((v) => {
-              const borderLeftColor = 
-                v.estado === 'EN_RUTA' ? '#f59e0b' : 
-                v.estado === 'EN_PROGRESO' ? '#3b82f6' : 
-                v.estado === 'FINALIZADA' ? '#10b981' : '#94a3b8';
-              
-              return (
-                <div 
-                  key={v.id_visita} 
-                  onClick={() => {
-                    setActiveVisita(v);
-                    setActiveSubTab('tab-cliente');
-                    setOltResult(null);
-                  }}
-                  style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderLeft: `6px solid ${borderLeftColor}`, borderRadius: '14px', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px', cursor: 'pointer', boxShadow: 'var(--shadow-sm)', transition: 'transform 0.15s ease', position: 'relative' }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingRight: '25px' }}>
-                    <div>
-                      <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 850, color: 'var(--text-main)' }}>
-                        {v.es_instalacion === 1 ? `🔌 Instalación #${v.numero_parada}` : `🎫 Ticket #${v.numero_parada}`}
-                      </h4>
-                      <small style={{ color: 'var(--sidebar-text)', fontWeight: 600 }}>Ref: #VT-{v.id_visita}</small>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: v.estado === 'FINALIZADA' ? 'rgba(16, 185, 129, 0.15)' : v.estado === 'EN_PROGRESO' ? 'rgba(59, 130, 246, 0.15)' : v.estado === 'EN_RUTA' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(148, 163, 184, 0.15)', color: v.estado === 'FINALIZADA' ? '#10b981' : v.estado === 'EN_PROGRESO' ? '#3b82f6' : v.estado === 'EN_RUTA' ? '#f59e0b' : '#64748b' }}>
-                        {v.estado.replace(/_/g, ' ')}
-                      </span>
-                      {v.prioridad === 'ALTA' && (
-                        <span style={{ fontSize: '0.65rem', fontWeight: 900, color: '#ef4444', background: 'rgba(239, 68, 68, 0.12)', padding: '2px 6px', borderRadius: '4px' }}>🔴 URGENTE</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <small style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Cliente</small>
-                    <span style={{ fontSize: '0.95rem', fontWeight: 750, color: 'var(--text-main)' }}>{v.cliente}</span>
-                  </div>
-
-                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <small style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Motivo</small>
-                      <span style={{ fontSize: '0.88rem', fontWeight: 800, color: v.es_instalacion === 1 ? '#3b82f6' : '#dc2626' }}>
-                        {v.es_instalacion === 1 ? `🔌 ${v.servicio}` : `🛠️ ${v.problema}`}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Right indicator arrow */}
-                  <div style={{ position: 'absolute', right: '18px', top: '50%', transform: 'translateY(-50%)', color: 'var(--sidebar-text)', fontSize: '0.95rem' }}>
-                    <i className="fa-solid fa-chevron-right"></i>
+        {/* TAB 1: AGENDA DE VISITAS */}
+        {activeMainTab === 'agenda' && (
+          <div>
+            {totalListasParaFirmar > 0 && (
+              <div style={{ margin: '14px 0', padding: '14px 18px', borderRadius: '16px', background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(217, 119, 6, 0.35) 100%)', border: '2px solid #f59e0b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 14px rgba(245, 158, 11, 0.25)', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '1.6rem' }}>📦</span>
+                  <div>
+                    <strong style={{ color: '#fbbf24', fontSize: '0.9rem', display: 'block' }}>
+                      ¡Pedido de Insumos Aprobado por Bodega!
+                    </strong>
+                    <span style={{ color: '#f8fafc', fontSize: '0.78rem' }}>
+                      {totalListasParaFirmar === 1 ? 'Tienes 1 pedido listo en bodega. Firma para recibir.' : `Tienes ${totalListasParaFirmar} pedidos listos. Firma para recibir.`}
+                    </span>
                   </div>
                 </div>
-              );
-            })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const reqList = misRequisiciones.find(r => r.estado === 'LISTO_ENTREGA');
+                    if (reqList) handleAbrirFirmaReq(reqList);
+                  }}
+                  style={{ padding: '8px 16px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', fontWeight: 900, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 10px rgba(16, 185, 129, 0.4)' }}
+                >
+                  <span>✍️ Firmar Recepción</span>
+                </button>
+              </div>
+            )}
+
+            {/* List of visits */}
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '2rem', color: 'var(--primary)', marginBottom: '12px' }}></i>
+                <p style={{ margin: 0, color: 'var(--sidebar-text)', fontWeight: 700 }}>Cargando agenda de hoy...</p>
+              </div>
+            ) : visitas.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                <i className="fa-solid fa-calendar-check" style={{ fontSize: '3rem', color: 'var(--sidebar-text)', marginBottom: '15px', opacity: 0.4 }}></i>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)', fontWeight: 800 }}>No hay visitas pendientes</h3>
+                <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: 'var(--sidebar-text)', fontWeight: 500 }}>
+                  {areaTrabajo === 'INSTALACIONES' ? 'No tienes instalaciones asignadas para hoy.' : 'No tienes visitas de soporte técnico asignadas para hoy.'} ¡Buen trabajo!
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                {visitas.map((v) => {
+                  const borderLeftColor = 
+                    v.estado === 'EN_RUTA' ? '#f59e0b' : 
+                    v.estado === 'EN_PROGRESO' ? '#3b82f6' : 
+                    v.estado === 'FINALIZADA' ? '#10b981' : '#94a3b8';
+                  
+                  return (
+                    <div 
+                      key={v.id_visita} 
+                      onClick={() => {
+                        setActiveVisita(v);
+                        setActiveSubTab('tab-cliente');
+                        setOltResult(null);
+                      }}
+                      style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderLeft: `6px solid ${borderLeftColor}`, borderRadius: '14px', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px', cursor: 'pointer', boxShadow: 'var(--shadow-sm)', transition: 'transform 0.15s ease', position: 'relative' }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingRight: '25px' }}>
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 850, color: 'var(--text-main)' }}>
+                            {v.es_instalacion === 1 ? `🔌 Instalación #${v.numero_parada}` : `🎫 Ticket #${v.numero_parada}`}
+                          </h4>
+                          <small style={{ color: 'var(--sidebar-text)', fontWeight: 600 }}>Ref: #VT-{v.id_visita}</small>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: v.estado === 'FINALIZADA' ? 'rgba(16, 185, 129, 0.15)' : v.estado === 'EN_PROGRESO' ? 'rgba(59, 130, 246, 0.15)' : v.estado === 'EN_RUTA' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(148, 163, 184, 0.15)', color: v.estado === 'FINALIZADA' ? '#10b981' : v.estado === 'EN_PROGRESO' ? '#3b82f6' : v.estado === 'EN_RUTA' ? '#f59e0b' : '#64748b' }}>
+                            {v.estado.replace(/_/g, ' ')}
+                          </span>
+                          {v.prioridad === 'ALTA' && (
+                            <span style={{ fontSize: '0.65rem', fontWeight: 900, color: '#ef4444', background: 'rgba(239, 68, 68, 0.12)', padding: '2px 6px', borderRadius: '4px' }}>🔴 URGENTE</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <small style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Cliente</small>
+                        <span style={{ fontSize: '0.95rem', fontWeight: 750, color: 'var(--text-main)' }}>{v.cliente}</span>
+                      </div>
+
+                      <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <small style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Motivo</small>
+                          <span style={{ fontSize: '0.88rem', fontWeight: 800, color: v.es_instalacion === 1 ? '#3b82f6' : '#dc2626' }}>
+                            {v.es_instalacion === 1 ? `🔌 ${v.servicio}` : `🛠️ ${v.problema}`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Right indicator arrow */}
+                      <div style={{ position: 'absolute', right: '18px', top: '50%', transform: 'translateY(-50%)', color: 'var(--sidebar-text)', fontSize: '0.95rem' }}>
+                        <i className="fa-solid fa-chevron-right"></i>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: PESTAÑA DEDICADA DE PEDIDOS A BODEGA */}
+        {activeMainTab === 'pedidos' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            
+            {/* Header de la pestaña */}
+            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 900, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <i className="fa-solid fa-boxes-packing"></i> Mis Pedidos a Bodega
+                </h3>
+                <span style={{ fontSize: '0.78rem', color: 'var(--sidebar-text)', fontWeight: 700, marginTop: '2px', display: 'block' }}>
+                  🚐 Buseta: <strong style={{ color: '#38bdf8' }}>{inventarioVehiculoData.placa || 'S/P'}</strong>
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowSolicitudBodegaModal(true)}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                  color: 'white',
+                  fontWeight: 900,
+                  fontSize: '0.84rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 4px 12px rgba(37,99,235,0.4)'
+                }}
+              >
+                <i className="fa-solid fa-plus-circle"></i> + Solicitar Insumos a Bodega
+              </button>
+            </div>
+
+            {/* Listado de Pedidos */}
+            {misRequisiciones.length === 0 ? (
+              <div style={{ padding: '50px 20px', textAlign: 'center', background: 'var(--card-bg)', borderRadius: '16px', border: '1px dashed var(--border-color)' }}>
+                <i className="fa-solid fa-box-open" style={{ fontSize: '3rem', color: 'var(--sidebar-text)', opacity: 0.4, marginBottom: '12px' }}></i>
+                <h4 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.05rem', fontWeight: 800 }}>No tienes solicitudes registradas</h4>
+                <p style={{ margin: '6px 0 16px 0', color: 'var(--sidebar-text)', fontSize: '0.82rem' }}>
+                  Puedes pedir materiales cuando necesites reponer stock para tus instalaciones o soporte.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowSolicitudBodegaModal(true)}
+                  style={{ padding: '8px 16px', borderRadius: '10px', background: '#2563eb', color: 'white', border: 'none', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer' }}
+                >
+                  Hacer mi primera solicitud
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {misRequisiciones.map((req) => (
+                  <div 
+                    key={req.id_requisicion}
+                    style={{
+                      background: 'var(--card-bg)',
+                      border: req.estado === 'LISTO_ENTREGA' ? '2px solid #10b981' : '1px solid var(--border-color)',
+                      borderRadius: '16px',
+                      padding: '18px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px',
+                      boxShadow: req.estado === 'LISTO_ENTREGA' ? '0 4px 18px rgba(16, 185, 129, 0.25)' : 'var(--shadow-sm)',
+                      position: 'relative'
+                    }}
+                  >
+                    {/* Encabezado del Pedido */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+                      <div>
+                        <span style={{ fontSize: '0.95rem', fontWeight: 900, color: '#38bdf8' }}>{req.numero_solicitud}</span>
+                        <small style={{ color: 'var(--sidebar-text)', fontSize: '0.74rem', display: 'block', marginTop: '2px' }}>
+                          📅 Solicitado: {req.fecha_solicitud_fmt || req.fecha_solicitud}
+                        </small>
+                      </div>
+
+                      <div>
+                        {req.estado === 'PENDIENTE' && (
+                          <span style={{ padding: '4px 10px', borderRadius: '10px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', fontSize: '0.75rem', fontWeight: 900 }}>
+                            ⏳ En preparación Bodega
+                          </span>
+                        )}
+                        {req.estado === 'LISTO_ENTREGA' && (
+                          <span style={{ padding: '4px 12px', borderRadius: '10px', background: '#10b981', color: '#ffffff', fontSize: '0.78rem', fontWeight: 900, boxShadow: '0 2px 8px rgba(16,185,129,0.4)' }}>
+                            📦 ¡APROBADO! LISTO PARA FIRMA
+                          </span>
+                        )}
+                        {req.estado === 'ENTREGADA' && (
+                          <span style={{ padding: '4px 10px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.18)', color: '#38bdf8', fontSize: '0.75rem', fontWeight: 900 }}>
+                            ✅ Recibido en Buseta
+                          </span>
+                        )}
+                        {req.estado === 'RECHAZADA' && (
+                          <span style={{ padding: '4px 10px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', fontSize: '0.75rem', fontWeight: 900 }}>
+                            🔴 Rechazado por Bodega
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Lista de Insumos */}
+                    <div style={{ background: 'rgba(15, 23, 42, 0.5)', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase' }}>Materiales:</span>
+                      {(req.items || []).map((it, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', color: 'var(--text-main)' }}>
+                          <span>• {it.nombre_material}</span>
+                          <strong style={{ color: req.estado === 'LISTO_ENTREGA' ? '#34d399' : '#38bdf8' }}>
+                            {it.cantidad_aprobada || it.cantidad_solicitada} {it.unidad_medida}
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Observaciones o Motivo de Rechazo */}
+                    {req.motivo_rechazo && (
+                      <div style={{ padding: '10px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', fontSize: '0.78rem' }}>
+                        <strong>Motivo de Rechazo:</strong> {req.motivo_rechazo}
+                      </div>
+                    )}
+
+                    {/* Acciones del Técnico */}
+                    {req.estado === 'LISTO_ENTREGA' && (
+                      <div style={{ marginTop: '4px' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirFirmaReq(req)}
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            borderRadius: '12px',
+                            border: 'none',
+                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                            color: 'white',
+                            fontWeight: 900,
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)'
+                          }}
+                        >
+                          <i className="fa-solid fa-signature"></i> ✍️ FIRMAR Y CONFIRMAR RECEPCIÓN
+                        </button>
+                      </div>
+                    )}
+
+                    {req.estado === 'ENTREGADA' && req.fecha_entrega_fmt && (
+                      <small style={{ color: '#10b981', fontWeight: 700, fontSize: '0.74rem' }}>
+                        Entrega finalizada el {req.fecha_entrega_fmt}
+                      </small>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: PESTAÑA DEDICADA DE MI VEHÍCULO */}
+        {activeMainTab === 'vehiculo' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            
+            {/* Header del Vehículo */}
+            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 900, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <i className="fa-solid fa-truck-moving"></i> Mi Bodega Móvil / Vehículo
+                </h3>
+                <span style={{ fontSize: '0.78rem', color: 'var(--sidebar-text)', fontWeight: 700, marginTop: '2px', display: 'block' }}>
+                  🚗 Placa: <strong style={{ color: '#38bdf8' }}>{inventarioVehiculoData.placa || 'S/P'}</strong> &bull; {inventarioVehiculoData.tecnico}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowTraspasoModal(true)}
+                  style={{ padding: '8px 14px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.2)', border: '1px solid rgba(16, 185, 129, 0.4)', color: '#34d399', fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <i className="fa-solid fa-arrow-right-arrow-left"></i> Traspasar / Devolver
+                </button>
+                <button
+                  type="button"
+                  onClick={cargarInventarioVehiculo}
+                  style={{ padding: '8px 12px', borderRadius: '10px', background: 'var(--profile-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer' }}
+                >
+                  <i className="fa-solid fa-arrows-rotate"></i>
+                </button>
+              </div>
+            </div>
+
+            {/* Listado de Materiales en Camioneta */}
+            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '16px' }}>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-main)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Insumos Disponibles ({inventarioVehiculoData.materiales.length}):
+              </h4>
+
+              {inventarioVehiculoData.materiales.length === 0 ? (
+                <div style={{ padding: '30px 20px', textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '14px', border: '1px dashed var(--border-color)' }}>
+                  <p style={{ margin: 0, color: 'var(--sidebar-text)', fontSize: '0.86rem', fontWeight: 600 }}>No hay materiales asignados a este vehículo ({inventarioVehiculoData.placa}).</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {inventarioVehiculoData.materiales.map((m, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+                      <div>
+                        <strong style={{ color: '#f8fafc', fontSize: '0.88rem', display: 'block' }}>{m.nombre_material}</strong>
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{m.categoria || 'Consumible'} &bull; Cod: {m.codigo_material || 'N/A'}</span>
+                      </div>
+                      <span style={{ padding: '4px 10px', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.2)', border: '1px solid rgba(59, 130, 246, 0.4)', color: '#60a5fa', fontWeight: 900, fontSize: '0.88rem' }}>
+                        {m.cantidad_disponible} {m.unidad_medida || 'uds'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Listado de Equipos Retirados */}
+            {inventarioVehiculoData.equipos_retirados.length > 0 && (
+              <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 800, color: '#fca5a5', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Equipos Retirados en Custodia ({inventarioVehiculoData.equipos_retirados.length}):
+                  </h4>
+                  <button
+                    type="button"
+                    disabled={devolviendoEquipos}
+                    onClick={() => handleDevolverEquiposBodega(inventarioVehiculoData.equipos_retirados.map(x => x.id_retiro))}
+                    style={{ padding: '6px 12px', borderRadius: '8px', background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', border: 'none', color: 'white', fontWeight: 800, fontSize: '0.74rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                  >
+                    {devolviendoEquipos ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-building-circle-arrow-right"></i>} Devolver a Bodega
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {inventarioVehiculoData.equipos_retirados.map((eq, idx) => (
+                    <div key={idx} style={{ background: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span style={{ padding: '2px 6px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: 900, background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', marginRight: '6px' }}>{eq.tipo_equipo}</span>
+                          <strong style={{ color: '#f8fafc', fontSize: '0.9rem', fontFamily: 'monospace' }}>{eq.numero_serie}</strong>
+                        </div>
+                        <span style={{ fontSize: '0.72rem', color: '#fca5a5', fontWeight: 700 }}>{eq.motivo_retiro}</span>
+                      </div>
+                      <small style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Cliente: {eq.cliente || 'N/A'}</small>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 
@@ -3550,38 +4042,42 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                 )}
               </div>
 
-              {/* Mi Vehículo / Bodega Móvil */}
-              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '16px' }}>
-                <label style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <i className="fa-solid fa-truck-moving" style={{ marginRight: '6px', color: '#3b82f6' }}></i> Mi Bodega Móvil / Vehículo
+              {/* Navegación Rápida a Pestañas del Panel */}
+              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Acceso Rápido
                 </label>
                 <button
                   type="button"
                   onClick={() => {
                     setShowProfileModal(false);
-                    setShowInventarioVehiculoModal(true);
+                    setActiveMainTab('vehiculo');
                     cargarInventarioVehiculo();
                   }}
-                  style={{ width: '100%', padding: '12px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', color: 'white', fontWeight: 800, cursor: 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                  style={{ width: '100%', padding: '12px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', fontWeight: 800, cursor: 'pointer', fontSize: '0.86rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                 >
-                  <i className="fa-solid fa-boxes-stacked"></i> 📦 Ver Materiales y Equipos en Vehículo
+                  <i className="fa-solid fa-truck-moving"></i> 🚐 Ir a Mi Vehículo
                 </button>
-              </div>
-
-              {/* Traspaso de Material entre Técnicos */}
-              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '16px' }}>
-                <label style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <i className="fa-solid fa-arrow-right-arrow-left" style={{ marginRight: '6px', color: '#10b981' }}></i> Transferencia o Devolución
-                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProfileModal(false);
+                    setActiveMainTab('pedidos');
+                    cargarMisRequisiciones();
+                  }}
+                  style={{ width: '100%', padding: '12px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: 'white', fontWeight: 800, cursor: 'pointer', fontSize: '0.86rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                >
+                  <i className="fa-solid fa-boxes-packing"></i> 📦 Ir a Mis Pedidos
+                </button>
                 <button
                   type="button"
                   onClick={() => {
                     setShowProfileModal(false);
                     setShowTraspasoModal(true);
                   }}
-                  style={{ width: '100%', padding: '12px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', fontWeight: 800, cursor: 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                  style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: '#38bdf8', fontWeight: 800, cursor: 'pointer', fontSize: '0.86rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                 >
-                  <i className="fa-solid fa-people-arrows"></i> 🔄 Traspaso / Devolver a Bodega
+                  <i className="fa-solid fa-arrow-right-arrow-left"></i> 🔄 Traspasar / Devolver
                 </button>
               </div>
 
@@ -3599,198 +4095,113 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         </div>
       )}
 
-      {/* MODAL: MI INVENTARIO / VEHÍCULO ASIGNADO */}
-      {showInventarioVehiculoModal && (
+      {/* MODAL: SOLICITAR MATERIALES A BODEGA (DESDE EL CELULAR DEL TÉCNICO) */}
+      {showSolicitudBodegaModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: 200000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px', boxSizing: 'border-box' }}>
-          <div style={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '24px', width: '100%', maxWidth: '520px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.7)', overflow: 'hidden' }}>
+          <div style={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '24px', width: '100%', maxWidth: '480px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.7)', overflow: 'hidden' }}>
             
             {/* Header */}
-            <div style={{ padding: '20px 24px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '18px 22px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
-                <h4 style={{ margin: 0, color: 'white', fontSize: '1.1rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <i className="fa-solid fa-truck-moving" style={{ color: '#38bdf8' }}></i> Mi Bodega Móvil
+                <h4 style={{ margin: 0, color: 'white', fontSize: '1.05rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <i className="fa-solid fa-boxes-packing" style={{ color: '#38bdf8' }}></i> Pedido de Insumos a Bodega
                 </h4>
-                <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, marginTop: '2px', display: 'block' }}>
-                  🚗 Placa: <strong style={{ color: '#38bdf8' }}>{inventarioVehiculoData.placa || 'S/P'}</strong> &bull; {inventarioVehiculoData.tecnico}
+                <span style={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: 700, marginTop: '2px', display: 'block' }}>
+                  🚗 Buseta: <strong style={{ color: '#38bdf8' }}>{inventarioVehiculoData.placa || 'S/P'}</strong>
                 </span>
               </div>
-              <button onClick={() => setShowInventarioVehiculoModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.4rem', cursor: 'pointer', padding: '4px' }}>&times;</button>
+              <button onClick={() => setShowSolicitudBodegaModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.4rem', cursor: 'pointer', padding: '4px' }}>&times;</button>
             </div>
 
-            {/* Sub Tabs: Materiales vs Equipos Retirados */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#0f172a', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '6px' }}>
-              <button
-                type="button"
-                onClick={() => setTabInventarioVehiculo('materiales')}
-                style={{
-                  padding: '10px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  background: tabInventarioVehiculo === 'materiales' ? 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)' : 'transparent',
-                  color: tabInventarioVehiculo === 'materiales' ? 'white' : '#94a3b8',
-                  fontWeight: 800,
-                  fontSize: '0.82rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <i className="fa-solid fa-toolbox"></i> Materiales ({inventarioVehiculoData.materiales.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setTabInventarioVehiculo('retirados')}
-                style={{
-                  padding: '10px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  background: tabInventarioVehiculo === 'retirados' ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' : 'transparent',
-                  color: tabInventarioVehiculo === 'retirados' ? 'white' : '#94a3b8',
-                  fontWeight: 800,
-                  fontSize: '0.82rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <i className="fa-solid fa-box-archive"></i> Retirados ({inventarioVehiculoData.equipos_retirados.length})
-              </button>
-            </div>
-
-            {/* Body */}
-            <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {loadingInventarioVehiculo ? (
-                <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8' }}>
-                  <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '1.8rem', color: '#38bdf8', marginBottom: '10px' }}></i>
-                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700 }}>Cargando inventario del vehículo...</p>
+            {/* Form Body */}
+            <form onSubmit={handleEnviarSolicitudBodegaSubmit} style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase' }}>
+                    Materiales Requeridos:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddItemSolicitudBodega}
+                    style={{ background: 'rgba(56, 189, 248, 0.2)', border: '1px solid rgba(56, 189, 248, 0.4)', color: '#38bdf8', padding: '4px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer' }}
+                  >
+                    + Agregar Ítem
+                  </button>
                 </div>
-              ) : tabInventarioVehiculo === 'materiales' ? (
-                /* TAB 1: MATERIALES EN CAMIONETA */
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase' }}>Insumos Disponibles:</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowInventarioVehiculoModal(false);
-                        setShowTraspasoModal(true);
-                      }}
-                      style={{ padding: '6px 12px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.2)', border: '1px solid rgba(16, 185, 129, 0.4)', color: '#34d399', fontWeight: 800, fontSize: '0.74rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
-                    >
-                      <i className="fa-solid fa-arrow-right-arrow-left"></i> Traspasar / Devolver
-                    </button>
-                  </div>
 
-                  {inventarioVehiculoData.materiales.length === 0 ? (
-                    <div style={{ padding: '30px 20px', textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                      <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.86rem', fontWeight: 600 }}>No hay materiales asignados a este vehículo ({inventarioVehiculoData.placa}).</p>
-                      <small style={{ color: '#64748b', marginTop: '4px', display: 'block' }}>Solicita carga de stock en Bodega Central.</small>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {inventarioVehiculoData.materiales.map((m, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px' }}>
-                          <div>
-                            <strong style={{ color: '#f8fafc', fontSize: '0.88rem', display: 'block' }}>{m.nombre_material}</strong>
-                            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{m.categoria || 'Consumible'} &bull; Cod: {m.codigo_material || 'N/A'}</span>
-                          </div>
-                          <span style={{ padding: '4px 10px', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.2)', border: '1px solid rgba(59, 130, 246, 0.4)', color: '#60a5fa', fontWeight: 900, fontSize: '0.88rem' }}>
-                            {m.cantidad_disponible} {m.unidad_medida || 'uds'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* TAB 2: EQUIPOS RETIRADOS EN CUSTODIA */
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={{ fontSize: '0.78rem', color: '#fca5a5', fontWeight: 800, textTransform: 'uppercase' }}>Equipos en Custodia:</span>
-                    {inventarioVehiculoData.equipos_retirados.length > 0 && (
-                      <button
-                        type="button"
-                        disabled={devolviendoEquipos}
-                        onClick={() => handleDevolverEquiposBodega(inventarioVehiculoData.equipos_retirados.map(x => x.id_retiro))}
-                        style={{ padding: '6px 12px', borderRadius: '8px', background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', border: 'none', color: 'white', fontWeight: 800, fontSize: '0.74rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '220px', overflowY: 'auto' }}>
+                  {solicitudBodegaItems.map((it, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 32px', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.6)', padding: '8px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <select
+                        required
+                        value={it.id_material}
+                        onChange={(e) => handleItemChangeSolicitudBodega(idx, 'id_material', e.target.value)}
+                        style={{ padding: '8px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#f8fafc', fontSize: '0.8rem' }}
                       >
-                        {devolviendoEquipos ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-building-circle-arrow-right"></i>} Devolver Todos a Bodega
-                      </button>
-                    )}
-                  </div>
+                        <option value="">-- Elegir Material --</option>
+                        {(catalogoMateriales || []).map((m) => (
+                          <option key={m.id_material} value={m.id_material}>
+                            {m.nombre_material} ({m.unidad_medida})
+                          </option>
+                        ))}
+                      </select>
 
-                  {inventarioVehiculoData.equipos_retirados.length === 0 ? (
-                    <div style={{ padding: '30px 20px', textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                      <p style={{ margin: 0, color: '#34d399', fontSize: '0.86rem', fontWeight: 700 }}>✨ No tienes equipos retirados pendientes de devolución.</p>
-                      <small style={{ color: '#94a3b8', marginTop: '4px', display: 'block' }}>Tu furgoneta está al día sin rezagos.</small>
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        placeholder="Cant"
+                        value={it.cantidad_solicitada}
+                        onChange={(e) => handleItemChangeSolicitudBodega(idx, 'cantidad_solicitada', e.target.value)}
+                        style={{ padding: '8px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#f8fafc', fontSize: '0.8rem', textAlign: 'center', fontWeight: 'bold' }}
+                      />
+
+                      {solicitudBodegaItems.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItemSolicitudBodega(idx)}
+                          style={{ background: 'transparent', border: 'none', color: '#f87171', fontSize: '1rem', cursor: 'pointer' }}
+                        >
+                          &times;
+                        </button>
+                      ) : <div></div>}
                     </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {inventarioVehiculoData.equipos_retirados.map((eq, idx) => {
-                        const esDanado = eq.motivo_retiro === 'DANADO_FALLA' || eq.motivo_retiro === 'DANADO_CLIENTE';
-                        return (
-                          <div key={idx} style={{ background: 'rgba(15, 23, 42, 0.7)', border: `1px solid ${esDanado ? 'rgba(239, 68, 68, 0.35)' : 'rgba(16, 185, 129, 0.35)'}`, borderRadius: '14px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                              <div>
-                                <span style={{ padding: '2px 8px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: 900, background: eq.tipo_equipo === 'ONU' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(99, 102, 241, 0.2)', color: eq.tipo_equipo === 'ONU' ? '#34d399' : '#a5b4fc', textTransform: 'uppercase', marginRight: '6px' }}>
-                                  {eq.tipo_equipo}
-                                </span>
-                                <strong style={{ color: '#f8fafc', fontSize: '0.92rem', fontFamily: 'monospace' }}>{eq.numero_serie}</strong>
-                              </div>
-                              <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '3px 8px', borderRadius: '8px', background: esDanado ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)', color: esDanado ? '#fca5a5' : '#6ee7b7' }}>
-                                {eq.motivo_retiro === 'DANADO_FALLA' ? '⚡ Dañado' : eq.motivo_retiro === 'REEMPLAZO_UPGRADE' ? '🔄 Reutilizable' : eq.motivo_retiro}
-                              </span>
-                            </div>
-
-                            <div style={{ fontSize: '0.76rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                              {eq.cliente && <span>Cliente: <strong style={{ color: '#cbd5e1' }}>{eq.cliente}</strong> (Contrato: {eq.contrato || 'N/A'})</span>}
-                              {eq.observacion_retiro && <span>Detalle: <em>"{eq.observacion_retiro}"</em></span>}
-                              <small style={{ color: '#64748b', marginTop: '2px' }}>Retirado: {eq.fecha_retiro}</small>
-                            </div>
-
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '8px' }}>
-                              <button
-                                type="button"
-                                disabled={devolviendoEquipos}
-                                onClick={() => handleDevolverEquiposBodega([eq.id_retiro])}
-                                style={{ padding: '6px 12px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#fca5a5', fontWeight: 800, fontSize: '0.74rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                              >
-                                <i className="fa-solid fa-arrow-right-to-bracket"></i> Devolver a Bodega
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                  ))}
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* Footer */}
-            <div style={{ padding: '16px 24px', background: '#0f172a', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={cargarInventarioVehiculo}
-                style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                <i className="fa-solid fa-arrows-rotate"></i> Actualizar
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowInventarioVehiculoModal(false)}
-                style={{ padding: '8px 18px', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', color: 'white', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer' }}
-              >
-                Cerrar
-              </button>
-            </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>
+                  Nota / Motivo del Pedido (Opcional):
+                </label>
+                <textarea
+                  rows="2"
+                  placeholder="Ej: Reposición para jornada de la tarde..."
+                  value={solicitudBodegaObs}
+                  onChange={(e) => setSolicitudBodegaObs(e.target.value)}
+                  style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #475569', background: '#0f172a', color: '#f8fafc', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                />
+              </div>
 
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowSolicitudBodegaModal(false)}
+                  style={{ padding: '10px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#cbd5e1', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={enviandoSolicitudBodega}
+                  style={{ padding: '10px 20px', borderRadius: '10px', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', border: 'none', color: 'white', fontWeight: 800, fontSize: '0.84rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,99,235,0.4)' }}
+                >
+                  {enviandoSolicitudBodega ? 'Enviando...' : 'Enviar Pedido a Bodega 🚀'}
+                </button>
+              </div>
+
+            </form>
           </div>
         </div>
       )}
@@ -3961,6 +4372,18 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
         </div>
       )}
+
+      {/* MODAL DE FIRMA DIGITAL PARA RECEPCIÓN DE REQUISICIÓN */}
+      <FirmaCanvasModal
+        isOpen={showFirmaReqModal}
+        onClose={() => {
+          setShowFirmaReqModal(false);
+          setSelectedReqParaFirmar(null);
+        }}
+        onSave={handleGuardarFirmaReq}
+        titulo={`Firma de Recepción: ${selectedReqParaFirmar?.numero_solicitud || ''}`}
+        subtitulo={`Confirmo la entrega y recepción física de los materiales aprobados para el vehículo ${selectedReqParaFirmar?.placa_vehiculo || ''}`}
+      />
 
     </div>
   );

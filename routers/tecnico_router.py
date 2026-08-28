@@ -1258,7 +1258,11 @@ def api_tecnico_mi_inventario():
     cursor = conexion.cursor(dictionary=True)
     try:
         username = usuario.get('username') or session.get('user_name')
-        cursor.execute("SELECT id_tecnico, nombre, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa FROM tecnicos WHERE id_usuario = %s OR nombre = %s OR nombre LIKE %s", (usuario.get('id_usuario'), username, f"%{username}%"))
+        cursor.execute("""
+            SELECT id_tecnico, nombre, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa 
+            FROM tecnicos 
+            WHERE nombre = %s OR UPPER(nombre) = %s OR nombre LIKE %s
+        """, (username, (username or '').upper(), f"%{username}%"))
         row_tec = cursor.fetchone()
         
         if not row_tec:
@@ -1307,6 +1311,144 @@ def api_tecnico_mi_inventario():
     finally:
         cursor.close()
         conexion.close()
+
+
+@tecnico_bp.route('/api/tecnico/mis_requisiciones', methods=['GET'])
+def api_tecnico_mis_requisiciones():
+    usuario = obtener_usuario_autenticado()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de base de datos"}), 500
+        
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        username = usuario.get('username') or session.get('user_name')
+        cursor.execute("""
+            SELECT id_tecnico, nombre, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa 
+            FROM tecnicos 
+            WHERE nombre = %s OR UPPER(nombre) = %s OR nombre LIKE %s
+        """, (username, (username or '').upper(), f"%{username}%"))
+        row_tec = cursor.fetchone()
+        
+        if not row_tec:
+            return jsonify({"status": "error", "message": "Técnico no encontrado"}), 404
+            
+        nombre_tecnico = row_tec['nombre']
+        placa = row_tec['placa']
+
+        cursor.execute("""
+            SELECT * FROM requisiciones_materiales
+            WHERE (placa_vehiculo = %s OR nombre_tecnico = %s)
+            ORDER BY fecha_solicitud DESC LIMIT 30
+        """, (placa, nombre_tecnico))
+        reqs = cursor.fetchall()
+
+        for r in reqs:
+            cursor.execute("""
+                SELECT ri.*
+                FROM requisiciones_materiales_items ri
+                WHERE ri.id_requisicion = %s
+            """, (r['id_requisicion'],))
+            r['items'] = cursor.fetchall()
+            if r.get('fecha_solicitud'):
+                r['fecha_solicitud_fmt'] = r['fecha_solicitud'].strftime('%Y-%m-%d %H:%M')
+            if r.get('fecha_aprobacion'):
+                r['fecha_aprobacion_fmt'] = r['fecha_aprobacion'].strftime('%Y-%m-%d %H:%M')
+            if r.get('fecha_entrega'):
+                r['fecha_entrega_fmt'] = r['fecha_entrega'].strftime('%Y-%m-%d %H:%M')
+
+        # Contar cuántas están listas para firmar
+        pendientes_firma = [r for r in reqs if r['estado'] == 'LISTO_ENTREGA']
+
+        return jsonify({
+            "status": "ok",
+            "placa": placa,
+            "tecnico": nombre_tecnico,
+            "requisiciones": reqs,
+            "total_listas_para_firmar": len(pendientes_firma)
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@tecnico_bp.route('/api/tecnico/requisiciones/<int:id_requisicion>/firmar', methods=['POST'])
+def api_tecnico_requisicion_firmar(id_requisicion):
+    usuario = obtener_usuario_autenticado()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+
+    data = request.json or {}
+    firma_base64 = data.get('firma_tecnico')
+    if not firma_base64:
+        return jsonify({"status": "error", "message": "Debes dibujar tu firma digital para recibir."}), 400
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de base de datos"}), 500
+
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        username = usuario.get('username') or session.get('user_name')
+
+        cursor.execute("SELECT * FROM requisiciones_materiales WHERE id_requisicion = %s", (id_requisicion,))
+        req = cursor.fetchone()
+        if not req:
+            return jsonify({"status": "error", "message": "Requisición no encontrada"}), 404
+        if req['estado'] == 'ENTREGADA':
+            return jsonify({"status": "error", "message": "Esta solicitud ya fue entregada y firmada."}), 400
+
+        placa = req['placa_vehiculo']
+
+        cursor.execute("SELECT * FROM requisiciones_materiales_items WHERE id_requisicion = %s", (id_requisicion,))
+        items = cursor.fetchall()
+
+        # Transferencia atómica
+        for it in items:
+            id_mat = it['id_material']
+            cant = int(it['cantidad_aprobada'] or it['cantidad_solicitada'] or 0)
+            if cant <= 0:
+                continue
+
+            # Restar de materiales (bodega)
+            cursor.execute("UPDATE materiales SET stock_bodega = GREATEST(0, stock_bodega - %s) WHERE id_material = %s", (cant, id_mat))
+
+            # Sumar a inventario_tecnicos de la placa
+            cursor.execute("SELECT id_inventario, cantidad_disponible FROM inventario_tecnicos WHERE placa_vehiculo = %s AND id_material = %s", (placa, id_mat))
+            inv_row = cursor.fetchone()
+            if inv_row:
+                cursor.execute("UPDATE inventario_tecnicos SET cantidad_disponible = cantidad_disponible + %s WHERE id_inventario = %s", (cant, inv_row['id_inventario']))
+            else:
+                cursor.execute("INSERT INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible) VALUES (%s, %s, %s)", (placa, id_mat, cant))
+
+        # Actualizar estado
+        cursor.execute("""
+            UPDATE requisiciones_materiales
+            SET estado = 'ENTREGADA',
+                fecha_entrega = NOW(),
+                firma_tecnico = %s,
+                entregado_por = COALESCE(aprobado_por, 'Bodega Central')
+            WHERE id_requisicion = %s
+        """, (firma_base64, id_requisicion))
+
+        conexion.commit()
+        return jsonify({
+            "status": "ok",
+            "message": f"¡Firma registrada con éxito! Los materiales fueron cargados a tu buseta ({placa}).",
+            "numero_solicitud": req['numero_solicitud']
+        })
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
 
 @tecnico_bp.route('/api/tecnico/devolver_equipos_bodega', methods=['POST'])
 def api_tecnico_devolver_equipos_bodega():
@@ -1373,7 +1515,11 @@ def traspaso_material_tecnico():
     cursor = conexion.cursor(dictionary=True)
     try:
         origen_nombre = usuario.get('username') or session.get('user_name')
-        cursor.execute("SELECT nombre, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa FROM tecnicos WHERE id_usuario = %s OR nombre = %s OR nombre LIKE %s", (usuario.get('id_usuario'), origen_nombre, f"%{origen_nombre}%"))
+        cursor.execute("""
+            SELECT nombre, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa 
+            FROM tecnicos 
+            WHERE nombre = %s OR UPPER(nombre) = %s OR nombre LIKE %s
+        """, (origen_nombre, (origen_nombre or '').upper(), f"%{origen_nombre}%"))
         row_origen = cursor.fetchone()
         if not row_origen:
             return jsonify({"status": "error", "message": "Técnico de origen no encontrado"}), 404

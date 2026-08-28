@@ -1,4 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import EquiposBodegaTab from './EquiposBodegaTab';
+import RequisicionesBodegaTab from './RequisicionesBodegaTab';
+import LiquidacionMensualTab from './LiquidacionMensualTab';
+import ConsumoVisitasTab from './ConsumoVisitasTab';
 
 function InventarioTab({ token }) {
   const [loading, setLoading] = useState(true);
@@ -796,27 +800,6 @@ function InventarioTab({ token }) {
         </button>
 
         <button
-          onClick={() => setInvSubTab('requisiciones')}
-          style={{
-            padding: '10px 18px',
-            borderRadius: '12px',
-            border: 'none',
-            fontWeight: 800,
-            cursor: 'pointer',
-            background: invSubTab === 'requisiciones' ? '#1f497d' : 'var(--card-bg)',
-            color: invSubTab === 'requisiciones' ? 'white' : 'var(--text-main)',
-            boxShadow: invSubTab === 'requisiciones' ? '0 4px 12px rgba(31, 73, 125, 0.2)' : 'none',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontSize: '0.9rem',
-            transition: 'all 0.2s'
-          }}
-        >
-          <i className="fa-solid fa-truck-ramp-box"></i> Historial Entregas ({requisicionesHistorial.length})
-        </button>
-
-        <button
           onClick={() => setInvSubTab('traspasos')}
           style={{
             padding: '10px 18px',
@@ -836,6 +819,90 @@ function InventarioTab({ token }) {
         >
           <i className="fa-solid fa-arrow-right-arrow-left"></i> Traspasos ({traspasosHistorial.length})
         </button>
+
+        <button
+          onClick={() => setInvSubTab('requisiciones')}
+          style={{
+            padding: '10px 18px',
+            borderRadius: '12px',
+            border: 'none',
+            fontWeight: 800,
+            cursor: 'pointer',
+            background: invSubTab === 'requisiciones' ? '#2563eb' : 'var(--card-bg)',
+            color: invSubTab === 'requisiciones' ? 'white' : 'var(--text-main)',
+            boxShadow: invSubTab === 'requisiciones' ? '0 4px 14px rgba(37, 99, 235, 0.3)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontSize: '0.9rem',
+            transition: 'all 0.2s'
+          }}
+        >
+          <i className="fa-solid fa-file-signature"></i> 📦 Requisiciones & Despachos
+        </button>
+
+        <button
+          onClick={() => setInvSubTab('liquidacion')}
+          style={{
+            padding: '10px 18px',
+            borderRadius: '12px',
+            border: 'none',
+            fontWeight: 800,
+            cursor: 'pointer',
+            background: invSubTab === 'liquidacion' ? '#0d9488' : 'var(--card-bg)',
+            color: invSubTab === 'liquidacion' ? 'white' : 'var(--text-main)',
+            boxShadow: invSubTab === 'liquidacion' ? '0 4px 14px rgba(13, 148, 136, 0.3)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontSize: '0.9rem',
+            transition: 'all 0.2s'
+          }}
+        >
+          <i className="fa-solid fa-calculator"></i> 📊 Cierre Mensual (26-27)
+        </button>
+
+        <button
+          onClick={() => setInvSubTab('consumo_visitas')}
+          style={{
+            padding: '10px 18px',
+            borderRadius: '12px',
+            border: 'none',
+            fontWeight: 800,
+            cursor: 'pointer',
+            background: invSubTab === 'consumo_visitas' ? '#0ea5e9' : 'var(--card-bg)',
+            color: invSubTab === 'consumo_visitas' ? 'white' : 'var(--text-main)',
+            boxShadow: invSubTab === 'consumo_visitas' ? '0 4px 14px rgba(14, 165, 233, 0.3)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontSize: '0.9rem',
+            transition: 'all 0.2s'
+          }}
+        >
+          <i className="fa-solid fa-clipboard-check"></i> 📋 Materiales por Visita
+        </button>
+
+        <button
+          onClick={() => setInvSubTab('equipos')}
+          style={{
+            padding: '10px 18px',
+            borderRadius: '12px',
+            border: 'none',
+            fontWeight: 800,
+            cursor: 'pointer',
+            background: invSubTab === 'equipos' ? '#10b981' : 'var(--card-bg)',
+            color: invSubTab === 'equipos' ? 'white' : 'var(--text-main)',
+            boxShadow: invSubTab === 'equipos' ? '0 4px 14px rgba(16, 185, 129, 0.3)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontSize: '0.9rem',
+            transition: 'all 0.2s'
+          }}
+        >
+          <i className="fa-solid fa-barcode"></i> Equipos (ONUs / Routers)
+        </button>
       </div>
 
       {loading ? (
@@ -851,6 +918,39 @@ function InventarioTab({ token }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
           
+          {/* VIEW: CONSUMO DE MATERIALES POR VISITA DIARIA */}
+          {invSubTab === 'consumo_visitas' && (
+            <ConsumoVisitasTab 
+              token={token} 
+              tecnicosVehiculosProp={tecnicosVehiculos}
+            />
+          )}
+
+          {/* VIEW: REQUISICIONES DIGITALES Y DESPACHOS CON FIRMA */}
+          {invSubTab === 'requisiciones' && (
+            <RequisicionesBodegaTab 
+              token={token}
+              placas={tecnicos}
+              tecnicosVehiculos={tecnicosVehiculos}
+              materialesProp={materiales}
+            />
+          )}
+
+          {/* VIEW: LIQUIDACION Y CIERRE MENSUAL POR PLACA */}
+          {invSubTab === 'liquidacion' && (
+            <LiquidacionMensualTab 
+              token={token}
+              placas={tecnicos}
+              tecnicosVehiculos={tecnicosVehiculos}
+              materialesProp={materiales}
+            />
+          )}
+
+          {/* VIEW 0: CONTROL DE EQUIPOS CON PISTOLA DE CÓDIGO DE BARRAS */}
+          {invSubTab === 'equipos' && (
+            <EquiposBodegaTab />
+          )}
+
           {/* VIEW 1: MATRIZ DE STOCK Y CUSTODIAS */}
           {invSubTab === 'matriz' && (
             <>
@@ -1371,97 +1471,6 @@ function InventarioTab({ token }) {
                               style={{ padding: '6px 12px', background: 'rgba(31, 73, 125, 0.1)', border: '1px solid rgba(31, 73, 125, 0.25)', color: '#1f497d', borderRadius: '8px', fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             >
                               <i className="fa-solid fa-eye"></i> Ver Lote
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* VIEW 6: HISTORIAL DE REQUISICIONES / ENTREGAS */}
-          {invSubTab === 'requisiciones' && (
-            <div style={{ padding: '25px', background: 'var(--card-bg)', borderRadius: '20px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 850, color: '#6366f1', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <i className="fa-solid fa-truck-ramp-box"></i> Historial de Requisiciones y Entregas a Placas
-                  </h3>
-                  <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
-                    Registro histórico de vales y lotes de materiales despachados a vehículos.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowEntregaModal(true)}
-                  style={{ padding: '10px 18px', fontSize: '0.85rem', background: '#6366f1', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 8px rgba(99, 102, 241, 0.25)' }}
-                >
-                  <i className="fa-solid fa-plus"></i> + Nueva Requisición / Despacho
-                </button>
-              </div>
-
-              <div style={{ border: '1px solid var(--border-color)', borderRadius: '14px', overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--profile-bg)', borderBottom: '1px solid var(--border-color)', fontWeight: 800 }}>
-                      <th style={{ padding: '12px 15px' }}>Fecha Entrega</th>
-                      <th style={{ padding: '12px 15px' }}>Nº Requisición</th>
-                      <th style={{ padding: '12px 15px' }}>Placa Vehículo</th>
-                      <th style={{ padding: '12px 15px' }}>Técnico Responsable</th>
-                      <th style={{ padding: '12px 15px' }}>Observación</th>
-                      <th style={{ padding: '12px 15px', textAlign: 'center' }}>Tipos Insumo</th>
-                      <th style={{ padding: '12px 15px', textAlign: 'center' }}>Total Unidades</th>
-                      <th style={{ padding: '12px 15px' }}>Registrado por</th>
-                      <th style={{ padding: '12px 15px', textAlign: 'center', width: '110px' }}>Detalle</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {requisicionesHistorial.length === 0 ? (
-                      <tr>
-                        <td colSpan="9" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--sidebar-text)' }}>
-                          <i className="fa-solid fa-truck-ramp-box" style={{ fontSize: '2.5rem', color: '#94a3b8', marginBottom: '10px', display: 'block' }}></i>
-                          <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-main)' }}>No hay requisiciones registradas en el historial.</span>
-                        </td>
-                      </tr>
-                    ) : (
-                      requisicionesHistorial.map((r, idx) => (
-                        <tr key={r.id_requisicion || idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                          <td style={{ padding: '12px 15px', fontWeight: 800, color: 'var(--text-main)' }}>
-                            {r.fecha_entrega ? String(r.fecha_entrega).slice(0, 10) : '---'}
-                          </td>
-                          <td style={{ padding: '12px 15px', fontWeight: 900, fontFamily: 'monospace', color: '#6366f1' }}>
-                            {r.documento_req || '---'}
-                          </td>
-                          <td style={{ padding: '12px 15px', fontWeight: 900, color: 'var(--text-main)' }}>
-                            🚗 {r.placa_vehiculo}
-                          </td>
-                          <td style={{ padding: '12px 15px', fontWeight: 800, color: '#1f497d' }}>
-                            {r.tecnico_responsable || '---'}
-                          </td>
-                          <td style={{ padding: '12px 15px', color: 'var(--sidebar-text)', fontSize: '0.82rem' }}>
-                            {r.comentario || '---'}
-                          </td>
-                          <td style={{ padding: '12px 15px', textAlign: 'center', fontWeight: 800, color: 'var(--text-main)' }}>
-                            {r.total_items} items
-                          </td>
-                          <td style={{ padding: '12px 15px', textAlign: 'center' }}>
-                            <span style={{ padding: '3px 8px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1', fontWeight: 900, fontSize: '0.85rem' }}>
-                              {r.total_unidades} uds
-                            </span>
-                          </td>
-                          <td style={{ padding: '12px 15px', color: 'var(--sidebar-text)', fontSize: '0.82rem' }}>
-                            {r.registrado_por}
-                          </td>
-                          <td style={{ padding: '12px 15px', textAlign: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => verDetalleRequisicion(r)}
-                              style={{ padding: '6px 12px', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.25)', color: '#6366f1', borderRadius: '8px', fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              <i className="fa-solid fa-eye"></i> Ver Vale
                             </button>
                           </td>
                         </tr>

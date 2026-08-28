@@ -176,8 +176,8 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
     // Load initial map view
     mapRef.current = window.L.map(mapContainerId).setView([defaultLat, defaultLon], 14);
 
-    window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
+    window.L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+      attribution: '&copy; Google Maps'
     }).addTo(mapRef.current);
 
     markerRef.current = window.L.marker([defaultLat, defaultLon], {
