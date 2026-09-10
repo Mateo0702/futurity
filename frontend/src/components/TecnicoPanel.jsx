@@ -304,9 +304,11 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
   // Work Tab Forms State (indexed by visit ID)
   const [formCierre, setFormCierre] = useState({});
+  const [isFinalizing, setIsFinalizing] = useState(false);
 
   // Canvas Ref for Signature Drawing
   const canvasRef = useRef(null);
+  const isDrawingRef = useRef(false);
   const [isDrawing, setIsDrawing] = useState(false);
 
   // Load panel data
@@ -491,7 +493,29 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
   const activeFormState = activeVisita ? getFormState(activeVisita.id_visita) : defaultFormState;
 
-  // GPS Auto-Ping
+  // GPS Auto-Ping Continuo y Heartbeat de Conexión
+  const ultimaPosicionRef = useRef(null);
+
+  // Mantener GPS satelital enganchado en alta precisión (watchPosition)
+  useEffect(() => {
+    if (!navigator.geolocation || estadoActividad === 'En Descanso') return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        ultimaPosicionRef.current = {
+          lat: position.coords.latitude,
+          lon: position.coords.longitude,
+          timestamp: Date.now()
+        };
+      },
+      (err) => console.log('WatchPosition GPS info:', err.message),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [estadoActividad]);
 
   const enviarPingGeolocalizacion = () => {
     if (estadoActividad === 'En Descanso') {
@@ -500,7 +524,6 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     }
 
     if (window.AndroidBridge) {
-      console.log("Solicitando ping global nativo Android...");
       try {
         window.AndroidBridge.requestSingleLocation("global");
       } catch (e) {
@@ -512,11 +535,37 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     }
   };
 
-  const solicitarPingHTML5 = () => {
+  const solicitarPingHTML5 = async () => {
+    // Si tenemos una posición muy fresca del watchPosition (< 20s), enviarla de inmediato
+    if (ultimaPosicionRef.current && (Date.now() - ultimaPosicionRef.current.timestamp < 20000)) {
+      try {
+        await fetch('/api/tecnico/ping_global', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            latitud: ultimaPosicionRef.current.lat,
+            longitud: ultimaPosicionRef.current.lon,
+            tecnico_nombre: tecnicoRealName
+          })
+        });
+        return;
+      } catch (err) {
+        console.error('Error enviando ping con posición cacheada:', err);
+      }
+    }
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           try {
+            ultimaPosicionRef.current = {
+              lat: position.coords.latitude,
+              lon: position.coords.longitude,
+              timestamp: Date.now()
+            };
             await fetch('/api/tecnico/ping_global', {
               method: 'POST',
               headers: {
@@ -534,15 +583,42 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
           }
         },
         (err) => console.log('Ubicación HTML5 denegada o no disponible para ping: ' + err.message),
-        { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
       );
     }
   };
+
+  // Temporizador de ping continuo cada 25 segundos y arranque de servicio nativo
+  useEffect(() => {
+    // Ping inmediato al abrir
+    enviarPingGeolocalizacion();
+
+    // Notificar al servicio nativo de Android para rastreo global continuo si existe
+    if (window.AndroidBridge) {
+      try {
+        if (typeof window.AndroidBridge.startGlobalTracking === 'function') {
+          window.AndroidBridge.startGlobalTracking(tecnicoRealName, window.location.origin);
+        }
+      } catch (e) {
+        console.warn("startGlobalTracking nativo:", e);
+      }
+    }
+
+    const pingTimer = setInterval(() => {
+      enviarPingGeolocalizacion();
+    }, 25000);
+
+    return () => {
+      clearInterval(pingTimer);
+    };
+  }, [token, tecnicoRealName, estadoActividad]);
 
   // Register native callback hook on window object for Android app interaction
   useEffect(() => {
     window.recibirUbicacionNativa = async (tipo, lat, lon) => {
       console.log("Recibida ubicación nativa desde Android:", tipo, lat, lon);
+      ultimaPosicionRef.current = { lat, lon, timestamp: Date.now() };
+
       if (tipo === 'global') {
         if (estadoActividad === 'En Descanso') {
           console.log("El técnico está en descanso. Saltando ping nativo.");
@@ -585,38 +661,44 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
   // --- OLT SmartOLT Live Diagnosis ---
   const ejecutarMedicionOLT = async (sn) => {
-    if (!sn || sn.trim() === '' || sn === 'S/N' || sn === 'None') {
-      alert("Esta visita no tiene un número de serie (SN) registrado para consultar en la OLT.");
-      return;
+    let targetSn = (sn || activeVisita?.numero_serie || '').toString().trim();
+    if (!targetSn || targetSn === '' || targetSn.toUpperCase() === 'S/N' || targetSn.toUpperCase() === 'NONE' || targetSn.toUpperCase() === 'NULL') {
+      const inputSn = prompt("Esta visita no tiene un número de serie asignado.\nIngresa el SN de la ONT a diagnosticar en SmartOLT:", "");
+      if (!inputSn || !inputSn.trim()) return;
+      targetSn = inputSn.trim();
     }
     setOltLoading(true);
     setOltResult(null);
     try {
-      const res = await fetch(`/api/admin/smartolt/diagnostico/${encodeURIComponent(sn.trim())}`, {
+      const res = await fetch(`/api/admin/smartolt/diagnostico/${encodeURIComponent(targetSn.trim())}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      if (res.ok && data.status === 'success') {
+      if (res.ok && data.status === 'success' && data.diagnostico) {
         setOltResult(data.diagnostico);
       } else {
-        alert(data.message || 'Error al obtener diagnóstico de la OLT.');
+        alert(data.message || 'El equipo no se encuentra registrado en ninguna central SmartOLT activa.');
       }
     } catch (err) {
       console.error(err);
-      alert('Error de conexión.');
+      alert('Error de conexión con el servidor de diagnóstico.');
     } finally {
       setOltLoading(false);
     }
   };
 
   const getPowerRangeValues = (dbmStr) => {
-    if (!dbmStr || dbmStr === 'N/D') return { pct: 0, color: 'rgba(255,255,255,0.1)', text: 'N/D' };
-    const val = parseFloat(dbmStr.replace(/[^\d.-]/g, ''));
-    if (isNaN(val)) return { pct: 0, color: 'rgba(255,255,255,0.1)', text: dbmStr };
+    if (!dbmStr || dbmStr === 'N/D' || dbmStr === 'DESCONECTADO' || dbmStr === '-') {
+      return { pct: 0, color: '#ef4444', text: '🔴 Sin Señal / N/D' };
+    }
+    const match = String(dbmStr).match(/-?\d+\.?\d*/);
+    if (!match) return { pct: 0, color: '#64748b', text: String(dbmStr) };
+    const val = parseFloat(match[0]);
+    if (isNaN(val)) return { pct: 0, color: '#64748b', text: String(dbmStr) };
     
-    if (val >= -25.99 && val <= -15.00) {
+    if (val >= -25.99 && val <= -14.00) {
       return { pct: 85, color: '#10b981', text: `🟢 Excelente (${val} dBm)` };
-    } else if (val >= -28.99 && val <= -26.00) {
+    } else if (val >= -28.99 && val < -25.99) {
       return { pct: 55, color: '#f59e0b', text: `🟡 Atenuado (${val} dBm)` };
     } else {
       return { pct: 25, color: '#ef4444', text: `🔴 Crítico (${val} dBm)` };
@@ -932,7 +1014,12 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   // Posponer
   const posponerVisitaSubmit = async (e) => {
     e.preventDefault();
-    const motivoFinal = motivoPosponer === 'Otro motivo' ? motivoPosponerOtro : motivoPosponer;
+    let motivoFinal = motivoPosponer;
+    if (motivoPosponer === 'Cliente solicita reagendar para otra fecha') {
+      motivoFinal = `Cliente solicita reagendar: ${motivoPosponerOtro ? motivoPosponerOtro.trim() : 'Sin fecha detallada'}`;
+    } else if (motivoPosponer === 'Otro motivo') {
+      motivoFinal = motivoPosponerOtro;
+    }
     if (!motivoFinal.trim()) {
       alert('Especifique el motivo.');
       return;
@@ -1599,8 +1686,8 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     const rect = canvas.getBoundingClientRect();
     
     // Support mouse and touch
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
     
     return {
       x: clientX - rect.left,
@@ -1609,23 +1696,27 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   };
 
   const startSignatureDrawing = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
+    if (e && e.cancelable) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.lineWidth = 3;
     ctx.strokeStyle = '#0f172a'; // dark line
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     
     const pos = getCanvasPos(e);
     ctx.beginPath();
     ctx.moveTo(pos.x, pos.y);
+    isDrawingRef.current = true;
     setIsDrawing(true);
   };
 
   const drawSignatureLine = (e) => {
-    if (!isDrawing) return;
-    if (e && e.preventDefault) e.preventDefault();
+    if (!isDrawingRef.current) return;
+    if (e && e.cancelable) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -1636,7 +1727,9 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   };
 
   const stopSignatureDrawing = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
+    if (e && e.cancelable) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
+    isDrawingRef.current = false;
     setIsDrawing(false);
   };
 
@@ -1646,15 +1739,18 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     if (!canvas) return;
 
     const handleTouchStart = (e) => {
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
       startSignatureDrawing(e);
     };
     const handleTouchMove = (e) => {
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
       drawSignatureLine(e);
     };
     const handleTouchEnd = (e) => {
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
       stopSignatureDrawing(e);
     };
 
@@ -1669,7 +1765,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
       canvas.removeEventListener('touchend', handleTouchEnd);
       canvas.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [activeFormState?.metodo_firma, activeVisita?.id_visita, isDrawing]);
+  }, [activeFormState?.metodo_firma, activeVisita?.id_visita]);
 
   const limpiarCanvasFirma = (visitaId) => {
     const canvas = canvasRef.current;
@@ -1798,6 +1894,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   // --- FINALIZE WORK SUBMIT ---
   const handleFinalizeSubmit = async (e, idVisita) => {
     e.preventDefault();
+    if (isFinalizing) return;
     const form = getFormState(idVisita);
     
     // Validate Signature
@@ -1831,6 +1928,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
       return;
     }
 
+    setIsFinalizing(true);
     try {
       const payload = {
         solucion_tecnico: form.solucion_tecnico,
@@ -1867,8 +1965,6 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         materiales: form.materiales.map(m => ({ id_material: parseInt(m.id_material), cantidad: parseInt(m.cantidad) }))
       };
 
-
-      
       const res = await fetch(`/api/tecnico/finalizar/${idVisita}`, {
         method: 'POST',
         headers: {
@@ -1895,6 +1991,8 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     } catch (err) {
       console.error(err);
       alert('Error de conexión con el servidor.');
+    } finally {
+      setIsFinalizing(false);
     }
   };
 
@@ -2492,17 +2590,70 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {inventarioVehiculoData.equipos_retirados.map((eq, idx) => (
-                    <div key={idx} style={{ background: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <span style={{ padding: '2px 6px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: 900, background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', marginRight: '6px' }}>{eq.tipo_equipo}</span>
-                          <strong style={{ color: '#f8fafc', fontSize: '0.9rem', fontFamily: 'monospace' }}>{eq.numero_serie}</strong>
+                    <div key={idx} style={{ 
+                      background: 'rgba(15, 23, 42, 0.85)', 
+                      border: '1px solid rgba(255, 255, 255, 0.1)', 
+                      borderRadius: '14px', 
+                      padding: '12px 14px', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      gap: '8px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.25)'
+                    }}>
+                      {/* Fila 1: Tipo + Número de Serie + Motivo */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 }}>
+                          <span style={{ 
+                            padding: '3px 8px', 
+                            borderRadius: '6px', 
+                            fontSize: '0.68rem', 
+                            fontWeight: 900, 
+                            background: eq.tipo_equipo === 'ROUTER' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)', 
+                            color: eq.tipo_equipo === 'ROUTER' ? '#60a5fa' : '#34d399',
+                            border: eq.tipo_equipo === 'ROUTER' ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid rgba(16, 185, 129, 0.35)',
+                            letterSpacing: '0.04em'
+                          }}>
+                            {eq.tipo_equipo || 'EQUIPO'}
+                          </span>
+                          <strong style={{ color: '#f8fafc', fontSize: '0.92rem', fontFamily: 'monospace', letterSpacing: '0.02em', wordBreak: 'break-all' }}>
+                            {eq.numero_serie}
+                          </strong>
                         </div>
-                        <span style={{ fontSize: '0.72rem', color: '#fca5a5', fontWeight: 700 }}>{eq.motivo_retiro}</span>
+
+                        {/* Badge con el Motivo Formateado */}
+                        <span style={{ 
+                          padding: '3px 9px', 
+                          borderRadius: '8px', 
+                          fontSize: '0.72rem', 
+                          fontWeight: 800, 
+                          background: eq.motivo_retiro === 'DANADO_FALLA' ? 'rgba(239, 68, 68, 0.18)' : 'rgba(245, 158, 11, 0.18)', 
+                          color: eq.motivo_retiro === 'DANADO_FALLA' ? '#fca5a5' : '#fcd34d',
+                          border: eq.motivo_retiro === 'DANADO_FALLA' ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid rgba(245, 158, 11, 0.35)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {eq.motivo_retiro === 'DANADO_FALLA' ? '⚠️ Daño / Falla' : 
+                           eq.motivo_retiro === 'REEMPLAZO_UPGRADE' ? '🔄 Plan Renove' : 
+                           eq.motivo_retiro === 'RETIRO_DEFINITIVO' ? '📦 Retiro Final' : 
+                           (eq.motivo_retiro || 'Retirado').replace(/_/g, ' ')}
+                        </span>
                       </div>
-                      <small style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Cliente: {eq.cliente || 'N/A'}</small>
+
+                      {/* Fila 2: Cliente y Modelo */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#94a3b8', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '6px', flexWrap: 'wrap', gap: '4px' }}>
+                        <span>
+                          <strong style={{ color: '#cbd5e1' }}>Cliente:</strong> {eq.cliente || 'N/A'} {eq.contrato ? `(#${eq.contrato})` : ''}
+                        </span>
+                        {eq.modelo && (
+                          <span style={{ color: '#64748b', fontSize: '0.72rem' }}>
+                            Mod: {eq.modelo}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -2516,10 +2667,10 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
       {/* FULLSCREEN VISIT DETAILS OVERLAY */}
       {activeVisita && (
-        <div className="tecnico-scroll-container" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: '#0f172a', zIndex: 99999, display: 'flex', flexDirection: 'column', color: '#f8fafc', overscrollBehaviorY: 'contain', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
+        <div className="tecnico-overlay-modal" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', background: '#0f172a', zIndex: 99999, display: 'flex', flexDirection: 'column', color: '#f8fafc', overflow: 'hidden' }}>
           
           {/* Header */}
-          <div style={{ background: '#1e293b', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ background: '#1e293b', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
             <button 
               type="button" 
               onClick={() => setActiveVisita(null)} 
@@ -2543,7 +2694,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
 
           {/* Sub tabs nav */}
-          <div style={{ background: '#1e293b', display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ background: '#1e293b', display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
             <button 
               type="button" 
               onClick={() => setActiveSubTab('tab-cliente')} 
@@ -2571,7 +2722,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
           </div>
 
           {/* Details body */}
-          <div className="tecnico-overlay-content" style={{ flex: 1, overflowY: 'auto', overscrollBehaviorY: 'contain', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', padding: '20px', background: '#0f172a' }}>
+          <div className="tecnico-overlay-content" style={{ flex: '1 1 0%', minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', padding: '20px', paddingBottom: '160px', background: '#0f172a' }}>
             
             {/* SUB TAB 1: CLIENTE */}
             {activeSubTab === 'tab-cliente' && (
@@ -2848,65 +2999,115 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                 </div>
 
                 {/* SmartOLT Live Diagnosis Section */}
-                <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '16px' }}>
-                  <strong style={{ color: '#38bdf8', fontSize: '0.92rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <i className="fa-solid fa-square-poll-vertical"></i> Diagnóstico de Señal OLT (En Vivo)
-                  </strong>
+                <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '14px', padding: '18px', boxShadow: '0 4px 20px rgba(0,0,0,0.25)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                    <strong style={{ color: '#38bdf8', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800 }}>
+                      <i className="fa-solid fa-network-wired"></i> Diagnóstico de Señal OLT (En Vivo)
+                    </strong>
+                    {activeVisita?.numero_serie && activeVisita.numero_serie !== 'S/N' && (
+                      <span style={{ fontSize: '0.75rem', fontFamily: 'monospace', background: 'rgba(255,255,255,0.08)', padding: '3px 8px', borderRadius: '6px', color: '#cbd5e1' }}>
+                        SN: {activeVisita.numero_serie}
+                      </span>
+                    )}
+                  </div>
 
                   {!oltResult && !oltLoading && (
-                    <button 
-                      type="button" 
-                      onClick={() => ejecutarMedicionOLT(activeVisita.numero_serie)} 
-                      style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 800, fontSize: '0.85rem', padding: '11px 18px', background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', border: 'none', borderRadius: '10px', color: 'white', cursor: 'pointer' }}
-                    >
-                      <i className="fa-solid fa-bolt"></i> Medir Potencia en Central (SmartOLT)
-                    </button>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        type="button" 
+                        onClick={() => ejecutarMedicionOLT(activeVisita?.numero_serie)} 
+                        style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 800, fontSize: '0.85rem', padding: '12px 18px', background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', border: 'none', borderRadius: '10px', color: 'white', cursor: 'pointer', boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)' }}
+                      >
+                        <i className="fa-solid fa-bolt"></i> Medir Potencia en Central (SmartOLT)
+                      </button>
+                      <button 
+                        type="button" 
+                        title="Probar con otro número de serie"
+                        onClick={() => ejecutarMedicionOLT(null)} 
+                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#94a3b8', borderRadius: '10px', padding: '0 14px', cursor: 'pointer' }}
+                      >
+                        <i className="fa-solid fa-keyboard"></i>
+                      </button>
+                    </div>
                   )}
 
                   {oltLoading && (
-                    <div style={{ textAlignment: 'center', padding: '15px 0' }}>
-                      <i className="fa-solid fa-spinner fa-spin" style={{ color: '#38bdf8', fontSize: '1.8rem', marginBottom: '8px' }}></i>
-                      <p style={{ margin: 0, color: '#94a3b8', fontWeight: 700, fontSize: '0.78rem' }}>Consultando potencia de fibra en la OLT...</p>
+                    <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                      <i className="fa-solid fa-spinner fa-spin" style={{ color: '#38bdf8', fontSize: '2rem', marginBottom: '10px' }}></i>
+                      <p style={{ margin: 0, color: '#94a3b8', fontWeight: 700, fontSize: '0.82rem' }}>Consultando potencia de fibra en la OLT...</p>
                     </div>
                   )}
 
                   {oltResult && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.82rem', color: '#94a3b8', fontWeight: 700 }}>Estado GPON:</span>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 850, padding: '4px 10px', borderRadius: '6px', background: oltResult.status === 'ONLINE' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)', color: oltResult.status === 'ONLINE' ? '#34d399' : '#f87171' }}>
-                          {oltResult.status || 'DESCONOCIDO'}
-                        </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {/* Estado y OLT */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.25)', padding: '10px 14px', borderRadius: '10px' }}>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'block', fontWeight: 700, textTransform: 'uppercase' }}>Estado GPON</span>
+                          <span style={{ 
+                            fontSize: '0.88rem', 
+                            fontWeight: 900, 
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            color: ((oltResult.estado || oltResult.status || '').toString().toLowerCase() === 'online') ? '#34d399' : '#f87171' 
+                          }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: ((oltResult.estado || oltResult.status || '').toString().toLowerCase() === 'online') ? '#10b981' : '#ef4444' }}></span>
+                            {((oltResult.estado || oltResult.status || 'DESCONOCIDO')).toString().toUpperCase()}
+                          </span>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'block', fontWeight: 700, textTransform: 'uppercase' }}>Central & Puerto</span>
+                          <strong style={{ fontSize: '0.82rem', color: '#e2e8f0' }}>
+                            {oltResult.olt_name || 'SmartOLT'} {oltResult.pon_port ? `(${oltResult.pon_port})` : ''}
+                          </strong>
+                        </div>
                       </div>
                       
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' }}>
+                      {/* Potencias */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: 'rgba(0,0,0,0.3)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
                         <div>
-                          <small style={{ color: '#64748b', fontSize: '0.72rem', display: 'block' }}>Potencia Rx (ONU)</small>
-                          <strong style={{ fontSize: '0.95rem', color: (parseFloat(oltResult.rx_power) < -27 || parseFloat(oltResult.rx_power) > -8) ? '#f87171' : '#38bdf8' }}>
-                            {oltResult.rx_power ? `${oltResult.rx_power} dBm` : 'N/D'}
+                          <small style={{ color: '#94a3b8', fontSize: '0.72rem', display: 'block', fontWeight: 700 }}>Potencia Rx (Enganche ONU)</small>
+                          <strong style={{ fontSize: '1.1rem', fontWeight: 900, display: 'block', margin: '4px 0', color: getPowerRangeValues(oltResult.potencia_rx || oltResult.rx_power).color }}>
+                            {oltResult.potencia_rx || oltResult.rx_power || 'N/D'}
                           </strong>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: getPowerRangeValues(oltResult.potencia_rx || oltResult.rx_power).color }}>
+                            {getPowerRangeValues(oltResult.potencia_rx || oltResult.rx_power).text}
+                          </span>
                         </div>
-                        <div>
-                          <small style={{ color: '#64748b', fontSize: '0.72rem', display: 'block' }}>Potencia Tx (OLT)</small>
-                          <strong style={{ fontSize: '0.95rem', color: '#f8fafc' }}>
-                            {oltResult.tx_power ? `${oltResult.tx_power} dBm` : 'N/D'}
+                        <div style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '10px' }}>
+                          <small style={{ color: '#94a3b8', fontSize: '0.72rem', display: 'block', fontWeight: 700 }}>Potencia Tx (Retorno OLT)</small>
+                          <strong style={{ fontSize: '1.1rem', fontWeight: 900, display: 'block', margin: '4px 0', color: '#f8fafc' }}>
+                            {oltResult.potencia_tx || oltResult.tx_power || 'N/D'}
                           </strong>
+                          <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                            Distancia: {oltResult.distancia || 'N/D'}
+                          </span>
                         </div>
                       </div>
 
-                      {oltResult.detalles && (
-                        <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8', background: 'rgba(0,0,0,0.15)', padding: '8px', borderRadius: '6px' }}>
-                          {oltResult.detalles}
-                        </p>
-                      )}
+                      {/* Detalles complementarios (NAP / Uptime) */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px' }}>
+                        <span><strong>Caja NAP:</strong> {oltResult.caja_nap || 'N/D'}</span>
+                        <span><strong>Uptime:</strong> {oltResult.uptime || 'N/D'}</span>
+                      </div>
 
-                      <button 
-                        type="button" 
-                        onClick={() => ejecutarMedicionOLT(activeVisita.numero_serie)} 
-                        style={{ alignSelf: 'flex-start', background: 'transparent', border: '1px solid #475569', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', marginTop: '4px' }}
-                      >
-                        <i className="fa-solid fa-arrows-rotate"></i> Volver a medir
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                        <button 
+                          type="button" 
+                          onClick={() => ejecutarMedicionOLT(activeVisita?.numero_serie)} 
+                          style={{ flex: 1, background: 'rgba(2, 132, 199, 0.15)', border: '1px solid #0284c7', color: '#38bdf8', fontSize: '0.78rem', fontWeight: 800, padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                        >
+                          <i className="fa-solid fa-arrows-rotate"></i> Volver a medir
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => ejecutarMedicionOLT(null)} 
+                          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#94a3b8', fontSize: '0.78rem', fontWeight: 700, padding: '8px 12px', borderRadius: '8px', cursor: 'pointer' }}
+                        >
+                          Cambiar SN
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -2996,7 +3197,12 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                             <option value="SOLUCION PARCIAL">SOLUCION PARCIAL</option>
                           </>
                         ) : (
-                          soluciones.map((s, idx) => <option key={idx} value={s.nombre}>{s.nombre}</option>)
+                          soluciones
+                            .filter(s => {
+                              const n = (s?.nombre || '').toUpperCase();
+                              return !n.includes('REAGENDAD') && !n.includes('SATURACI');
+                            })
+                            .map((s, idx) => <option key={idx} value={s.nombre}>{s.nombre}</option>)
                         )}
                       </select>
                     </div>
@@ -3684,9 +3890,34 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                     <div style={{ marginTop: '10px' }}>
                       <button 
                         type="submit" 
-                        style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', fontWeight: 900, fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)' }}
+                        disabled={isFinalizing}
+                        style={{ 
+                          width: '100%', 
+                          padding: '14px', 
+                          borderRadius: '12px', 
+                          border: 'none', 
+                          background: isFinalizing ? '#64748b' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
+                          color: 'white', 
+                          fontWeight: 900, 
+                          fontSize: '1rem', 
+                          cursor: isFinalizing ? 'not-allowed' : 'pointer', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center', 
+                          gap: '8px', 
+                          boxShadow: isFinalizing ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.25)',
+                          opacity: isFinalizing ? 0.75 : 1
+                        }}
                       >
-                        <i className="fa-solid fa-circle-check"></i> Guardar y Finalizar Visita
+                        {isFinalizing ? (
+                          <>
+                            <i className="fa-solid fa-circle-notch fa-spin"></i> Guardando y procesando evidencias...
+                          </>
+                        ) : (
+                          <>
+                            <i className="fa-solid fa-circle-check"></i> Guardar y Finalizar Visita
+                          </>
+                        )}
                       </button>
                       
                       <button 
@@ -3829,13 +4060,34 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                     onChange={(e) => setMotivoPosponer(e.target.value)} 
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white', fontSize: '0.85rem' }}
                   >
-                    <option value="Cliente ausente">Cliente ausente / No se encuentra</option>
-                    <option value="Dirección incorrecta / Difícil acceso">Dirección incorrecta / Difícil acceso</option>
-                    <option value="Falta de materiales o herramientas">Falta de materiales o herramientas</option>
-                    <option value="Falla en poste / Daño mayor central">Falla en poste / Daño mayor central</option>
-                    <option value="Otro motivo">Otro motivo (especificar)</option>
+                    <option value="Cliente solicita reagendar para otra fecha">📅 Cliente solicita reagendar para otra fecha</option>
+                    <option value="Cliente ausente">👤 Cliente ausente / No se encuentra</option>
+                    <option value="Saturación del día / Fin de jornada">⏳ Saturación del día / Fin de jornada</option>
+                    <option value="Dirección incorrecta / Difícil acceso">📍 Dirección incorrecta / Difícil acceso</option>
+                    <option value="Falta de materiales o herramientas">🛠️ Falta de materiales o herramientas</option>
+                    <option value="Falla en poste / Daño mayor central">⚡ Falla en poste / Daño mayor central</option>
+                    <option value="Otro motivo">❓ Otro motivo (especificar)</option>
                   </select>
                 </div>
+
+                {motivoPosponer === 'Cliente solicita reagendar para otra fecha' && (
+                  <div>
+                    <label style={{ fontWeight: 700, color: '#f59e0b', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>
+                      Indique fecha y hora tentativa que solicita el cliente:
+                    </label>
+                    <input 
+                      type="text" 
+                      value={motivoPosponerOtro} 
+                      onChange={(e) => setMotivoPosponerOtro(e.target.value)} 
+                      placeholder="Ej: Lunes 14/09 de 8:00am a 9:30am..." 
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #f59e0b', background: '#0f172a', color: 'white', fontSize: '0.85rem', boxSizing: 'border-box' }} 
+                      required
+                    />
+                    <small style={{ color: '#94a3b8', fontSize: '0.72rem', display: 'block', marginTop: '4px' }}>
+                      Call Center / Coordinación verá este requerimiento para agendar la nueva fecha.
+                    </small>
+                  </div>
+                )}
 
                 {motivoPosponer === 'Otro motivo' && (
                   <div>
@@ -3846,6 +4098,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                       onChange={(e) => setMotivoPosponerOtro(e.target.value)} 
                       placeholder="Describa el motivo..." 
                       style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white', fontSize: '0.85rem', boxSizing: 'border-box' }} 
+                      required
                     />
                   </div>
                 )}

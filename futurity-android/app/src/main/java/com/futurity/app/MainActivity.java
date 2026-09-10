@@ -321,6 +321,12 @@ public class MainActivity extends AppCompatActivity {
     // --- Javascript Interface Class ---
     public class WebAppInterface {
         @JavascriptInterface
+        public void startGlobalTracking(String tecnicoNombre, String serverUrl) {
+            Log.d(TAG, "JS triggered startGlobalTracking: " + tecnicoNombre + ", URL: " + serverUrl);
+            runOnUiThread(() -> startGlobalTrackingService(tecnicoNombre, serverUrl));
+        }
+
+        @JavascriptInterface
         public void startTracking(String idVisita, String serverUrl) {
             Log.d(TAG, "JS triggered startTracking: " + idVisita + ", URL: " + serverUrl);
             runOnUiThread(() -> startTrackingService(idVisita, serverUrl));
@@ -502,6 +508,27 @@ public class MainActivity extends AppCompatActivity {
                 Log.e(TAG, "Error requesting ignore battery optimization: " + e.getMessage());
             }
         }
+    }
+
+    public void startGlobalTrackingService(String tecnicoNombre, String serverUrl) {
+        checkBatteryOptimizations();
+        
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            checkAndRequestPermissions();
+            return;
+        }
+
+        Intent serviceIntent = new Intent(this, LocationService.class);
+        serviceIntent.putExtra("tecnico_nombre", tecnicoNombre);
+        serviceIntent.putExtra("server_url", serverUrl);
+        serviceIntent.putExtra("id_visita", "");
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent);
+        } else {
+            startService(serviceIntent);
+        }
+        Log.d(TAG, "Global foreground location service started for tecnico: " + tecnicoNombre);
     }
 
     public void startTrackingService(String idVisita, String serverUrl) {

@@ -366,9 +366,9 @@ function BuscadorClienteTab({ token }) {
                   </span>
                 </div>
                 <div>
-                  <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>🏢 Nodo / OLT</strong>
+                  <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '4px', textTransform: 'uppercase' }}>🏢 IP Nodo / OLT</strong>
                   <span style={{ color: '#0284c7', fontSize: '0.92rem', fontWeight: 700 }}>
-                    {selectedClient.nodo_nombre || selectedClient.ip_nodo || 'N/D'}
+                    {selectedClient.ip_nodo ? `${selectedClient.ip_nodo}${selectedClient.nodo_nombre && selectedClient.nodo_nombre !== selectedClient.ip_nodo ? ` (${selectedClient.nodo_nombre})` : ''}` : (selectedClient.nodo_nombre || 'N/D')}
                   </span>
                 </div>
                 <div>
@@ -381,13 +381,32 @@ function BuscadorClienteTab({ token }) {
                 {/* Bloque de Equipos e Inventario */}
                 {(selectedClient.modelo_ont || selectedClient.router_principal || selectedClient.router_secundario) && (
                   <div style={{ gridColumn: 'span 2', background: 'rgba(16, 185, 129, 0.04)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '14px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
                       <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <i className="fa-solid fa-server"></i> Equipos Instalados en Cliente
                       </span>
-                      <span style={{ background: selectedClient.cantidad_routers > 1 ? 'rgba(139, 92, 246, 0.2)' : 'rgba(99, 102, 241, 0.15)', color: selectedClient.cantidad_routers > 1 ? '#c4b5fd' : '#a5b4fc', border: '1px solid rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
-                        {selectedClient.cantidad_routers > 1 ? `🔁 2 Routers (Mesh ${selectedClient.tipo_mesh || ''})` : `📶 1 Router`}
-                      </span>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        {(() => {
+                          const txt = `${selectedClient.modelo_ont || ''} ${selectedClient.router_principal || ''} ${selectedClient.router_secundario || ''}`.toUpperCase();
+                          const esHomologado = ['511', '530', '231', 'AX3', 'AX3S', 'AX2S'].some(k => txt.includes(k));
+                          if (esHomologado) {
+                            return (
+                              <span style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                🟢 Wi-Fi 6 Homologado
+                              </span>
+                            );
+                          } else {
+                            return (
+                              <span style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                ⚠️ Plan Renove: Cambiar a EX511
+                              </span>
+                            );
+                          }
+                        })()}
+                        <span style={{ background: selectedClient.cantidad_routers > 1 ? 'rgba(139, 92, 246, 0.2)' : 'rgba(99, 102, 241, 0.15)', color: selectedClient.cantidad_routers > 1 ? '#c4b5fd' : '#a5b4fc', border: '1px solid rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                          {selectedClient.cantidad_routers > 1 ? `🔁 2 Routers (Mesh ${selectedClient.tipo_mesh || ''})` : `📶 1 Router`}
+                        </span>
+                      </div>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>

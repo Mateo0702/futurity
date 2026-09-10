@@ -22,17 +22,19 @@ function MetricasTab({ token }) {
   const [tecnicosList, setTecnicosList] = useState([]);
 
   // Subtab navigation
-  const [subTab, setSubTab] = useState('visitas'); // 'visitas', 'atenciones', 'tiempos'
+  const [subTab, setSubTab] = useState('visitas'); // 'visitas', 'atenciones', 'tiempos', 'modernizacion'
 
   // Loading states
   const [loading, setLoading] = useState(false);
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [loadingPdf, setLoadingPdf] = useState(false);
+  const [exportingNodo, setExportingNodo] = useState(null);
 
   // Data states
   const [dataVisitas, setDataVisitas] = useState(null);
   const [dataAtenciones, setDataAtenciones] = useState(null);
   const [dataTiempos, setDataTiempos] = useState(null);
+  const [dataModernizacion, setDataModernizacion] = useState(null);
 
   // Audit (Timeline) states
   const [contratoAudit, setContratoAudit] = useState('');
@@ -56,6 +58,9 @@ function MetricasTab({ token }) {
   const canvasComparativaTiemposRef = useRef(null);
   const canvasTiemposProblemaRef = useRef(null);
   const canvasEvolucionTiemposRef = useRef(null);
+
+  const canvasModernizacionDoughnutRef = useRef(null);
+  const canvasModernizacionBarrasRef = useRef(null);
 
   // Fetch metrics data when filters change or subtab switches
   useEffect(() => {
@@ -129,11 +134,117 @@ function MetricasTab({ token }) {
             renderTiemposCharts(dataT);
           }, 150);
         }
+      } else if (subTab === 'modernizacion') {
+        // Fetch Modernización de Equipos metrics
+        const res = await fetch('/api/admin/metricas_equipos_modernizacion', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const dataM = await res.json();
+        if (dataM.status === 'ok') {
+          setDataModernizacion(dataM);
+          setTimeout(() => {
+            renderModernizacionCharts(dataM);
+          }, 150);
+        }
       }
     } catch (e) {
       console.error("Error al cargar métricas:", e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Exportar listado de equipos obsoletos a Excel
+  const handleExportarEquipos = async (ipNodo = '', nombreNodo = 'Toda la Red') => {
+    setExportingNodo(ipNodo || 'GLOBAL');
+    try {
+      const url = `/api/admin/exportar_equipos_obsoletos?nodo=${encodeURIComponent(ipNodo)}`;
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error("Error al exportar listado");
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      const cleanNombre = nombreNodo.replace(/[^a-zA-Z0-9]/g, '_');
+      a.download = `Campana_Cambio_Equipos_${cleanNombre}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error("Error al exportar equipos obsoletos:", err);
+      alert("Error al descargar el archivo Excel de campaña.");
+    } finally {
+      setExportingNodo(null);
+    }
+  };
+
+  // Render Modernización de Equipos Charts
+  const renderModernizacionCharts = (data) => {
+    if (!window.Chart || !data) return;
+    const isDark = document.body.classList.contains('dark-mode');
+    const textColor = isDark ? '#f8fafc' : '#64748b';
+    const gridColor = isDark ? '#334155' : '#e2e8f0';
+
+    // 1. Doughnut: Homologados vs Obsoletos
+    if (canvasModernizacionDoughnutRef.current && data.resumen_global) {
+      const ctx = canvasModernizacionDoughnutRef.current.getContext('2d');
+      chartsRef.current.modDoughnut = new window.Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Equipos Homologados (Vigentes)', 'Equipos Por Cambiar (Obsoletos)'],
+          datasets: [{
+            data: [
+              data.resumen_global.homologados || 0,
+              data.resumen_global.obsoletos || 0
+            ],
+            backgroundColor: ['#10b981', '#ef4444'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: textColor, font: { family: 'Inter', weight: 600, size: 11 }, padding: 14 }
+            }
+          },
+          cutout: '68%'
+        }
+      });
+    }
+
+    // 2. Bar Chart: Top 10 Modelos
+    if (canvasModernizacionBarrasRef.current && data.modelos_top) {
+      const ctx = canvasModernizacionBarrasRef.current.getContext('2d');
+      const top10 = data.modelos_top.slice(0, 8);
+      chartsRef.current.modBarras = new window.Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: top10.map(m => m.modelo),
+          datasets: [{
+            label: 'Cantidad de Equipos',
+            data: top10.map(m => m.cantidad),
+            backgroundColor: top10.map(m => m.tipo === 'HOMOLOGADO' ? '#10b981' : '#f59e0b'),
+            borderRadius: 6
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: textColor, font: { family: 'Inter', size: 9 } } },
+            y: { grid: { display: false }, ticks: { color: textColor, font: { family: 'Inter', size: 9, weight: 600 } } }
+          }
+        }
+      });
     }
   };
 
@@ -638,6 +749,19 @@ function MetricasTab({ token }) {
         >
           <i className="fa-solid fa-clock"></i> Tiempos y Rendimiento
         </button>
+        <button
+          type="button"
+          onClick={() => setSubTab('modernizacion')}
+          style={{
+            background: 'none', border: 'none', padding: '10px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s',
+            fontSize: '0.95rem',
+            color: subTab === 'modernizacion' ? '#e11d48' : 'var(--sidebar-text)',
+            borderBottom: subTab === 'modernizacion' ? '3px solid #e11d48' : 'none',
+            fontWeight: subTab === 'modernizacion' ? '800' : '700'
+          }}
+        >
+          <i className="fa-solid fa-microchip"></i> Plan Modernización de Equipos
+        </button>
       </div>
 
       {/* Main Loader */}
@@ -964,6 +1088,214 @@ function MetricasTab({ token }) {
                             </tr>
                           );
                         })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 4. PLAN DE MODERNIZACION SUBTAB */}
+          {subTab === 'modernizacion' && dataModernizacion && (
+            <div>
+              {/* Hero Header & Progress */}
+              <div className="card" style={{ padding: '25px', marginBottom: '25px', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(225, 29, 72, 0.05) 100%)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '18px' }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ background: '#e11d48', color: 'white', padding: '4px 10px', borderRadius: '8px', fontSize: '0.85rem' }}>PLAN RENOVE</span>
+                      🚀 Avance de Modernización Tecnológica en Red
+                    </h3>
+                    <p style={{ margin: '5px 0 0 0', color: 'var(--sidebar-text)', fontSize: '0.85rem' }}>
+                      Meta de estandarización a Wi-Fi 6 Gigabit (TP-Link EX511, EXX530v, EXX231v y Huawei AX3).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleExportarEquipos('', 'Toda_la_Red')}
+                    disabled={exportingNodo !== null}
+                    style={{
+                      background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)',
+                      color: 'white',
+                      border: 'none',
+                      padding: '10px 18px',
+                      borderRadius: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: '0 4px 12px rgba(225, 29, 72, 0.25)',
+                      fontSize: '0.88rem'
+                    }}
+                  >
+                    <i className="fa-solid fa-file-excel"></i>
+                    {exportingNodo === 'GLOBAL' ? 'Generando Excel...' : 'Descargar Lista General de Campaña'}
+                  </button>
+                </div>
+
+                {/* Progress Bar */}
+                <div style={{ background: 'var(--profile-bg)', borderRadius: '12px', padding: '15px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.85rem', fontWeight: 700 }}>
+                    <span style={{ color: '#10b981' }}>🟢 {dataModernizacion.resumen_global?.homologados || 0} Equipos Vigentes ({dataModernizacion.resumen_global?.porcentaje_homologados || 0}%)</span>
+                    <span style={{ color: '#ef4444' }}>🔴 {dataModernizacion.resumen_global?.obsoletos || 0} Pendientes por Cambiar ({dataModernizacion.resumen_global?.porcentaje_obsoletos || 0}%)</span>
+                  </div>
+                  <div style={{ height: '14px', background: 'rgba(239, 68, 68, 0.2)', borderRadius: '10px', overflow: 'hidden', display: 'flex' }}>
+                    <div
+                      style={{
+                        width: `${dataModernizacion.resumen_global?.porcentaje_homologados || 0}%`,
+                        background: 'linear-gradient(90deg, #10b981 0%, #059669 100%)',
+                        borderRadius: '10px',
+                        transition: 'width 0.8s ease-in-out'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* KPIs Grid */}
+              <div className="metric-kpi-grid" style={{ marginBottom: '25px' }}>
+                <div className="metric-kpi-card">
+                  <div className="metric-kpi-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
+                    <i className="fa-solid fa-shield-halved"></i>
+                  </div>
+                  <div className="metric-kpi-info">
+                    <h3 style={{ color: '#10b981' }}>{dataModernizacion.resumen_global?.homologados || 0}</h3>
+                    <p>Equipos Homologados (Vigentes)</p>
+                  </div>
+                </div>
+                <div className="metric-kpi-card">
+                  <div className="metric-kpi-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
+                    <i className="fa-solid fa-triangle-exclamation"></i>
+                  </div>
+                  <div className="metric-kpi-info">
+                    <h3 style={{ color: '#ef4444' }}>{dataModernizacion.resumen_global?.obsoletos || 0}</h3>
+                    <p>Equipos por Reemplazar (Legacy)</p>
+                  </div>
+                </div>
+                <div className="metric-kpi-card">
+                  <div className="metric-kpi-icon" style={{ background: 'rgba(2, 132, 199, 0.1)', color: '#0284c7' }}>
+                    <i className="fa-solid fa-users"></i>
+                  </div>
+                  <div className="metric-kpi-info">
+                    <h3 style={{ color: 'var(--text-main)' }}>{dataModernizacion.resumen_global?.total_clientes || 0}</h3>
+                    <p>Total Clientes Activos Auditados</p>
+                  </div>
+                </div>
+                <div className="metric-kpi-card">
+                  <div className="metric-kpi-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>
+                    <i className="fa-solid fa-chart-pie"></i>
+                  </div>
+                  <div className="metric-kpi-info">
+                    <h3 style={{ color: '#f59e0b' }}>{dataModernizacion.resumen_global?.porcentaje_homologados || 0}%</h3>
+                    <p>Índice Global de Modernización</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Charts Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginBottom: '25px' }}>
+                <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
+                  <h4 style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <i className="fa-solid fa-chart-pie" style={{ marginRight: '8px' }}></i> Proporción de Equipos en Red
+                  </h4>
+                  <div style={{ position: 'relative', height: '230px', flex: 1 }}>
+                    <canvas ref={canvasModernizacionDoughnutRef} id="chartModDoughnut"></canvas>
+                  </div>
+                </div>
+                <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
+                  <h4 style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <i className="fa-solid fa-server" style={{ marginRight: '8px' }}></i> Top Modelos de Routers Instalados
+                  </h4>
+                  <div style={{ position: 'relative', height: '230px', flex: 1 }}>
+                    <canvas ref={canvasModernizacionBarrasRef} id="chartModBarras"></canvas>
+                  </div>
+                </div>
+              </div>
+
+              {/* Table per Node */}
+              <div className="card" style={{ padding: '25px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+                  <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-main)', fontWeight: 800 }}>
+                    <i className="fa-solid fa-network-wired" style={{ color: 'var(--primary)', marginRight: '8px' }}></i> Control y Avance de Modernización por Nodo / OLT
+                  </h3>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
+                    Mostrando todos los nodos principales con IP Maestra
+                  </span>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="historial-reciente-table">
+                    <thead>
+                      <tr>
+                        <th>Nodo / Sector</th>
+                        <th>IP Maestra</th>
+                        <th style={{ textAlign: 'center' }}>Total Clientes</th>
+                        <th style={{ textAlign: 'center', color: '#10b981' }}>🟢 Vigentes</th>
+                        <th style={{ textAlign: 'center', color: '#ef4444' }}>🔴 Por Cambiar</th>
+                        <th style={{ width: '220px' }}>% Avance</th>
+                        <th style={{ textAlign: 'center' }}>Acción de Campaña</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(!dataModernizacion.nodos || dataModernizacion.nodos.length === 0) ? (
+                        <tr>
+                          <td colSpan="7" style={{ textAlign: 'center', color: 'var(--sidebar-text)', padding: '20px 0' }}>No se encontraron registros de nodos.</td>
+                        </tr>
+                      ) : (
+                        dataModernizacion.nodos.map((n, idx) => (
+                          <tr key={idx}>
+                            <td style={{ fontWeight: 800, color: 'var(--text-main)' }}>
+                              🏢 {n.nodo}
+                            </td>
+                            <td>
+                              <span style={{ fontFamily: 'monospace', fontSize: '0.82rem', background: 'var(--profile-bg)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                                {n.ip_nodo}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'center', fontWeight: 700 }}>{n.total}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 800, color: '#10b981' }}>{n.homologados}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 800, color: '#ef4444' }}>{n.obsoletos}</td>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{ flex: 1, height: '8px', background: 'rgba(239, 68, 68, 0.2)', borderRadius: '6px', overflow: 'hidden' }}>
+                                  <div
+                                    style={{
+                                      width: `${n.porcentaje}%`,
+                                      height: '100%',
+                                      background: n.porcentaje > 70 ? '#10b981' : n.porcentaje > 40 ? '#f59e0b' : '#ef4444',
+                                      borderRadius: '6px'
+                                    }}
+                                  />
+                                </div>
+                                <span style={{ fontSize: '0.78rem', fontWeight: 800, minWidth: '40px' }}>{n.porcentaje}%</span>
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleExportarEquipos(n.ip_nodo, n.nodo)}
+                                disabled={exportingNodo !== null}
+                                style={{
+                                  background: 'rgba(2, 132, 199, 0.1)',
+                                  color: '#0284c7',
+                                  border: '1px solid rgba(2, 132, 199, 0.3)',
+                                  padding: '5px 12px',
+                                  borderRadius: '8px',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px'
+                                }}
+                              >
+                                <i className="fa-solid fa-download"></i>
+                                {exportingNodo === n.ip_nodo ? 'Descargando...' : 'Descargar Lista'}
+                              </button>
+                            </td>
+                          </tr>
+                        ))
                       )}
                     </tbody>
                   </table>

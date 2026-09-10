@@ -31,12 +31,14 @@ export default function FirmaRemota({ token }) {
     fetchFirmaInfo();
   }, [token]);
 
+  const isDrawingRef = useRef(false);
+
   const getPos = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
     return {
       x: clientX - rect.left,
       y: clientY - rect.top
@@ -44,22 +46,26 @@ export default function FirmaRemota({ token }) {
   };
 
   const startDrawing = (e) => {
-    e.preventDefault();
+    if (e && e.cancelable) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.lineWidth = 3;
     ctx.strokeStyle = '#0f172a';
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     const pos = getPos(e);
     ctx.beginPath();
     ctx.moveTo(pos.x, pos.y);
+    isDrawingRef.current = true;
     setIsDrawing(true);
   };
 
   const draw = (e) => {
-    if (!isDrawing) return;
-    e.preventDefault();
+    if (!isDrawingRef.current) return;
+    if (e && e.cancelable) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -68,9 +74,45 @@ export default function FirmaRemota({ token }) {
     ctx.stroke();
   };
 
-  const stopDrawing = () => {
+  const stopDrawing = (e) => {
+    if (e && e.cancelable) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
+    isDrawingRef.current = false;
     setIsDrawing(false);
   };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleTouchStart = (e) => {
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      startDrawing(e);
+    };
+    const handleTouchMove = (e) => {
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      draw(e);
+    };
+    const handleTouchEnd = (e) => {
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      stopDrawing(e);
+    };
+
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+    canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    return () => {
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchmove', handleTouchMove);
+      canvas.removeEventListener('touchend', handleTouchEnd);
+      canvas.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [loading, signed]);
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
@@ -159,10 +201,7 @@ export default function FirmaRemota({ token }) {
                 onMouseMove={draw}
                 onMouseUp={stopDrawing}
                 onMouseLeave={stopDrawing}
-                onTouchStart={startDrawing}
-                onTouchMove={draw}
-                onTouchEnd={stopDrawing}
-                style={styles.canvas}
+                style={{ ...styles.canvas, touchAction: 'none' }}
               />
             </div>
 

@@ -719,6 +719,7 @@ function UsuariosTab({ token, user }) {
                   <option value="ASESOR">ASESOR</option>
                   <option value="ATC">ATC (Atención al Cliente)</option>
                   <option value="ATC_AUDITOR">ATC_AUDITOR (Auditor de Calidad ATC)</option>
+                  <option value="AUDITOR">AUDITOR (Auditor de Visitas Técnicas)</option>
                   <option value="ADMIN">ADMIN</option>
                   <option value="TECNICO">TECNICO</option>
                   <option value="BODEGA">BODEGA</option>

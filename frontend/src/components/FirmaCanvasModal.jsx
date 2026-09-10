@@ -2,56 +2,113 @@ import React, { useRef, useState, useEffect } from 'react';
 
 export default function FirmaCanvasModal({ isOpen, onClose, onSave, titulo = "Firma Digital de Conformidad", subtitulo = "Dibuja la firma en el recuadro para confirmar la entrega" }) {
   const canvasRef = useRef(null);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const isDrawingRef = useRef(false);
   const [hasDrawn, setHasDrawn] = useState(false);
 
   useEffect(() => {
-    if (isOpen && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      // Set display size
-      canvas.width = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      setHasDrawn(false);
-    }
+    if (!isOpen) return;
+
+    // Bloquear scroll de fondo mientras el modal está abierto
+    const prevBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    // Set display size
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    setHasDrawn(false);
+    isDrawingRef.current = false;
+
+    const getPos = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return {
+        x: clientX - rect.left,
+        y: clientY - rect.top
+      };
+    };
+
+    const handleTouchStart = (e) => {
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      isDrawingRef.current = true;
+      const pos = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+      setHasDrawn(true);
+    };
+
+    const handleTouchMove = (e) => {
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      if (!isDrawingRef.current) return;
+      const pos = getPos(e);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+    };
+
+    const handleTouchEnd = (e) => {
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      isDrawingRef.current = false;
+    };
+
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+    canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchmove', handleTouchMove);
+      canvas.removeEventListener('touchend', handleTouchEnd);
+      canvas.removeEventListener('touchcancel', handleTouchEnd);
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   const startDrawing = (e) => {
-    setIsDrawing(true);
+    isDrawingRef.current = true;
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
-    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
     ctx.beginPath();
     ctx.moveTo(x, y);
     setHasDrawn(true);
   };
 
   const draw = (e) => {
-    if (!isDrawing) return;
-    e.preventDefault();
+    if (!isDrawingRef.current) return;
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
-    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
     ctx.lineTo(x, y);
     ctx.stroke();
   };
 
   const stopDrawing = () => {
-    setIsDrawing(false);
+    isDrawingRef.current = false;
   };
 
   const handleClear = () => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     setHasDrawn(false);
@@ -125,10 +182,7 @@ export default function FirmaCanvasModal({ isOpen, onClose, onSave, titulo = "Fi
               onMouseMove={draw}
               onMouseUp={stopDrawing}
               onMouseLeave={stopDrawing}
-              onTouchStart={startDrawing}
-              onTouchMove={draw}
-              onTouchEnd={stopDrawing}
-              style={{ width: '100%', height: '100%', cursor: 'crosshair', display: 'block' }}
+              style={{ width: '100%', height: '100%', cursor: 'crosshair', display: 'block', touchAction: 'none' }}
             />
             {!hasDrawn && (
               <div style={{

@@ -259,25 +259,30 @@ function Login({ onLoginSuccess }) {
         {/* Panel Izquierdo: Visual & Características */}
         <div className="login-split-left">
           <div className="login-left-content">
-            <div className="login-shield-container" style={{ width: '130px', height: '130px', margin: '0 auto 20px auto', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <div className="login-shield-glow" style={{ position: 'absolute', inset: '-10px', background: 'radial-gradient(circle, rgba(59, 130, 246, 0.35) 0%, rgba(225, 29, 72, 0.15) 60%, transparent 80%)', filter: 'blur(20px)', borderRadius: '50%', zIndex: 0 }}></div>
-              <img
-                src="/img/new_atlas.png"
-                alt="Atlas Platform Logo"
-                style={{
-                  width: '110px',
-                  height: '110px',
-                  objectFit: 'contain',
-                  position: 'relative',
-                  zIndex: 1,
-                  filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.4))'
-                }}
-              />
+            {/* Badge de Plataforma */}
+            <div className="login-badge-core">
+              <i className="fa-solid fa-atom" style={{ color: '#38bdf8' }}></i>
+              <span>Atlas Platform</span>
             </div>
-            <h1 className="login-left-title" style={{ fontWeight: 800, color: 'white', letterSpacing: '-0.5px' }}>
-              <span style={{ background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #f43f5e 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 900, fontSize: '2.2rem' }}>ATLAS</span>
+
+            {/* Marco Redondo Elegante (Atlas Pod) */}
+            <div className="login-pod-container">
+              <div className="login-pod-halo"></div>
+              <div className="login-pod-ring">
+                <div className="login-pod-inner">
+                  <img
+                    src="/img/atlas_circle.png"
+                    alt="Atlas Core Platform"
+                    className="login-pod-img"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <h1 className="login-left-title">
+              <span style={{ background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #f43f5e 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 900, fontSize: '2.3rem' }}>ATLAS</span>
             </h1>
-            <p className="login-left-desc" style={{ fontSize: '0.9rem', color: '#cbd5e1', lineHeight: 1.5, maxWidth: '280px', margin: '0 auto' }}>
+            <p className="login-left-desc">
               Plataforma inteligente de optimización de rutas, trazabilidad de equipos y control de calidad para ISPs.
             </p>
           </div>

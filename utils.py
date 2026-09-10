@@ -113,16 +113,16 @@ def normalizar_horario_texto(texto_preferencia):
     return inicio_default, fin_default
 
 MAPEO_NODOS = {
-
-    '10.101.1.18': '1.18',
-    '10.101.18': '1.18',
-    '10.101.1.50': '1.50',
-    '10.11.99.1': '99.1',
-    '10.80.80.134': 'BAÑOS',
-    '10.17.200.52': 'AZOGUES',
-    '10.101.100.10': 'ESTADIO',
-    '100.64.21.2': 'FIBRACOM VALLE',
-    '100.64.20.2': 'FIBRACOM SANTA ANA'
+    '10.101.1.18': 'Gz',
+    '10.101.18': 'Gz',
+    '10.101.1.50': 'Orq',
+    '10.11.99.1': 'Ch',
+    '10.80.80.134': 'CS (Baños)',
+    '10.17.200.52': 'Azo',
+    '10.101.100.10': 'Estadio',
+    '100.64.21.2': 'Valle',
+    '10.64.20.2': 'Santa Ana',
+    '100.64.20.2': 'Santa Ana'
 }
 
 def normalizar_gpon_sn(sn_raw):

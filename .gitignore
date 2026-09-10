@@ -47,8 +47,8 @@ backups/
 .vscode/
 
 # Flutter App en fase de prueba
-futurity_mobile_test/
-static/app/
+static/app/*.apk
+
 
 
 

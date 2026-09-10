@@ -230,7 +230,7 @@ def api_v2_get_visitas():
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
 
-    fecha_param = request.args.get('fecha', date.today().isoformat())
+    fecha_param = request.args.get('fecha') or date.today().isoformat()
     buscar_texto = request.args.get('buscar', '').strip()
     active_area = request.args.get('area', 'SOPORTE')
     es_instalacion_val = 1 if active_area == 'INSTALACIONES' else 0

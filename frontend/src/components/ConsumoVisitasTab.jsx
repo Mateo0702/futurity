@@ -499,7 +499,17 @@ export default function ConsumoVisitasTab({ token, tecnicosVehiculosProp = [] })
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {visitas.map((v) => {
-              const tieneMateriales = v.materiales && v.materiales.length > 0;
+              const materialesConsolidados = (v.materiales || []).reduce((acc, m) => {
+                const key = m.id_material;
+                if (!acc[key]) {
+                  acc[key] = { ...m };
+                } else {
+                  acc[key].cantidad_usada = (Number(acc[key].cantidad_usada) || 0) + (Number(m.cantidad_usada) || 0);
+                }
+                return acc;
+              }, {});
+              const listaMateriales = Object.values(materialesConsolidados);
+              const tieneMateriales = listaMateriales.length > 0;
               const tieneRetirados = v.equipos_retirados && v.equipos_retirados.length > 0;
               const tieneONU = v.numero_serie_onu && v.numero_serie_onu !== 'None' && v.numero_serie_onu !== 'S/N';
               const tieneRouter = v.numero_serie_router && v.numero_serie_router !== 'None' && v.numero_serie_router !== 'S/N';
@@ -575,7 +585,7 @@ export default function ConsumoVisitasTab({ token, tecnicosVehiculosProp = [] })
                     </span>
                     {tieneMateriales ? (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        {v.materiales.map((m, idx) => (
+                        {listaMateriales.map((m, idx) => (
                           <span
                             key={idx}
                             style={{

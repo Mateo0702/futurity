@@ -46,6 +46,7 @@ public class LocationService extends Service {
 
     private String idVisita = "";
     private String serverUrl = "";
+    private String tecnicoNombre = "";
 
     private LocationManager locationManager;
     private LocationListener nativeLocationListener;
@@ -88,7 +89,7 @@ public class LocationService extends Service {
             if (pm != null && wakeLock == null) {
                 wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Futurity:LocationServiceWakeLock");
                 wakeLock.acquire();
-                Log.d(TAG, "PARTIAL_WAKE_LOCK acquired for background tracking");
+                Log.d(TAG, "PARTIAL_WAKE_LOCK acquired for continuous background tracking");
             }
         } catch (Exception e) {
             Log.e(TAG, "Error acquiring WakeLock: " + e.getMessage());
@@ -98,11 +99,17 @@ public class LocationService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null) {
-            idVisita = intent.getStringExtra("id_visita");
-            serverUrl = intent.getStringExtra("server_url");
+            String newVisita = intent.getStringExtra("id_visita");
+            if (newVisita != null) idVisita = newVisita;
+
+            String newServer = intent.getStringExtra("server_url");
+            if (newServer != null && !newServer.isEmpty()) serverUrl = newServer;
+
+            String newTecnico = intent.getStringExtra("tecnico_nombre");
+            if (newTecnico != null && !newTecnico.isEmpty()) tecnicoNombre = newTecnico;
         }
 
-        Log.d(TAG, "Starting service for visita " + idVisita + " to " + serverUrl);
+        Log.d(TAG, "Starting/updating service for tecnico: " + tecnicoNombre + ", visita: " + idVisita + ", URL: " + serverUrl);
 
         // Start as foreground service to prevent OS from killing it
         Notification notification = buildNotification();
@@ -163,43 +170,72 @@ public class LocationService extends Service {
     }
 
     private void postLocation(double latitude, double longitude) {
-        if (serverUrl == null || serverUrl.isEmpty() || idVisita == null || idVisita.isEmpty()) {
-            Log.w(TAG, "Server URL or Visita ID is empty, skipping post");
+        if (serverUrl == null || serverUrl.isEmpty()) {
+            Log.w(TAG, "Server URL is empty, skipping post");
             return;
         }
 
         executorService.execute(() -> {
-            HttpURLConnection conn = null;
+            String baseUrl = serverUrl.endsWith("/") ? serverUrl.substring(0, serverUrl.length() - 1) : serverUrl;
+
+            // 1. Si hay una visita activa en camino, enviar a rastreo_vivo de la visita
+            if (idVisita != null && !idVisita.isEmpty() && !idVisita.equals("0")) {
+                HttpURLConnection connVisita = null;
+                try {
+                    URL urlVisita = new URL(baseUrl + "/api/tecnico/rastreo_vivo/" + idVisita);
+                    connVisita = (HttpURLConnection) urlVisita.openConnection();
+                    connVisita.setRequestMethod("POST");
+                    connVisita.setRequestProperty("Content-Type", "application/json; utf-8");
+                    connVisita.setRequestProperty("Accept", "application/json");
+                    connVisita.setDoOutput(true);
+                    connVisita.setConnectTimeout(8000);
+                    connVisita.setReadTimeout(8000);
+
+                    JSONObject jsonParam = new JSONObject();
+                    jsonParam.put("latitud", latitude);
+                    jsonParam.put("longitud", longitude);
+
+                    try (OutputStream os = connVisita.getOutputStream()) {
+                        byte[] input = jsonParam.toString().getBytes("utf-8");
+                        os.write(input, 0, input.length);
+                    }
+                    connVisita.getResponseCode();
+                } catch (Exception e) {
+                    Log.e(TAG, "Error posting to rastreo_vivo: " + e.getMessage());
+                } finally {
+                    if (connVisita != null) connVisita.disconnect();
+                }
+            }
+
+            // 2. Enviar siempre a ping_global para mantener al técnico conectado en el mapa central
+            HttpURLConnection connGlobal = null;
             try {
-                // Remove trailing slash if present
-                String baseUrl = serverUrl.endsWith("/") ? serverUrl.substring(0, serverUrl.length() - 1) : serverUrl;
-                URL url = new URL(baseUrl + "/api/tecnico/rastreo_vivo/" + idVisita);
-                
-                conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("POST");
-                conn.setRequestProperty("Content-Type", "application/json; utf-8");
-                conn.setRequestProperty("Accept", "application/json");
-                conn.setDoOutput(true);
-                conn.setConnectTimeout(10000);
-                conn.setReadTimeout(10000);
+                URL urlGlobal = new URL(baseUrl + "/api/tecnico/ping_global");
+                connGlobal = (HttpURLConnection) urlGlobal.openConnection();
+                connGlobal.setRequestMethod("POST");
+                connGlobal.setRequestProperty("Content-Type", "application/json; utf-8");
+                connGlobal.setRequestProperty("Accept", "application/json");
+                connGlobal.setDoOutput(true);
+                connGlobal.setConnectTimeout(8000);
+                connGlobal.setReadTimeout(8000);
 
-                JSONObject jsonParam = new JSONObject();
-                jsonParam.put("latitud", latitude);
-                jsonParam.put("longitud", longitude);
+                JSONObject jsonGlobal = new JSONObject();
+                jsonGlobal.put("latitud", latitude);
+                jsonGlobal.put("longitud", longitude);
+                if (tecnicoNombre != null && !tecnicoNombre.isEmpty()) {
+                    jsonGlobal.put("tecnico_nombre", tecnicoNombre);
+                }
 
-                try (OutputStream os = conn.getOutputStream()) {
-                    byte[] input = jsonParam.toString().getBytes("utf-8");
+                try (OutputStream os = connGlobal.getOutputStream()) {
+                    byte[] input = jsonGlobal.toString().getBytes("utf-8");
                     os.write(input, 0, input.length);
                 }
-
-                int code = conn.getResponseCode();
-                Log.i(TAG, "POST location response code: " + code);
+                int code = connGlobal.getResponseCode();
+                Log.d(TAG, "Global ping POST result: " + code);
             } catch (Exception e) {
-                Log.e(TAG, "Error posting location: " + e.getMessage(), e);
+                Log.e(TAG, "Error posting to ping_global: " + e.getMessage());
             } finally {
-                if (conn != null) {
-                    conn.disconnect();
-                }
+                if (connGlobal != null) connGlobal.disconnect();
             }
         });
     }
@@ -212,7 +248,7 @@ public class LocationService extends Service {
         return new NotificationCompat.Builder(this, channelId)
                 .setContentTitle(title)
                 .setContentText(text)
-                .setSmallIcon(android.R.drawable.ic_menu_mylocation) // default system GPS icon
+                .setSmallIcon(android.R.drawable.ic_menu_mylocation)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build();

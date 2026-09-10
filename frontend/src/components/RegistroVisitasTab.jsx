@@ -609,7 +609,7 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
               )}
               {clientPlanInfo.ip_nodo && (
                 <span style={{ color: '#0284c7', fontWeight: 600 }}>
-                  🏢 <strong>Nodo:</strong> {clientPlanInfo.nodo_nombre || clientPlanInfo.ip_nodo}
+                  🏢 <strong>IP Nodo:</strong> {clientPlanInfo.ip_nodo}{clientPlanInfo.nodo_nombre && clientPlanInfo.nodo_nombre !== clientPlanInfo.ip_nodo ? ` (${clientPlanInfo.nodo_nombre})` : ''}
                 </span>
               )}
               {clientPlanInfo.modelo_ont && (

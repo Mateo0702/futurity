@@ -29,18 +29,24 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
 
   const isVisible = (tab) => {
     if (tab === 'visitas') {
-      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'ATC_AUDITOR'].includes(role);
+      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'ATC_AUDITOR', 'AUDITOR'].includes(role);
     }
     if (tab === 'mapa-tecnicos' || tab === 'registro') {
       return ['ADMIN', 'ASESOR', 'CALIDAD'].includes(role);
     }
-    if (tab === 'registro-atencion' || tab === 'buscar-cliente') {
+    if (tab === 'registro-atencion') {
       return ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR'].includes(role);
     }
-    if (tab === 'metricas') {
-      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'ATC_AUDITOR'].includes(role);
+    if (tab === 'buscar-cliente') {
+      return ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR', 'AUDITOR'].includes(role);
     }
-    if (tab === 'reportes' || tab === 'control-calidad') {
+    if (tab === 'metricas') {
+      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'ATC_AUDITOR', 'AUDITOR'].includes(role);
+    }
+    if (tab === 'reportes') {
+      return ['ADMIN', 'ASESOR', 'CALIDAD', 'AUDITOR'].includes(role);
+    }
+    if (tab === 'control-calidad') {
       return ['ADMIN', 'ASESOR', 'CALIDAD'].includes(role);
     }
     if (tab === 'auditoria-atc') {
@@ -140,7 +146,7 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
           </div>
         )}
 
-        {['ADMIN', 'ASESOR', 'ATC'].includes(role) ? (
+        {['ADMIN', 'ASESOR', 'ATC', 'AUDITOR', 'CALIDAD'].includes(role) ? (
           <div className="segmented-control" id="area-switcher" style={{ height: collapsed ? '0px' : 'auto', overflow: 'hidden', opacity: collapsed ? 0 : 1, transition: 'all 0.2s ease' }}>
             <div
               className="segmented-slider"

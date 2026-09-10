@@ -1253,6 +1253,8 @@ def preview_reporte_calidad():
         
     fecha = request.args.get('fecha', date.today().isoformat())
     es_instalacion = request.args.get('es_instalacion', '0').strip()
+    tecnico = request.args.get('tecnico', 'TODOS').strip()
+    todas_soluciones = request.args.get('todas_soluciones', '1').strip()
     
     conexion = get_db_connection()
     if not conexion:
@@ -1264,98 +1266,78 @@ def preview_reporte_calidad():
         fecha_dt = datetime.strptime(fecha, "%Y-%m-%d").date()
         is_sunday = (fecha_dt.weekday() == 6)
         
+        where_clauses = [
+            "estado = 'FINALIZADA'", 
+            "tecnico_principal IS NOT NULL", 
+            "tecnico_principal NOT IN ('', 'NO TECNICO', 'SIN ASIGNAR', 'NONE', 'NAN')"
+        ]
+        params = []
+        
         if is_sunday:
-            query = """
-                SELECT 
-                    id_visita, 
-                    fecha_registro, 
-                    contrato, 
-                    cliente, 
-                    telefonos, 
-                    sector, 
-                    servicio, 
-                    solucion_tecnico, 
-                    observacion_tecnico, 
-                    tecnico_principal, 
-                    tecnico_apoyo,
-                    hora_fin_visita,
-                    foto_equipos,
-                    foto_equipos_2,
-                    firma_cliente,
-                    modelo_onu,
-                    modelo_router,
-                    coordenadas_tecnico,
-                    latitud_inicio,
-                    longitud_inicio,
-                    foto_extra_1,
-                    foto_extra_2,
-                    foto_extra_3,
-                    foto_extra_4,
-                    equipos_juntos
-                FROM visitas_tecnicas
-                WHERE COALESCE(DATE(hora_fin_visita), fecha_programada) BETWEEN DATE_SUB(%s, INTERVAL 2 DAY) AND %s AND estado = 'FINALIZADA'
-                  AND tecnico_principal IS NOT NULL 
-                  AND tecnico_principal NOT IN ('', 'NO TECNICO', 'SIN ASIGNAR', 'NONE', 'NAN')
-                  AND solucion_tecnico IS NOT NULL 
-                  AND solucion_tecnico NOT IN (
-                      'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                      'SIN RESPUESTA DEL CLIENTE',
-                      'GENERAR CAMBIO DE FO',
-                      'GENERAR ARREGLO DE INSTALACIÓN',
-                      'GESTIONAR ARREGLO DE INSTALACIÓN'
-                  )
-                  AND solucion_tecnico NOT LIKE '%NOC%'
-                  AND solucion_tecnico NOT LIKE '%PARCIAL%'
-                  AND es_instalacion = %s
-                ORDER BY COALESCE(DATE(hora_fin_visita), fecha_programada) ASC, hora_fin_visita ASC
-            """
-            cursor.execute(query, (fecha, fecha, int(es_instalacion)))
+            where_clauses.append("COALESCE(DATE(hora_fin_visita), fecha_programada) BETWEEN DATE_SUB(%s, INTERVAL 2 DAY) AND %s")
+            params.extend([fecha, fecha])
         else:
-            query = """
-                SELECT 
-                    id_visita, 
-                    fecha_registro, 
-                    contrato, 
-                    cliente, 
-                    telefonos, 
-                    sector, 
-                    servicio, 
-                    solucion_tecnico, 
-                    observacion_tecnico, 
-                    tecnico_principal, 
-                    tecnico_apoyo,
-                    hora_fin_visita,
-                    foto_equipos,
-                    foto_equipos_2,
-                    firma_cliente,
-                    modelo_onu,
-                    modelo_router,
-                    coordenadas_tecnico,
-                    latitud_inicio,
-                    longitud_inicio,
-                    foto_extra_1,
-                    foto_extra_2,
-                    foto_extra_3,
-                    foto_extra_4,
-                    equipos_juntos
-                FROM visitas_tecnicas
-                WHERE COALESCE(DATE(hora_fin_visita), fecha_programada) = %s AND estado = 'FINALIZADA'
-                  AND tecnico_principal IS NOT NULL 
-                  AND tecnico_principal NOT IN ('', 'NO TECNICO', 'SIN ASIGNAR', 'NONE', 'NAN')
-                  AND solucion_tecnico IS NOT NULL 
-                  AND solucion_tecnico NOT IN (
-                      'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                      'SIN RESPUESTA DEL CLIENTE',
-                      'GENERAR CAMBIO DE FO',
-                      'GENERAR ARREGLO DE INSTALACIÓN',
-                      'GESTIONAR ARREGLO DE INSTALACIÓN'
-                  )
-                  AND solucion_tecnico NOT LIKE '%NOC%'
-                  AND solucion_tecnico NOT LIKE '%PARCIAL%'
-                  AND es_instalacion = %s
-                ORDER BY hora_fin_visita ASC
-            """
-            cursor.execute(query, (fecha, int(es_instalacion)))
+            where_clauses.append("COALESCE(DATE(hora_fin_visita), fecha_programada) = %s")
+            params.append(fecha)
+            
+        if es_instalacion in ['0', '1']:
+            where_clauses.append("es_instalacion = %s")
+            params.append(int(es_instalacion))
+            
+        if tecnico and tecnico != 'TODOS':
+            where_clauses.append("(tecnico_principal = %s OR tecnico_apoyo = %s)")
+            params.extend([tecnico, tecnico])
+            
+        if todas_soluciones in ['1', 'true', 'si', 'SI']:
+            where_clauses.append("solucion_tecnico IS NOT NULL AND solucion_tecnico != ''")
+        else:
+            where_clauses.append("""
+                solucion_tecnico IS NOT NULL 
+                AND solucion_tecnico NOT IN (
+                    'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
+                    'SIN RESPUESTA DEL CLIENTE',
+                    'GENERAR CAMBIO DE FO',
+                    'GENERAR ARREGLO DE INSTALACIÓN',
+                    'GESTIONAR ARREGLO DE INSTALACIÓN'
+                )
+                AND solucion_tecnico NOT LIKE '%NOC%'
+                AND solucion_tecnico NOT LIKE '%PARCIAL%'
+            """)
+            
+        order_clause = "COALESCE(DATE(hora_fin_visita), fecha_programada) ASC, hora_fin_visita ASC" if is_sunday else "hora_fin_visita ASC"
+        
+        query = f"""
+            SELECT 
+                id_visita, 
+                fecha_registro, 
+                contrato, 
+                cliente, 
+                telefonos, 
+                sector, 
+                servicio, 
+                solucion_tecnico, 
+                observacion_tecnico, 
+                tecnico_principal, 
+                tecnico_apoyo,
+                hora_fin_visita,
+                foto_equipos,
+                foto_equipos_2,
+                firma_cliente,
+                modelo_onu,
+                modelo_router,
+                coordenadas_tecnico,
+                latitud_inicio,
+                longitud_inicio,
+                foto_extra_1,
+                foto_extra_2,
+                foto_extra_3,
+                foto_extra_4,
+                equipos_juntos
+            FROM visitas_tecnicas
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY {order_clause}
+        """
+        cursor.execute(query, tuple(params))
         visitas = cursor.fetchall()
         
         # Serializar objetos datetime a formato legible/ISO para JSON
@@ -1375,11 +1357,24 @@ def preview_reporte_calidad():
 
 @admin_bp.route('/api/admin/reporte_calidad/excel', methods=['GET'])
 def download_excel_reporte_calidad():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization') or request.args.get('token')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif token and not token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(f"Bearer {token}")
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     fecha = request.args.get('fecha', date.today().isoformat())
     es_instalacion = request.args.get('es_instalacion', '0').strip()
+    tecnico = request.args.get('tecnico', 'TODOS').strip()
+    todas_soluciones = request.args.get('todas_soluciones', '0').strip()
     
     conexion = get_db_connection()
     if not conexion:
@@ -1391,70 +1386,64 @@ def download_excel_reporte_calidad():
         fecha_dt = datetime.strptime(fecha, "%Y-%m-%d").date()
         is_sunday = (fecha_dt.weekday() == 6)
         
+        where_clauses = [
+            "estado = 'FINALIZADA'", 
+            "tecnico_principal IS NOT NULL", 
+            "tecnico_principal NOT IN ('', 'NO TECNICO', 'SIN ASIGNAR', 'NONE', 'NAN')"
+        ]
+        params = []
+        
         if is_sunday:
-            query = """
-                SELECT 
-                    fecha_registro, 
-                    contrato, 
-                    cliente, 
-                    telefonos, 
-                    sector, 
-                    servicio, 
-                    solucion_tecnico, 
-                    observacion_tecnico, 
-                    tecnico_principal, 
-                    tecnico_apoyo,
-                    hora_fin_visita
-                FROM visitas_tecnicas
-                WHERE COALESCE(DATE(hora_fin_visita), fecha_programada) BETWEEN DATE_SUB(%s, INTERVAL 2 DAY) AND %s AND estado = 'FINALIZADA'
-                  AND tecnico_principal IS NOT NULL 
-                  AND tecnico_principal NOT IN ('', 'NO TECNICO', 'SIN ASIGNAR', 'NONE', 'NAN')
-                  AND solucion_tecnico IS NOT NULL 
-                  AND solucion_tecnico NOT IN (
-                      'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                      'SIN RESPUESTA DEL CLIENTE',
-                      'GENERAR CAMBIO DE FO',
-                      'GENERAR ARREGLO DE INSTALACIÓN',
-                      'GESTIONAR ARREGLO DE INSTALACIÓN'
-                  )
-                  AND solucion_tecnico NOT LIKE '%NOC%'
-                  AND solucion_tecnico NOT LIKE '%PARCIAL%'
-                  AND es_instalacion = %s
-                ORDER BY COALESCE(DATE(hora_fin_visita), fecha_programada) ASC, hora_fin_visita ASC
-            """
-            cursor.execute(query, (fecha, fecha, int(es_instalacion)))
+            where_clauses.append("COALESCE(DATE(hora_fin_visita), fecha_programada) BETWEEN DATE_SUB(%s, INTERVAL 2 DAY) AND %s")
+            params.extend([fecha, fecha])
         else:
-            query = """
-                SELECT 
-                    fecha_registro, 
-                    contrato, 
-                    cliente, 
-                    telefonos, 
-                    sector, 
-                    servicio, 
-                    solucion_tecnico, 
-                    observacion_tecnico, 
-                    tecnico_principal, 
-                    tecnico_apoyo,
-                    hora_fin_visita
-                FROM visitas_tecnicas
-                WHERE COALESCE(DATE(hora_fin_visita), fecha_programada) = %s AND estado = 'FINALIZADA'
-                  AND tecnico_principal IS NOT NULL 
-                  AND tecnico_principal NOT IN ('', 'NO TECNICO', 'SIN ASIGNAR', 'NONE', 'NAN')
-                  AND solucion_tecnico IS NOT NULL 
-                  AND solucion_tecnico NOT IN (
-                      'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                      'SIN RESPUESTA DEL CLIENTE',
-                      'GENERAR CAMBIO DE FO',
-                      'GENERAR ARREGLO DE INSTALACIÓN',
-                      'GESTIONAR ARREGLO DE INSTALACIÓN'
-                  )
-                  AND solucion_tecnico NOT LIKE '%NOC%'
-                  AND solucion_tecnico NOT LIKE '%PARCIAL%'
-                  AND es_instalacion = %s
-                ORDER BY hora_fin_visita ASC
-            """
-            cursor.execute(query, (fecha, int(es_instalacion)))
+            where_clauses.append("COALESCE(DATE(hora_fin_visita), fecha_programada) = %s")
+            params.append(fecha)
+            
+        if es_instalacion in ['0', '1']:
+            where_clauses.append("es_instalacion = %s")
+            params.append(int(es_instalacion))
+            
+        if tecnico and tecnico != 'TODOS':
+            where_clauses.append("(tecnico_principal = %s OR tecnico_apoyo = %s)")
+            params.extend([tecnico, tecnico])
+            
+        if todas_soluciones in ['1', 'true', 'si', 'SI']:
+            where_clauses.append("solucion_tecnico IS NOT NULL AND solucion_tecnico != ''")
+        else:
+            where_clauses.append("""
+                solucion_tecnico IS NOT NULL 
+                AND solucion_tecnico NOT IN (
+                    'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
+                    'SIN RESPUESTA DEL CLIENTE',
+                    'GENERAR CAMBIO DE FO',
+                    'GENERAR ARREGLO DE INSTALACIÓN',
+                    'GESTIONAR ARREGLO DE INSTALACIÓN'
+                )
+                AND solucion_tecnico NOT LIKE '%NOC%'
+                AND solucion_tecnico NOT LIKE '%PARCIAL%'
+            """)
+            
+        order_clause = "COALESCE(DATE(hora_fin_visita), fecha_programada) ASC, hora_fin_visita ASC" if is_sunday else "hora_fin_visita ASC"
+        
+        query = f"""
+            SELECT 
+                fecha_registro, 
+                contrato, 
+                cliente, 
+                telefonos, 
+                sector, 
+                servicio, 
+                solucion_tecnico, 
+                observacion_tecnico, 
+                tecnico_principal, 
+                tecnico_apoyo,
+                hora_fin_visita
+            FROM visitas_tecnicas
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY {order_clause}
+        """
+        cursor.execute(query, tuple(params))
         visitas = cursor.fetchall()
         cursor.close()
         conexion.close()
@@ -5661,11 +5650,12 @@ def api_admin_visitas_materiales_reporte():
         if id_visitas:
             placeholders = ','.join(['%s'] * len(id_visitas))
             q_mat = f"""
-                SELECT vm.id_visita, vm.id_material, vm.cantidad_usada,
+                SELECT vm.id_visita, vm.id_material, SUM(vm.cantidad_usada) AS cantidad_usada,
                        m.codigo_material, m.nombre_material, m.unidad_medida, m.categoria
                 FROM visitas_materiales vm
                 JOIN materiales m ON vm.id_material = m.id_material
                 WHERE vm.id_visita IN ({placeholders})
+                GROUP BY vm.id_visita, vm.id_material, m.codigo_material, m.nombre_material, m.unidad_medida, m.categoria
                 ORDER BY m.nombre_material ASC
             """
             cur.execute(q_mat, tuple(id_visitas))
@@ -5769,4 +5759,729 @@ def api_admin_visitas_materiales_reporte():
     finally:
         cur.close()
         conn.close()
+
+
+# =========================================================================
+# AUDITORÍA Y CONTROL DE CALIDAD POST-VISITA (PARA CARO / ROL CALIDAD)
+# =========================================================================
+
+@admin_bp.route('/api/admin/calidad_visitas/lista', methods=['GET'])
+def api_admin_calidad_visitas_lista():
+    """Retorna la lista de visitas finalizadas con su estado de auditoría de calidad."""
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role'), 'nombre': session.get('user_name')}
+
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado."}), 401
+
+    user_role = user.get('role') or user.get('rol')
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para ver datos de control de calidad."}), 403
+
+    fecha_inicio = request.args.get('fecha_inicio', '')
+    fecha_fin = request.args.get('fecha_fin', '')
+    tecnico = request.args.get('tecnico', 'TODOS')
+    estado_contacto = request.args.get('estado_contacto', 'TODOS')
+    solicito_nueva = request.args.get('solicito_nueva_visita', 'TODOS')
+    search = request.args.get('search', '').strip()
+
+    if not fecha_inicio:
+        # Por defecto ayer
+        ayer = datetime.now() - timedelta(days=1)
+        fecha_inicio = ayer.strftime('%Y-%m-%d')
+    if not fecha_fin:
+        fecha_fin = fecha_inicio
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        query = """
+            SELECT 
+                v.id_visita, v.contrato, v.cliente, v.telefonos, v.sector, v.direccion,
+                v.tecnico_principal, v.tecnico_apoyo, COALESCE(t.placa_vehiculo, '') as placa_vehiculo,
+                v.problema as problema_inicial, v.solucion_tecnico, v.observacion_tecnico,
+                v.fecha_programada as fecha_visita, v.estado as estado_visita,
+                v.hora_inicio_visita, v.hora_fin_visita,
+                v.encuesta_rapidez, v.encuesta_atencion, v.encuesta_explicacion,
+                
+                aud.id_auditoria,
+                COALESCE(aud.estado_contacto, 'PENDIENTE') as estado_contacto,
+                COALESCE(aud.intentos_llamada, 0) as intentos_llamada,
+                COALESCE(aud.visita_efectiva, 'SI') as visita_efectiva,
+                COALESCE(aud.solicito_nueva_visita, 'NO') as solicito_nueva_visita,
+                COALESCE(aud.volver_a_llamar, 'NO') as volver_a_llamar,
+                aud.p1_servicio, aud.p2_velocidad, aud.p3_cobertura, aud.p4_explicacion_router,
+                aud.p6_profesionalismo, aud.p6_motivo_profesionalismo, aud.p7_cordialidad, aud.p8_orden_limpieza,
+                COALESCE(aud.app_administrar_router, 'NA') as app_administrar_router,
+                COALESCE(aud.app_cambio_wifi, 'NA') as app_cambio_wifi,
+                COALESCE(aud.app_red_invitados, 'NA') as app_red_invitados,
+                COALESCE(aud.app_control_parental, 'NA') as app_control_parental,
+                COALESCE(aud.instalo_grilla_canales, 'NA') as instalo_grilla_canales,
+                aud.promedio_total, aud.sugerencia_cliente, aud.observaciones,
+                aud.fecha_gestion, aud.auditor_gestion
+            FROM visitas_tecnicas v
+            LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
+            LEFT JOIN auditoria_calidad_visitas aud ON v.id_visita = aud.id_visita
+            WHERE v.estado = 'FINALIZADA'
+              AND v.fecha_programada BETWEEN %s AND %s
+        """
+        params = [fecha_inicio, fecha_fin]
+
+        if tecnico and tecnico != 'TODOS':
+            query += " AND (v.tecnico_principal = %s OR v.tecnico_apoyo = %s)"
+            params.extend([tecnico, tecnico])
+
+        if estado_contacto and estado_contacto != 'TODOS':
+            if estado_contacto == 'PENDIENTE':
+                query += " AND (aud.estado_contacto = 'PENDIENTE' OR aud.id_auditoria IS NULL)"
+            else:
+                query += " AND aud.estado_contacto = %s"
+                params.append(estado_contacto)
+
+        if solicito_nueva and solicito_nueva != 'TODOS':
+            query += " AND aud.solicito_nueva_visita = %s"
+            params.append(solicito_nueva)
+
+        if search:
+            query += " AND (v.cliente LIKE %s OR v.contrato LIKE %s OR v.id_visita LIKE %s OR v.telefonos LIKE %s)"
+            like_s = f"%{search}%"
+            params.extend([like_s, like_s, like_s, like_s])
+
+        query += " ORDER BY v.fecha_programada DESC, v.id_visita DESC"
+
+        cur.execute(query, params)
+        visitas = cur.fetchall()
+
+        # KPIs
+        total_visitas = len(visitas)
+        total_auditadas = 0
+        total_pendientes = 0
+        total_no_contesta = 0
+        total_nueva_visita = 0
+        suma_promedios = 0.0
+        conteo_promedios = 0
+
+        for v in visitas:
+            if v.get('fecha_visita'):
+                v['fecha_visita'] = str(v['fecha_visita'])
+            if v.get('fecha_gestion'):
+                v['fecha_gestion'] = str(v['fecha_gestion'])
+            if v.get('hora_inicio_visita'):
+                v['hora_inicio_visita'] = str(v['hora_inicio_visita'])
+            if v.get('hora_fin_visita'):
+                v['hora_fin_visita'] = str(v['hora_fin_visita'])
+            if v.get('promedio_total') is not None:
+                v['promedio_total'] = float(v['promedio_total'])
+
+            est = v.get('estado_contacto')
+            if est == 'CONTESTO':
+                total_auditadas += 1
+                if v.get('promedio_total') is not None:
+                    suma_promedios += float(v['promedio_total'])
+                    conteo_promedios += 1
+            elif est in ['NO_CONTESTA', 'VOLVER_A_LLAMAR']:
+                total_no_contesta += 1
+            elif est == 'PENDIENTE':
+                total_pendientes += 1
+
+            if v.get('solicito_nueva_visita') == 'SI':
+                total_nueva_visita += 1
+
+        promedio_general = round(suma_promedios / conteo_promedios, 2) if conteo_promedios > 0 else 0.0
+        pct_auditadas = round((total_auditadas / total_visitas) * 100, 1) if total_visitas > 0 else 0.0
+
+        # Tecnicos para selector
+        cur.execute("SELECT DISTINCT nombre FROM tecnicos WHERE activo = 1 ORDER BY nombre ASC")
+        tecnicos = [t['nombre'] for t in cur.fetchall()]
+
+        return jsonify({
+            "status": "ok",
+            "fecha_inicio": fecha_inicio,
+            "fecha_fin": fecha_fin,
+            "tecnicos": tecnicos,
+            "totales": {
+                "total_visitas": total_visitas,
+                "total_auditadas": total_auditadas,
+                "total_pendientes": total_pendientes,
+                "total_no_contesta": total_no_contesta,
+                "total_nueva_visita": total_nueva_visita,
+                "promedio_general": promedio_general,
+                "porcentaje_auditadas": pct_auditadas
+            },
+            "visitas": visitas
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@admin_bp.route('/api/admin/calidad_visitas/guardar', methods=['POST'])
+def api_admin_calidad_visitas_guardar():
+    """Guarda o actualiza la auditoría de calidad de una visita técnica."""
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role'), 'nombre': session.get('user_name')}
+
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado."}), 401
+
+    user_role = user.get('role') or user.get('rol')
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para registrar control de calidad."}), 403
+
+    user_name = user.get('nombre') or user.get('usuario') or 'Auditor Calidad'
+
+    data = request.get_json() or {}
+    id_visita = data.get('id_visita')
+    if not id_visita:
+        return jsonify({"status": "error", "message": "ID de visita requerido."}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        # Obtener datos de la visita para sincronizar
+        cur.execute("SELECT v.*, COALESCE(t.placa_vehiculo, '') as placa_vehiculo FROM visitas_tecnicas v LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre WHERE v.id_visita = %s", (id_visita,))
+        visita = cur.fetchone()
+        if not visita:
+            return jsonify({"status": "error", "message": "Visita no encontrada."}), 404
+
+        # Extraer notas numéricas
+        def parse_score(val):
+            try:
+                if val is not None and str(val).strip() != '':
+                    v = int(val)
+                    return v if 1 <= v <= 10 else None
+            except:
+                pass
+            return None
+
+        p1 = parse_score(data.get('p1_servicio'))
+        p2 = parse_score(data.get('p2_velocidad'))
+        p3 = parse_score(data.get('p3_cobertura'))
+        p4 = parse_score(data.get('p4_explicacion_router'))
+        p6 = parse_score(data.get('p6_profesionalismo'))
+        p7 = parse_score(data.get('p7_cordialidad'))
+        p8 = parse_score(data.get('p8_orden_limpieza'))
+
+        # Calcular promedio automático de las preguntas del 1 al 10 que fueron respondidas
+        notas = [n for n in [p1, p2, p3, p4, p6, p7, p8] if n is not None]
+        promedio_total = round(sum(notas) / len(notas), 2) if notas else None
+
+        estado_contacto = data.get('estado_contacto', 'CONTESTO')
+        intentos = int(data.get('intentos_llamada', 1))
+        visita_efectiva = data.get('visita_efectiva', 'SI')
+        solicito_nueva = data.get('solicito_nueva_visita', 'NO')
+        volver_llamar = data.get('volver_a_llamar', 'NO')
+
+        p6_motivo = data.get('p6_motivo_profesionalismo', '')
+        app_admin = data.get('app_administrar_router', 'NA')
+        app_wifi = data.get('app_cambio_wifi', 'NA')
+        app_inv = data.get('app_red_invitados', 'NA')
+        app_par = data.get('app_control_parental', 'NA')
+        grilla = data.get('instalo_grilla_canales', 'NA')
+        sugerencia = data.get('sugerencia_cliente', '').strip()
+        obs = data.get('observaciones', '').strip()
+
+        upsert_query = """
+            INSERT INTO auditoria_calidad_visitas (
+                id_visita, contrato, cliente, telefonos, sector, direccion,
+                tecnico_principal, tecnico_apoyo, placa_vehiculo, problema_inicial, solucion_tecnico,
+                fecha_visita, fecha_gestion, auditor_gestion,
+                estado_contacto, intentos_llamada, visita_efectiva, solicito_nueva_visita, volver_a_llamar,
+                p1_servicio, p2_velocidad, p3_cobertura, p4_explicacion_router,
+                p6_profesionalismo, p6_motivo_profesionalismo, p7_cordialidad, p8_orden_limpieza,
+                app_administrar_router, app_cambio_wifi, app_red_invitados, app_control_parental, instalo_grilla_canales,
+                promedio_total, sugerencia_cliente, observaciones
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, NOW(), %s,
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, %s, %s
+            ) ON DUPLICATE KEY UPDATE
+                contrato = VALUES(contrato),
+                cliente = VALUES(cliente),
+                telefonos = VALUES(telefonos),
+                sector = VALUES(sector),
+                direccion = VALUES(direccion),
+                tecnico_principal = VALUES(tecnico_principal),
+                tecnico_apoyo = VALUES(tecnico_apoyo),
+                placa_vehiculo = VALUES(placa_vehiculo),
+                problema_inicial = VALUES(problema_inicial),
+                solucion_tecnico = VALUES(solucion_tecnico),
+                fecha_visita = VALUES(fecha_visita),
+                fecha_gestion = NOW(),
+                auditor_gestion = VALUES(auditor_gestion),
+                estado_contacto = VALUES(estado_contacto),
+                intentos_llamada = VALUES(intentos_llamada),
+                visita_efectiva = VALUES(visita_efectiva),
+                solicito_nueva_visita = VALUES(solicito_nueva_visita),
+                volver_a_llamar = VALUES(volver_a_llamar),
+                p1_servicio = VALUES(p1_servicio),
+                p2_velocidad = VALUES(p2_velocidad),
+                p3_cobertura = VALUES(p3_cobertura),
+                p4_explicacion_router = VALUES(p4_explicacion_router),
+                p6_profesionalismo = VALUES(p6_profesionalismo),
+                p6_motivo_profesionalismo = VALUES(p6_motivo_profesionalismo),
+                p7_cordialidad = VALUES(p7_cordialidad),
+                p8_orden_limpieza = VALUES(p8_orden_limpieza),
+                app_administrar_router = VALUES(app_administrar_router),
+                app_cambio_wifi = VALUES(app_cambio_wifi),
+                app_red_invitados = VALUES(app_red_invitados),
+                app_control_parental = VALUES(app_control_parental),
+                instalo_grilla_canales = VALUES(instalo_grilla_canales),
+                promedio_total = VALUES(promedio_total),
+                sugerencia_cliente = VALUES(sugerencia_cliente),
+                observaciones = VALUES(observaciones)
+        """
+
+        cur.execute(upsert_query, (
+            id_visita, visita.get('contrato'), visita.get('cliente'), visita.get('telefonos'), visita.get('sector'), visita.get('direccion'),
+            visita.get('tecnico_principal'), visita.get('tecnico_apoyo'), visita.get('placa_vehiculo'), visita.get('problema'), visita.get('solucion_tecnico'),
+            visita.get('fecha_programada'), user_name,
+            estado_contacto, intentos, visita_efectiva, solicito_nueva, volver_llamar,
+            p1, p2, p3, p4,
+            p6, p6_motivo, p7, p8,
+            app_admin, app_wifi, app_inv, app_par, grilla,
+            promedio_total, sugerencia, obs
+        ))
+        conn.commit()
+
+        return jsonify({
+            "status": "ok",
+            "message": "Auditoría guardada exitosamente.",
+            "promedio_total": promedio_total
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@admin_bp.route('/api/admin/calidad_visitas/exportar_excel', methods=['GET'])
+def api_admin_calidad_visitas_exportar_excel():
+    """Genera archivo Excel idéntico al Drive para auditoría de calidad."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    import io
+
+    fecha_inicio = request.args.get('fecha_inicio', '')
+    fecha_fin = request.args.get('fecha_fin', '')
+    tecnico = request.args.get('tecnico', 'TODOS')
+    estado_contacto = request.args.get('estado_contacto', 'TODOS')
+    solicito_nueva = request.args.get('solicito_nueva_visita', 'TODOS')
+    search = request.args.get('search', '').strip()
+
+    if not fecha_inicio:
+        ayer = datetime.now() - timedelta(days=1)
+        fecha_inicio = ayer.strftime('%Y-%m-%d')
+    if not fecha_fin:
+        fecha_fin = fecha_inicio
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        query = """
+            SELECT 
+                v.id_visita, v.contrato, v.cliente, v.telefonos, v.sector, v.direccion,
+                v.tecnico_principal, v.tecnico_apoyo, COALESCE(t.placa_vehiculo, '') as placa_vehiculo,
+                v.problema as problema_inicial, v.solucion_tecnico, v.observacion_tecnico,
+                v.fecha_programada as fecha_visita,
+                aud.id_auditoria,
+                COALESCE(aud.estado_contacto, 'PENDIENTE') as estado_contacto,
+                aud.p1_servicio, aud.p2_velocidad, aud.p3_cobertura, aud.p4_explicacion_router,
+                aud.p6_profesionalismo, aud.p6_motivo_profesionalismo, aud.p7_cordialidad, aud.p8_orden_limpieza,
+                COALESCE(aud.app_administrar_router, 'NA') as app_administrar_router,
+                COALESCE(aud.app_cambio_wifi, 'NA') as app_cambio_wifi,
+                COALESCE(aud.app_red_invitados, 'NA') as app_red_invitados,
+                COALESCE(aud.app_control_parental, 'NA') as app_control_parental,
+                COALESCE(aud.instalo_grilla_canales, 'NA') as instalo_grilla_canales,
+                aud.promedio_total, aud.sugerencia_cliente, aud.observaciones,
+                COALESCE(aud.visita_efectiva, 'SI') as visita_efectiva,
+                COALESCE(aud.solicito_nueva_visita, 'NO') as solicito_nueva_visita,
+                COALESCE(aud.volver_a_llamar, 'NO') as volver_a_llamar,
+                aud.fecha_gestion, aud.auditor_gestion
+            FROM visitas_tecnicas v
+            LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
+            LEFT JOIN auditoria_calidad_visitas aud ON v.id_visita = aud.id_visita
+            WHERE v.estado = 'FINALIZADA'
+              AND v.fecha_programada BETWEEN %s AND %s
+        """
+        params = [fecha_inicio, fecha_fin]
+
+        if tecnico and tecnico != 'TODOS':
+            query += " AND (v.tecnico_principal = %s OR v.tecnico_apoyo = %s)"
+            params.extend([tecnico, tecnico])
+
+        if estado_contacto and estado_contacto != 'TODOS':
+            if estado_contacto == 'PENDIENTE':
+                query += " AND (aud.estado_contacto = 'PENDIENTE' OR aud.id_auditoria IS NULL)"
+            else:
+                query += " AND aud.estado_contacto = %s"
+                params.append(estado_contacto)
+
+        if solicito_nueva and solicito_nueva != 'TODOS':
+            query += " AND aud.solicito_nueva_visita = %s"
+            params.append(solicito_nueva)
+
+        if search:
+            query += " AND (v.cliente LIKE %s OR v.contrato LIKE %s OR v.id_visita LIKE %s)"
+            like_s = f"%{search}%"
+            params.extend([like_s, like_s, like_s])
+
+        query += " ORDER BY v.fecha_programada DESC, v.id_visita DESC"
+        cur.execute(query, params)
+        rows = cur.fetchall()
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Control Calidad Visitas"
+
+        headers = [
+            "N° TICKET", "FECHA VISITA", "CONTRATO", "CLIENTE", "TELÉFONOS", "SECTOR",
+            "TÉCNICO PRINCIPAL", "PLACA", "MOTIVO / PROBLEMA", "SOLUCIÓN TÉCNICA",
+            "ESTADO CONTACTO",
+            "P1. SERVICIO (1-10)", "P2. VELOCIDAD (1-10)", "P3. COBERTURA (1-10)", "P4. EXPLICACIÓN ROUTER (1-10)",
+            "APP: ADMIN ROUTER", "APP: CAMBIO WIFI", "APP: RED INVITADOS", "APP: CONTROL PARENTAL",
+            "P6. PROFESIONALISMO (1-10)", "POR QUÉ (PROFESIONALISMO)",
+            "P7. CORDIALIDAD (1-10)", "P8. ORDEN Y LIMPIEZA (1-10)",
+            "GRILLA CANALES INSTALADA",
+            "PROMEDIO TOTAL", "SUGERENCIAS CLIENTE",
+            "VISITA EFECTIVA", "SOLICITA NUEVA VISITA", "VOLVER A LLAMAR",
+            "OBSERVACIONES AUDITOR", "FECHA GESTIÓN", "AUDITOR"
+        ]
+
+        header_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
+        header_font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+        thin_border = Border(
+            left=Side(style='thin', color='D9D9D9'),
+            right=Side(style='thin', color='D9D9D9'),
+            top=Side(style='thin', color='D9D9D9'),
+            bottom=Side(style='thin', color='D9D9D9')
+        )
+
+        ws.append(headers)
+        for col_idx, _ in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        for row_idx, r in enumerate(rows, 2):
+            fecha_vis_str = str(r['fecha_visita']) if r.get('fecha_visita') else ''
+            fecha_ges_str = r['fecha_gestion'].strftime('%Y-%m-%d %H:%M') if r.get('fecha_gestion') else ''
+            prom_val = float(r['promedio_total']) if r.get('promedio_total') is not None else ''
+
+            row_data = [
+                f"VT-{r['id_visita']}",
+                fecha_vis_str,
+                r.get('contrato') or '',
+                r.get('cliente') or '',
+                r.get('telefonos') or '',
+                r.get('sector') or '',
+                r.get('tecnico_principal') or '',
+                r.get('placa_vehiculo') or '',
+                r.get('problema_inicial') or '',
+                r.get('solucion_tecnico') or '',
+                r.get('estado_contacto') or 'PENDIENTE',
+                r.get('p1_servicio') if r.get('p1_servicio') is not None else '',
+                r.get('p2_velocidad') if r.get('p2_velocidad') is not None else '',
+                r.get('p3_cobertura') if r.get('p3_cobertura') is not None else '',
+                r.get('p4_explicacion_router') if r.get('p4_explicacion_router') is not None else '',
+                r.get('app_administrar_router') or 'NA',
+                r.get('app_cambio_wifi') or 'NA',
+                r.get('app_red_invitados') or 'NA',
+                r.get('app_control_parental') or 'NA',
+                r.get('p6_profesionalismo') if r.get('p6_profesionalismo') is not None else '',
+                r.get('p6_motivo_profesionalismo') or '',
+                r.get('p7_cordialidad') if r.get('p7_cordialidad') is not None else '',
+                r.get('p8_orden_limpieza') if r.get('p8_orden_limpieza') is not None else '',
+                r.get('instalo_grilla_canales') or 'NA',
+                prom_val,
+                r.get('sugerencia_cliente') or '',
+                r.get('visita_efectiva') or 'SI',
+                r.get('solicito_nueva_visita') or 'NO',
+                r.get('volver_a_llamar') or 'NO',
+                r.get('observaciones') or '',
+                fecha_ges_str,
+                r.get('auditor_gestion') or ''
+            ]
+
+            ws.append(row_data)
+            for c_idx in range(1, len(headers) + 1):
+                cell = ws.cell(row=row_idx, column=c_idx)
+                cell.border = thin_border
+                cell.font = Font(name="Calibri", size=9)
+                cell.alignment = Alignment(vertical="center")
+
+        # Ajuste de ancho de columnas
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = col[0].column_letter
+            ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = f"Control_Calidad_Visitas_{fecha_inicio}_al_{fecha_fin}.xlsx"
+        return send_file(
+            output,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+# =========================================================================
+# PLAN DE MODERNIZACIÓN DE EQUIPOS (PLAN RENOVE / HARDWARE TRACKER)
+# =========================================================================
+
+HOMOLOGADOS_KEYWORDS = ['511', '530', '231', 'AX3', 'AX3S', 'AX2S']
+
+def es_equipo_homologado(ont, r1, r2):
+    txt = ((ont or '') + ' ' + (r1 or '') + ' ' + (r2 or '')).upper()
+    return any(k in txt for k in HOMOLOGADOS_KEYWORDS)
+
+
+@admin_bp.route('/api/admin/metricas_equipos_modernizacion', methods=['GET'])
+def api_metricas_equipos_modernizacion():
+    from utils import MAPEO_NODOS
+    from collections import Counter
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de conexión a BD"}), 500
+
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT contrato, nombre_cliente, ip_nodo, modelo_ont, router_principal, router_secundario
+            FROM directorio_clientes
+            WHERE estado != 'INACTIVO'
+        """)
+        clientes = cur.fetchall()
+
+        tot_homologados = 0
+        tot_obsoletos = 0
+        por_nodo = {}
+        modelos_counter = Counter()
+        onts_counter = Counter()
+
+        for c in clientes:
+            r1 = (c.get('router_principal') or 'SIN DATOS').strip()
+            ont = (c.get('modelo_ont') or 'SIN ONT').strip()
+            modelos_counter[r1] += 1
+            onts_counter[ont] += 1
+
+            ip = (c.get('ip_nodo') or 'SIN_NODO').strip()
+            nodo_nom = MAPEO_NODOS.get(ip, ip)
+
+            if nodo_nom not in por_nodo:
+                por_nodo[nodo_nom] = {
+                    'nodo': nodo_nom,
+                    'ip_nodo': ip,
+                    'total': 0,
+                    'homologados': 0,
+                    'obsoletos': 0,
+                    'porcentaje': 0.0
+                }
+
+            por_nodo[nodo_nom]['total'] += 1
+            if es_equipo_homologado(c.get('modelo_ont'), c.get('router_principal'), c.get('router_secundario')):
+                tot_homologados += 1
+                por_nodo[nodo_nom]['homologados'] += 1
+            else:
+                tot_obsoletos += 1
+                por_nodo[nodo_nom]['obsoletos'] += 1
+
+        total_activos = len(clientes)
+        pct_global = round((tot_homologados / total_activos * 100), 1) if total_activos > 0 else 0.0
+
+        nodos_list = []
+        for n, d in por_nodo.items():
+            if d['total'] > 5:  # Filtrar nodos con al menos algunos clientes
+                d['porcentaje'] = round((d['homologados'] / d['total'] * 100), 1)
+                nodos_list.append(d)
+
+        nodos_list.sort(key=lambda x: x['total'], reverse=True)
+
+        # Top Modelos
+        modelos_top = []
+        for m, cnt in modelos_counter.most_common(12):
+            es_h = es_equipo_homologado('', m, '')
+            modelos_top.append({
+                'modelo': m,
+                'cantidad': cnt,
+                'porcentaje': round((cnt / total_activos * 100), 1) if total_activos > 0 else 0,
+                'tipo': 'HOMOLOGADO' if es_h else 'OBSOLETO'
+            })
+
+        # Top ONTs
+        onts_top = []
+        for o, cnt in onts_counter.most_common(10):
+            onts_top.append({
+                'ont': o,
+                'cantidad': cnt,
+                'porcentaje': round((cnt / total_activos * 100), 1) if total_activos > 0 else 0
+            })
+
+        return jsonify({
+            "status": "ok",
+            "resumen_global": {
+                "total_clientes": total_activos,
+                "homologados": tot_homologados,
+                "obsoletos": tot_obsoletos,
+                "porcentaje_homologados": pct_global,
+                "porcentaje_obsoletos": round(100.0 - pct_global, 1)
+            },
+            "nodos": nodos_list,
+            "modelos_top": modelos_top,
+            "onts_top": onts_top
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@admin_bp.route('/api/admin/exportar_equipos_obsoletos', methods=['GET'])
+def api_exportar_equipos_obsoletos():
+    from utils import MAPEO_NODOS
+    import io
+
+    nodo_filtro = request.args.get('nodo', '').strip()
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de conexión a BD"}), 500
+
+    cur = conn.cursor(dictionary=True)
+    try:
+        sql = """
+            SELECT contrato, nombre_cliente, cedula, telefono1, telefono2, direccion, zona,
+                   ip_nodo, modelo_ont, router_principal, router_secundario, antiguedad, total_mensual
+            FROM directorio_clientes
+            WHERE estado != 'INACTIVO'
+        """
+        params = []
+        if nodo_filtro:
+            sql += " AND (ip_nodo = %s OR ip_nodo LIKE %s)"
+            params.extend([nodo_filtro, f"%{nodo_filtro}%"])
+
+        cur.execute(sql, tuple(params))
+        clientes = cur.fetchall()
+
+        # Filtrar solo los obsoletos
+        obsoletos = []
+        for c in clientes:
+            if not es_equipo_homologado(c.get('modelo_ont'), c.get('router_principal'), c.get('router_secundario')):
+                ip = (c.get('ip_nodo') or '').strip()
+                c['nodo_nombre'] = MAPEO_NODOS.get(ip, ip or 'N/D')
+                obsoletos.append(c)
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Equipos Por Cambiar"
+
+        # Encabezado Principal
+        ws.merge_cells("A1:K1")
+        title_cell = ws["A1"]
+        title_cell.value = f"PLAN RENOVE - LISTADO DE EQUIPOS POR CAMBIAR (TOTAL: {len(obsoletos)} CLIENTES)"
+        title_cell.font = Font(name="Calibri", size=13, bold=True, color="FFFFFF")
+        title_cell.fill = PatternFill(start_color="BE123C", end_color="BE123C", fill_type="solid")
+        title_cell.alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[1].height = 30
+
+        headers = [
+            "Contrato", "Cliente", "Cédula", "Teléfono 1", "Teléfono 2",
+            "Dirección", "Zona / Barrio", "Nodo", "IP Nodo", "Router Actual", "ONT Actual"
+        ]
+
+        ws.append(headers)
+        ws.row_dimensions[2].height = 22
+
+        header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+        header_font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+        thin_border = Border(
+            left=Side(style='thin', color='E2E8F0'),
+            right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'),
+            bottom=Side(style='thin', color='E2E8F0')
+        )
+
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=2, column=col_idx)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        row_idx = 3
+        for c in obsoletos:
+            ws.append([
+                c.get('contrato') or '',
+                c.get('nombre_cliente') or '',
+                c.get('cedula') or '',
+                c.get('telefono1') or '',
+                c.get('telefono2') or '',
+                c.get('direccion') or '',
+                c.get('zona') or '',
+                c.get('nodo_nombre') or '',
+                c.get('ip_nodo') or '',
+                c.get('router_principal') or 'SIN DATOS',
+                c.get('modelo_ont') or 'SIN ONT'
+            ])
+            ws.row_dimensions[row_idx].height = 18
+            for col_idx in range(1, len(headers) + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.border = thin_border
+                cell.font = Font(name="Calibri", size=9)
+                cell.alignment = Alignment(vertical="center")
+            row_idx += 1
+
+        for col_idx, col in enumerate(ws.columns, 1):
+            max_len = max(len(str(cell.value or '')) for cell in col if not isinstance(cell, openpyxl.cell.cell.MergedCell))
+            col_letter = get_column_letter(col_idx)
+            ws.column_dimensions[col_letter].width = max(max_len + 3, 11)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = f"Campana_Cambio_Equipos_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        return send_file(
+            output,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
 

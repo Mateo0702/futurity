@@ -505,6 +505,12 @@ def finalizar_visita(id_visita):
         datos = request.form
         
     solucion = datos.get('solucion_tecnico')
+    if solucion and any(term in str(solucion).upper() for term in ['REAGENDAD', 'SATURACI']):
+        return jsonify({
+            "status": "error",
+            "message": "Una visita a reagendar o posponer no se puede finalizar. Por favor usa la opción 'Posponer' para que Call Center / Coordinación programe la nueva fecha."
+        }), 400
+
     observacion = datos.get('observacion_tecnico')
     onu = datos.get('modelo_onu')
     router = datos.get('modelo_router')
@@ -671,38 +677,56 @@ def finalizar_visita(id_visita):
                 c_val, c_clean
             ))
 
-        # 2. Registrar materiales e inventario si existen
+        # 2. Registrar materiales e inventario si existen (de forma idempotente)
+        materiales_agrupados = {}
         if materiales_ids and cantidades:
+            for i in range(len(materiales_ids)):
+                try:
+                    id_m = int(materiales_ids[i])
+                    c_m = int(cantidades[i])
+                    if id_m > 0 and c_m > 0:
+                        materiales_agrupados[id_m] = materiales_agrupados.get(id_m, 0) + c_m
+                except (ValueError, TypeError):
+                    continue
+
+        # Si la visita ya tenía materiales previamente (ej. reintento o doble clic),
+        # revertimos el descuento previo en el inventario del vehículo antes de re-aplicar
+        cursor.execute("SELECT id_material, cantidad_usada FROM visitas_materiales WHERE id_visita = %s", (id_visita,))
+        materiales_previos = cursor.fetchall()
+        if materiales_previos:
+            if placa_vehiculo and placa_vehiculo != 'S/P':
+                for mp in materiales_previos:
+                    cursor.execute("""
+                        UPDATE inventario_tecnicos 
+                        SET cantidad_disponible = cantidad_disponible + %s 
+                        WHERE placa_vehiculo = %s AND id_material = %s
+                    """, (mp['cantidad_usada'], placa_vehiculo, mp['id_material']))
+            cursor.execute("DELETE FROM visitas_materiales WHERE id_visita = %s", (id_visita,))
+
+        # Registrar los materiales consolidados
+        if materiales_agrupados:
             query_materiales = """
                 INSERT INTO visitas_materiales (id_visita, id_material, cantidad_usada)
                 VALUES (%s, %s, %s)
             """
-            
             query_update_custodia = """
                 UPDATE inventario_tecnicos 
                 SET cantidad_disponible = cantidad_disponible - %s 
                 WHERE placa_vehiculo = %s AND id_material = %s
             """
-            
-            for i in range(len(materiales_ids)):
-                id_mat = materiales_ids[i]
-                cant = cantidades[i]
-                
-                # Solo guardamos si seleccionó un material y puso una cantidad mayor a cero
-                if id_mat and cant and int(cant) > 0:
-                    cursor.execute(query_materiales, (id_visita, int(id_mat), int(cant)))
-                    
-                    if placa_vehiculo:
-                        # Asegurar que exista el registro en inventario_tecnicos (por si no estaba inicializado)
-                        cursor.execute("""
-                            INSERT IGNORE INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible)
-                            VALUES (%s, %s, 0)
-                        """, (placa_vehiculo, int(id_mat)))
-                        
-                        # Descontar del inventario del vehículo
-                        cursor.execute(query_update_custodia, (int(cant), placa_vehiculo, int(id_mat)))
+            for id_mat, cant in materiales_agrupados.items():
+                cursor.execute(query_materiales, (id_visita, int(id_mat), int(cant)))
+                if placa_vehiculo and placa_vehiculo != 'S/P':
+                    cursor.execute("""
+                        INSERT IGNORE INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible)
+                        VALUES (%s, %s, 0)
+                    """, (placa_vehiculo, int(id_mat)))
+                    cursor.execute(query_update_custodia, (int(cant), placa_vehiculo, int(id_mat)))
                         
         # 3. Registrar equipos retirados si hubo cambio o reemplazo
+        # Limpiar registros previos de equipos retirados en vehículo para esta visita para evitar duplicados en reintentos
+        cursor.execute("DELETE FROM equipos_retirados_visitas WHERE id_visita = %s AND estado_custodia = 'EN_VEHICULO'", (id_visita,))
+
         equipos_retirados_data = datos.get('equipos_retirados', [])
         if not equipos_retirados_data:
             if datos.get('hubo_cambio_onu') and (datos.get('sn_retirado_onu') or datos.get('motivo_retiro_onu')):
@@ -846,19 +870,26 @@ def cerrar_visita_proceso(id_visita):
         """
         cursor.execute(query_visita, (estado_final, observacion, id_visita))
         
-        # B. Guardamos los materiales dinámicamente uno por uno si existen
+        # B. Guardamos los materiales dinámicamente uno por uno si existen (idempotente)
+        materiales_agrupados = {}
         if materiales_ids and cantidades:
+            for i in range(len(materiales_ids)):
+                try:
+                    id_m = int(materiales_ids[i])
+                    c_m = int(cantidades[i])
+                    if id_m > 0 and c_m > 0:
+                        materiales_agrupados[id_m] = materiales_agrupados.get(id_m, 0) + c_m
+                except (ValueError, TypeError):
+                    continue
+
+        cursor.execute("DELETE FROM visitas_materiales WHERE id_visita = %s", (id_visita,))
+        if materiales_agrupados:
             query_materiales = """
                 INSERT INTO visitas_materiales (id_visita, id_material, cantidad_usada)
                 VALUES (%s, %s, %s)
             """
-            for i in range(len(materiales_ids)):
-                id_mat = materiales_ids[i]
-                cant = cantidades[i]
-                
-                # Solo guardamos si seleccionó un material y puso una cantidad válida mayor a cero
-                if id_mat and cant and int(cant) > 0:
-                    cursor.execute(query_materiales, (id_visita, int(id_mat), int(cant)))
+            for id_mat, cant in materiales_agrupados.items():
+                cursor.execute(query_materiales, (id_visita, int(id_mat), int(cant)))
 
         # Actualizar estado global del técnico
         tecnico_nombre = session.get('user_name')

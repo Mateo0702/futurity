@@ -15,8 +15,9 @@ const LISTA_HORARIOS_TURNO = [
   "8AM - 8PM"
 ];
 
-function ReportesTab({ token, initialSubTab, initialFecha }) {
+function ReportesTab({ token, user, initialSubTab, initialFecha }) {
 
+  const userRole = user?.rol || user?.role || localStorage.getItem('user_role') || '';
   const Chart = window.Chart;
   const getTodayStr = (d = new Date()) => {
     const year = d.getFullYear();
@@ -26,11 +27,17 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
   };
 
   // Report Sub-tabs: 'calidad', 'actividades', 'dia-siguiente', 'cuadro-mando'
-  const [reportSubTab, setReportSubTab] = useState(initialSubTab || 'calidad');
+  const [reportSubTab, setReportSubTab] = useState(() => {
+    if (userRole === 'AUDITOR' && initialSubTab === 'cuadro-mando') return 'calidad';
+    return initialSubTab || 'calidad';
+  });
 
   // Filters
   const [fecha, setFecha] = useState(initialFecha || getTodayStr());
   const [tipoServicio, setTipoServicio] = useState('0'); // 0 = Soporte, 1 = Instalaciones
+  const [tecnicoFiltro, setTecnicoFiltro] = useState('TODOS');
+  const [todasSoluciones, setTodasSoluciones] = useState('1'); // '1' = Todas (efectivas, parciales, FO), '0' = Solo efectivas
+  const [tecnicosList, setTecnicosList] = useState([]);
   const [calidadViewMode, setCalidadViewMode] = useState(localStorage.getItem('calidad_view_mode') || 'table'); // 'table' or 'cards'
 
   // Photo modal zoom
@@ -66,6 +73,24 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
   const chartAgenteInstance = useRef(null);
   const chartTipoInstance = useRef(null);
 
+  // Cargar lista de técnicos para selector
+  useEffect(() => {
+    const fetchTecnicos = async () => {
+      try {
+        const res = await fetch('/api/v2/tecnicos', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          setTecnicosList(data.tecnicos || []);
+        }
+      } catch (e) {
+        console.error("Error al cargar tecnicos en reportes:", e);
+      }
+    };
+    if (token) fetchTecnicos();
+  }, [token]);
+
   // Update browser URL state without reloading
   useEffect(() => {
     const url = new URL(window.location);
@@ -77,13 +102,19 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
 
   useEffect(() => {
     loadReportData();
-  }, [reportSubTab, fecha, tipoServicio, agenteA, agenteB, agenteC]);
+  }, [reportSubTab, fecha, tipoServicio, tecnicoFiltro, todasSoluciones, agenteA, agenteB, agenteC]);
 
   const loadReportData = async () => {
     setLoading(true);
     try {
       if (reportSubTab === 'calidad') {
-        const res = await fetch(`/api/admin/reporte_calidad/preview?fecha=${fecha}&es_instalacion=${tipoServicio}`, {
+        const queryParams = new URLSearchParams({
+          fecha: fecha,
+          es_instalacion: tipoServicio,
+          tecnico: tecnicoFiltro,
+          todas_soluciones: todasSoluciones
+        });
+        const res = await fetch(`/api/admin/reporte_calidad/preview?${queryParams.toString()}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();
@@ -226,7 +257,13 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
       let filename = `Reporte_${reportSubTab}_${fecha}.xlsx`;
 
       if (reportSubTab === 'calidad') {
-        endpoint = `/api/admin/reporte_calidad/excel?fecha=${fecha}&es_instalacion=${tipoServicio}`;
+        const queryParams = new URLSearchParams({
+          fecha: fecha,
+          es_instalacion: tipoServicio,
+          tecnico: tecnicoFiltro,
+          todas_soluciones: todasSoluciones
+        });
+        endpoint = `/api/admin/reporte_calidad/excel?${queryParams.toString()}`;
         filename = `Reporte_Calidad_${fecha}.xlsx`;
       } else if (reportSubTab === 'actividades') {
         endpoint = `/api/admin/reporte_actividades/excel?fecha=${fecha}&es_instalacion=${tipoServicio}`;
@@ -319,6 +356,48 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
     }
   };
 
+  const getSolucionBadge = (sol) => {
+    const s = (sol || '').toUpperCase();
+    if (s.includes('PARCIAL')) {
+      return {
+        bg: 'rgba(249, 115, 22, 0.12)',
+        color: '#ea580c',
+        border: 'rgba(249, 115, 22, 0.3)',
+        borderCard: '#f97316',
+        icon: 'fa-triangle-exclamation',
+        label: 'Solución Parcial'
+      };
+    }
+    if (s.includes('CAMBIO DE FO') || s.includes('CAMBIO FO') || s.includes('FIBRA')) {
+      return {
+        bg: 'rgba(147, 51, 234, 0.12)',
+        color: '#9333ea',
+        border: 'rgba(147, 51, 234, 0.3)',
+        borderCard: '#a855f7',
+        icon: 'fa-bolt',
+        label: 'Cambio de FO'
+      };
+    }
+    if (s.includes('SATURACIÓN') || s.includes('SATURACION') || s.includes('SIN RESPUESTA') || s.includes('NO SE PUEDE')) {
+      return {
+        bg: 'rgba(239, 68, 68, 0.12)',
+        color: '#dc2626',
+        border: 'rgba(239, 68, 68, 0.3)',
+        borderCard: '#ef4444',
+        icon: 'fa-ban',
+        label: 'No Realizada / Pendiente'
+      };
+    }
+    return {
+      bg: 'rgba(22, 163, 74, 0.12)',
+      color: '#16a34a',
+      border: 'rgba(22, 163, 74, 0.3)',
+      borderCard: 'var(--primary)',
+      icon: 'fa-circle-check',
+      label: 'Efectiva'
+    };
+  };
+
   return (
     <div id="tab-reportes" className="tab-content active" style={{ display: 'block', padding: '25px', overflowY: 'auto', flexGrow: 1 }}>
       
@@ -378,18 +457,20 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
           <i className="fa-solid fa-calendar-day"></i> Visitas Día Siguiente
         </button>
 
-        <button
-          type="button"
-          onClick={() => setReportSubTab('cuadro-mando')}
-          style={{
-            background: 'none', border: 'none', padding: '10px 18px', fontWeight: 800, fontSize: '0.95rem',
-            color: reportSubTab === 'cuadro-mando' ? '#1f497d' : 'var(--sidebar-text)',
-            borderBottom: reportSubTab === 'cuadro-mando' ? '3px solid #1f497d' : 'none',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'
-          }}
-        >
-          <i className="fa-solid fa-gauge-high"></i> Reporte General
-        </button>
+        {userRole !== 'AUDITOR' && (
+          <button
+            type="button"
+            onClick={() => setReportSubTab('cuadro-mando')}
+            style={{
+              background: 'none', border: 'none', padding: '10px 18px', fontWeight: 800, fontSize: '0.95rem',
+              color: reportSubTab === 'cuadro-mando' ? '#1f497d' : 'var(--sidebar-text)',
+              borderBottom: reportSubTab === 'cuadro-mando' ? '3px solid #1f497d' : 'none',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'
+            }}
+          >
+            <i className="fa-solid fa-gauge-high"></i> Reporte General
+          </button>
+        )}
       </div>
 
       {/* Filtros de Fecha y Acciones */}
@@ -408,7 +489,7 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
           </div>
 
           {(reportSubTab === 'calidad' || reportSubTab === 'actividades') && (
-            <div style={{ flex: 1, minWidth: '200px' }}>
+            <div style={{ flex: 1, minWidth: '180px' }}>
               <label style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.82rem', marginBottom: '6px', display: 'block', textTransform: 'uppercase' }}>
                 Tipo de Servicio:
               </label>
@@ -421,6 +502,40 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
                 <option value="1">Instalaciones</option>
               </select>
             </div>
+          )}
+
+          {reportSubTab === 'calidad' && (
+            <>
+              <div style={{ flex: 1, minWidth: '200px' }}>
+                <label style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.82rem', marginBottom: '6px', display: 'block', textTransform: 'uppercase' }}>
+                  <i className="fa-solid fa-user-gear"></i> Técnico:
+                </label>
+                <select
+                  value={tecnicoFiltro}
+                  onChange={(e) => setTecnicoFiltro(e.target.value)}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 700, height: '44px' }}
+                >
+                  <option value="TODOS">Todos los Técnicos</option>
+                  {tecnicosList.map(t => (
+                    <option key={t.id_tecnico} value={t.nombre}>{t.nombre}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ flex: 1, minWidth: '220px' }}>
+                <label style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.82rem', marginBottom: '6px', display: 'block', textTransform: 'uppercase' }}>
+                  <i className="fa-solid fa-filter"></i> Soluciones:
+                </label>
+                <select
+                  value={todasSoluciones}
+                  onChange={(e) => setTodasSoluciones(e.target.value)}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 700, height: '44px' }}
+                >
+                  <option value="1">Todas (Efectivas, Parciales, FO)</option>
+                  <option value="0">Solo Visitas Efectivas</option>
+                </select>
+              </div>
+            </>
           )}
 
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -666,76 +781,99 @@ function ReportesTab({ token, initialSubTab, initialFecha }) {
                   /* Cards View */
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px', maxHeight: '580px', overflowY: 'auto', paddingRight: '4px' }}>
                     {dataCalidad.length > 0 ? (
-                      dataCalidad.map((v, idx) => (
-                        <div key={idx} style={{ background: 'var(--profile-bg)', borderRadius: '16px', border: '1px solid var(--border-color)', borderLeft: '5px solid var(--primary)', padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-                            <div>
-                              <span style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 800, textTransform: 'uppercase' }}>Contrato #{v.contrato || '-'}</span>
-                              <h4 style={{ margin: '4px 0 0 0', fontSize: '1.2rem', color: 'var(--text-main)', fontWeight: 850 }}>{v.cliente}</h4>
-                              <div style={{ fontSize: '0.85rem', color: 'var(--sidebar-text)', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                                <span>📞 {v.telefonos}</span>
-                                <span>|</span>
-                                <span>📍 Sector: {v.sector}</span>
-                                <span>|</span>
-                                <span>🆔 VT-{v.id_visita}</span>
+                      dataCalidad.map((v, idx) => {
+                        const solBadge = getSolucionBadge(v.solucion_tecnico);
+                        const extraPhotos = [v.foto_extra_1, v.foto_extra_2, v.foto_extra_3, v.foto_extra_4].filter(Boolean);
+
+                        return (
+                          <div key={idx} style={{ background: 'var(--profile-bg)', borderRadius: '16px', border: '1px solid var(--border-color)', borderLeft: `5px solid ${solBadge.borderCard}`, padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                              <div>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 800, textTransform: 'uppercase' }}>Contrato #{v.contrato || '-'}</span>
+                                <h4 style={{ margin: '4px 0 0 0', fontSize: '1.2rem', color: 'var(--text-main)', fontWeight: 850 }}>{v.cliente}</h4>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--sidebar-text)', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                                  <span>📞 {v.telefonos}</span>
+                                  <span>|</span>
+                                  <span>📍 Sector: {v.sector}</span>
+                                  <span>|</span>
+                                  <span>🆔 VT-{v.id_visita}</span>
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <span style={{ background: '#e0f2fe', color: '#0369a1', fontSize: '0.75rem', fontWeight: 800, padding: '4px 10px', borderRadius: '6px', textTransform: 'uppercase', display: 'inline-block', marginBottom: '4px' }}>{v.servicio}</span>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)' }}>⏰ Cierre: {fmtDt(v.hora_fin_visita)}</div>
                               </div>
                             </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <span style={{ background: '#e0f2fe', color: '#0369a1', fontSize: '0.75rem', fontWeight: 800, padding: '4px 10px', borderRadius: '6px', textTransform: 'uppercase', display: 'inline-block', marginBottom: '4px' }}>{v.servicio}</span>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)' }}>⏰ Cierre: {fmtDt(v.hora_fin_visita)}</div>
-                            </div>
-                          </div>
 
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '20px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem', borderRight: '1px solid var(--border-color)', paddingRight: '15px' }}>
-                              <div><strong>👥 Técnico(s):</strong> <span style={{ color: '#4f46e5', fontWeight: 700 }}>{v.tecnico_principal}{v.tecnico_apoyo ? ` / ${v.tecnico_apoyo}` : ''}</span></div>
-                              <div><strong>🛠️ Solución Aplicada:</strong> <span style={{ color: '#16a34a', fontWeight: 700 }}>{v.solucion_tecnico}</span></div>
-                              <div><strong>📝 Observación Técnico:</strong> <span style={{ color: 'var(--sidebar-text)', fontStyle: 'italic' }}>{v.observacion_tecnico || 'Sin observaciones.'}</span></div>
-                              <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '10px', marginTop: '6px', fontSize: '0.8rem' }}>
-                                <div><strong>ONU Instalada:</strong> {v.modelo_onu || 'N/A'}</div>
-                                <div><strong>Router Instalado:</strong> {v.modelo_router || 'N/A'}</div>
-                                {v.coordenadas_tecnico && (
-                                  <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid var(--border-color)' }}>
-                                    <strong>📍 GPS Cierre:</strong> {v.coordenadas_tecnico}
-                                    <a href={`https://maps.google.com/?q=${v.coordenadas_tecnico}`} target="_blank" rel="noreferrer" style={{ marginLeft: '8px', color: '#0284c7', fontWeight: 800, textDecoration: 'none' }}>Ver Mapa</a>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '20px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem', borderRight: '1px solid var(--border-color)', paddingRight: '15px' }}>
+                                <div><strong>👥 Técnico(s):</strong> <span style={{ color: '#4f46e5', fontWeight: 700 }}>{v.tecnico_principal}{v.tecnico_apoyo ? ` / ${v.tecnico_apoyo}` : ''}</span></div>
+                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                                  <strong>🛠️ Solución Aplicada:</strong>
+                                  <span style={{ color: solBadge.color, fontWeight: 700 }}>{v.solucion_tecnico}</span>
+                                  <span style={{ background: solBadge.bg, color: solBadge.color, border: `1px solid ${solBadge.border}`, fontSize: '0.72rem', fontWeight: 800, padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <i className={`fa-solid ${solBadge.icon}`}></i> {solBadge.label}
+                                  </span>
+                                </div>
+                                <div><strong>📝 Observación Técnico:</strong> <span style={{ color: 'var(--sidebar-text)', fontStyle: 'italic' }}>{v.observacion_tecnico || 'Sin observaciones.'}</span></div>
+                                <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '10px', marginTop: '6px', fontSize: '0.8rem' }}>
+                                  <div><strong>ONU Instalada:</strong> {v.modelo_onu || 'N/A'}</div>
+                                  <div><strong>Router Instalado:</strong> {v.modelo_router || 'N/A'}</div>
+                                  {v.coordenadas_tecnico && (
+                                    <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid var(--border-color)' }}>
+                                      <strong>📍 GPS Cierre:</strong> {v.coordenadas_tecnico}
+                                      <a href={`https://maps.google.com/?q=${v.coordenadas_tecnico}`} target="_blank" rel="noreferrer" style={{ marginLeft: '8px', color: '#0284c7', fontWeight: 800, textDecoration: 'none' }}>Ver Mapa</a>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Evidencias Visuales */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <strong style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)', textTransform: 'uppercase' }}>Evidencias de Cierre</strong>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                                  <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Equipos:</div>
+                                    {v.foto_equipos ? (
+                                      <img src={`/static/uploads/${v.foto_equipos}`} alt="Equipos" style={{ maxHeight: '70px', maxWidth: '100%', borderRadius: '4px', cursor: 'pointer' }} onClick={() => setPreviewPhoto(`/static/uploads/${v.foto_equipos}`)} />
+                                    ) : <span style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)' }}>Sin foto</span>}
                                   </div>
-                                )}
-                              </div>
-                            </div>
 
-                            {/* Evidencias Visuales */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              <strong style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)', textTransform: 'uppercase' }}>Evidencias de Cierre</strong>
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-                                <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
-                                  <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Equipos:</div>
-                                  {v.foto_equipos ? (
-                                    <img src={`/static/uploads/${v.foto_equipos}`} alt="Equipos" style={{ maxHeight: '70px', maxWidth: '100%', borderRadius: '4px', cursor: 'pointer' }} onClick={() => setPreviewPhoto(`/static/uploads/${v.foto_equipos}`)} />
-                                  ) : <span style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)' }}>Sin foto</span>}
-                                </div>
+                                  <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Firma:</div>
+                                    {v.firma_cliente ? (
+                                      v.firma_cliente.includes('SIN_FIRMA') ? (
+                                        <span style={{ fontSize: '0.7rem', color: '#b45309', fontWeight: 700 }}>⚠️ Sin Firma</span>
+                                      ) : (
+                                        <img src={`/static/uploads/${v.firma_cliente}`} alt="Firma" style={{ maxHeight: '65px', maxWidth: '100%', borderRadius: '4px', cursor: 'pointer' }} onClick={() => setPreviewPhoto(`/static/uploads/${v.firma_cliente}`)} />
+                                      )
+                                    ) : <span style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)' }}>Sin firma</span>}
+                                  </div>
 
-                                <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
-                                  <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Firma:</div>
-                                  {v.firma_cliente ? (
-                                    v.firma_cliente.includes('SIN_FIRMA') ? (
-                                      <span style={{ fontSize: '0.7rem', color: '#b45309', fontWeight: 700 }}>⚠️ Sin Firma</span>
-                                    ) : (
-                                      <img src={`/static/uploads/${v.firma_cliente}`} alt="Firma" style={{ maxHeight: '65px', maxWidth: '100%', borderRadius: '4px', cursor: 'pointer' }} onClick={() => setPreviewPhoto(`/static/uploads/${v.firma_cliente}`)} />
-                                    )
-                                  ) : <span style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)' }}>Sin firma</span>}
-                                </div>
-
-                                <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
-                                  <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>Extras:</div>
-                                  {v.foto_extra_1 ? (
-                                    <img src={`/static/uploads/${v.foto_extra_1}`} alt="Extra" style={{ maxHeight: '70px', maxWidth: '100%', borderRadius: '4px', cursor: 'pointer' }} onClick={() => setPreviewPhoto(`/static/uploads/${v.foto_extra_1}`)} />
-                                  ) : <span style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)' }}>0 fotos</span>}
+                                  <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '4px' }}>
+                                      Extras ({extraPhotos.length}):
+                                    </div>
+                                    {extraPhotos.length > 0 ? (
+                                      <div style={{ display: 'flex', justifyContent: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                                        {extraPhotos.map((f, fIdx) => (
+                                          <img
+                                            key={fIdx}
+                                            src={`/static/uploads/${f}`}
+                                            alt={`Extra ${fIdx + 1}`}
+                                            style={{ maxHeight: '65px', maxWidth: extraPhotos.length > 1 ? '45%' : '100%', borderRadius: '4px', cursor: 'pointer', objectFit: 'cover' }}
+                                            onClick={() => setPreviewPhoto(`/static/uploads/${f}`)}
+                                          />
+                                        ))}
+                                      </div>
+                                    ) : <span style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)' }}>0 fotos</span>}
+                                  </div>
                                 </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     ) : (
                       <div style={{ textAlign: 'center', padding: '50px', color: 'var(--sidebar-text)', fontWeight: 600 }}>No hay visitas registradas para esta fecha.</div>
                     )}

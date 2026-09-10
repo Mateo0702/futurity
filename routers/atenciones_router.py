@@ -861,17 +861,27 @@ def diagnostico_smartolt(sn):
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'TECNICO', 'CALIDAD', 'ATC']:
+    if user_role not in ['ADMIN', 'ASESOR', 'TECNICO', 'CALIDAD', 'ATC', 'AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para consultar diagnóstico"}), 403
         
     import urllib.request
     import ssl
     import json
     import concurrent.futures
+    from datetime import datetime
+    
+    clean_sn = str(sn).strip().upper()
+    if not clean_sn or clean_sn in ['NONE', 'S/N', 'NULL', 'UNDEFINED']:
+        return jsonify({"status": "error", "message": "Número de serie no válido para consultar en la OLT"}), 400
     
     SMARTOLT_CREDENTIALS = [
-        {"domain": "diyer.smartolt.com", "api_key": "e2b23976ae0649a1a1d767915fd90002"},
-        {"domain": "servicablegz.smartolt.com", "api_key": "ae287af051d349a68db0aec4b11cc933"}
+        {"name": "Orquídeas", "domain": "servicableor.smartolt.com", "api_key": "9f3398a3965f4ea4ab7b64404f3df1b7"},
+        {"name": "Chaullabamba", "domain": "servicablech.smartolt.com", "api_key": "630deab0acad46a4857c9f4310f337f2"},
+        {"name": "Azogues", "domain": "konnek.smartolt.com", "api_key": "5a40919a2243458d96e043dd34ea8a20"},
+        {"name": "Valle", "domain": "futurityvalle.smartolt.com", "api_key": "29e847d510f04f37bdcd5250786f7cb8"},
+        {"name": "Santa Ana", "domain": "futurity-santana.smartolt.com", "api_key": "cf084dfa389c4c589b49528ba7f41c9e"},
+        {"name": "Control Sur", "domain": "diyer.smartolt.com", "api_key": "e2b23976ae0649a1a1d767915fd90002"},
+        {"name": "Servicable GZ", "domain": "servicablegz.smartolt.com", "api_key": "ae287af051d349a68db0aec4b11cc933"}
     ]
     
     def check_single_smartolt(cred):
@@ -882,7 +892,7 @@ def diagnostico_smartolt(sn):
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         
-        url = f"https://{dom}/api/onu/get_onu_details/{sn}"
+        url = f"https://{dom}/api/onu/get_onu_details/{clean_sn}"
         req = urllib.request.Request(url)
         req.add_header("X-Token", api_key)
         req.add_header("User-Agent", "FuturityAtlas/1.0")
@@ -906,13 +916,12 @@ def diagnostico_smartolt(sn):
             res = future.result()
             if res is not None:
                 found_result = res
-                # Cancela el resto de hilos de ser posible
                 break
                 
     if not found_result:
         return jsonify({
             "status": "error", 
-            "message": f"El equipo con serie {sn} no se encuentra registrado en ninguna central de SmartOLT activa."
+            "message": f"El equipo con serie {clean_sn} no se encuentra registrado en ninguna central de SmartOLT activa."
         }), 404
         
     data = found_result["data"]
@@ -959,20 +968,31 @@ def diagnostico_smartolt(sn):
             print("Error parsing last_status_change:", ex)
             uptime_str = str(last_change)
     
-    # Estructurar diagnóstico
+    raw_status = details.get("status", "Offline")
+    odb = details.get("odb_name") or "N/D"
+    zone = details.get("zone_name") or "N/D"
+    dist = f"{details.get('distance')} m" if details.get('distance') else "N/D"
+    
+    # Estructurar diagnóstico con compatibilidad total
     diagnostico = {
-        "sn": sn,
+        "sn": clean_sn,
         "nombre_equipo": details.get("name", "N/D"),
         "modelo": details.get("onu_type_name", "N/D"),
-        "estado": details.get("status", "Offline"),
+        "estado": raw_status,
+        "status": str(raw_status).upper(),
         "uptime": uptime_str,
-        "distancia": f"{details.get('distance')} m" if details.get('distance') else "N/D",
+        "distancia": dist,
         "ip_wan": details.get("address") or "N/D",
         "potencia_rx": rx_power,
+        "rx_power": rx_power,
         "potencia_tx": tx_power,
+        "tx_power": tx_power,
         "vlan": details.get("vlan") or "N/D",
         "pon_port": pon_port,
-        "olt_name": olt_name
+        "olt_name": olt_name,
+        "caja_nap": odb,
+        "zona_olt": zone,
+        "detalles": f"Central: {olt_name} | PON: {pon_port} | NAP: {odb} | Distancia: {dist}"
     }
     return jsonify({"status": "success", "diagnostico": diagnostico})
 

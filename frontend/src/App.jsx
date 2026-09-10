@@ -219,7 +219,11 @@ function App() {
 
   // Handle Technician Panel directly without demanding admin login
   if (activeTab === 'tecnico-panel' && token && user) {
-    return <TecnicoPanel token={token} user={user} tecnicoNombreParam={tecnicoNombre} onLogout={handleLogout} />;
+    return (
+      <div className="tecnico-panel-wrapper">
+        <TecnicoPanel token={token} user={user} tecnicoNombreParam={tecnicoNombre} onLogout={handleLogout} />
+      </div>
+    );
   }
 
   const handleNavigateToRegistroVisitas = (data) => {

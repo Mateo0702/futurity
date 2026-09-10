@@ -471,7 +471,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                 )}
                 {clientPlanInfo.ip_nodo && (
                   <span style={{ color: '#0284c7', fontWeight: 600 }}>
-                    🏢 <strong>Nodo:</strong> {clientPlanInfo.nodo_nombre || clientPlanInfo.ip_nodo}
+                    🏢 <strong>IP Nodo:</strong> {clientPlanInfo.ip_nodo}{clientPlanInfo.nodo_nombre && clientPlanInfo.nodo_nombre !== clientPlanInfo.ip_nodo ? ` (${clientPlanInfo.nodo_nombre})` : ''}
                   </span>
                 )}
                 {clientPlanInfo.modelo_ont && (
@@ -729,6 +729,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                   <option value="CAÍDA GENERAL / OLT"></option>
                   <option value="COBRO CON TARJETA"></option>
                   <option value="PASO A RETENCION"></option>
+                  <option value="PLAN FIDELIZACIÓN"></option>
                 </datalist>
               </div>
 
