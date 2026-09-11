@@ -1,0 +1,29 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Futurity Tracker</title><link rel="stylesheet" href="vendor/leaflet.css"><link rel="stylesheet" href="styles.css">
+<script src="vendor/leaflet.js" defer></script><script src="app.js" defer></script></head><body>
+<header><img class="brand" src="logo_futurity.png" alt="Futurity"><strong>TRACKER <small>Pruebas independientes</small></strong><span id="connection" role="status">Inicie sesión</span><button id="logout" hidden>Cerrar sesión</button></header>
+<section id="loginPanel"><h1>Tu equipo, en el mapa.</h1><p>Dispositivos, técnicos y recorridos en un entorno de pruebas independiente.</p><p>Ingrese la credencial de administración del servidor. La sesión se conserva solo mientras esta página permanezca abierta.</p>
+<form id="loginForm"><label>Credencial de administración<input id="adminToken" type="password" required autocomplete="off"></label><button>Entrar</button></form><p id="loginError" role="alert"></p></section>
+<main id="workspace" hidden><aside>
+<section><h2>Equipos y técnicos</h2>
+<div class="metrics" aria-live="polite"><div><b id="countTotal">0</b><span>Equipos</span></div><div><b id="countOnline">0</b><span>Conectados</span></div><div><b id="countOffline">0</b><span>Sin contacto</span></div></div>
+<label>Buscar equipo, técnico o placa<input id="search" type="search" placeholder="Nombre, ID o placa"></label>
+<label>Área<select id="areaFilter"><option value="">Todas las áreas</option></select></label>
+<button id="refresh">Actualizar</button><div id="deviceList"></div></section>
+<section id="details" hidden><h2 id="deviceTitle"></h2><p id="deviceId"></p><p id="alerts" role="alert"></p><dl id="telemetry"></dl>
+<details id="profileDetails"><summary>Asignar técnico y vehículo</summary>
+<form id="profileForm">
+<label>Nombre del equipo<input id="profileName" maxlength="100" placeholder="Ej.: PMT de soporte 01"></label>
+<label>Técnico responsable<input id="profileTechnician" maxlength="100"></label>
+<label>Área<input id="profileArea" maxlength="50" placeholder="Soporte, instalaciones…"></label>
+<label>Placa del vehículo<input id="profilePlate" maxlength="30"></label>
+<label>ID del técnico en Atlas (opcional)<input id="profileAtlasId" type="number" min="1" step="1"></label>
+<p>El ID de Atlas se guarda solo como referencia para una integración futura.</p>
+<button id="profileSave">Guardar asignación</button><p id="profileStatus" role="status"></p>
+</form></details>
+<label>Recorrido<select id="period"><option value="24">Últimas 24 horas</option><option value="today">Hoy (hora del navegador)</option><option value="all">Todo el historial</option></select></label>
+<button id="loadHistory">Cargar recorrido</button><button id="export" disabled>Exportar CSV</button><p id="historyStatus" role="status"></p>
+</section><details><summary>Registrar o renovar credencial de un equipo</summary><p>Copie el ID que muestra la app. Renovar invalida su credencial anterior.</p>
+<form id="credentialForm"><label>ID del dispositivo<input id="credentialDevice" required pattern="[A-Za-z0-9_.:-]+" maxlength="100"></label><button>Generar credencial</button></form>
+<textarea id="generatedToken" readonly hidden aria-label="Nueva credencial del dispositivo"></textarea><p id="credentialStatus" role="status"></p></details>
+</aside><section id="mapArea"><div id="map"></div><div id="playback" hidden><button id="play">Reproducir</button><input id="slider" type="range" min="0" max="0" value="0" aria-label="Posición del recorrido"><select id="speed" aria-label="Velocidad de reproducción"><option value="60">60×</option><option value="300">300×</option><option value="1">Tiempo real</option></select><span id="playTime"></span></div></section></main></body></html>

@@ -1,0 +1,41 @@
+{
+  "snapshot_utc": "2026-09-10T21:12:40.799499+00:00",
+  "integrity_check": "ok",
+  "counts": {
+    "devices": 3,
+    "device_credentials": 3,
+    "device_profiles": 0,
+    "location_records": 57,
+    "status_events": 144
+  },
+  "files_sha256": {
+    "arrancar.ps1": "dd5f8b5988ba3a9b35bfcac932189a7fc8782f14f5e44c023936622b35320c30",
+    "backend/.env": "f456ce31f5c7a3e1640686ec8dfdcbd33ee37aeb1311c10e07ceb95f8ccbaf2b",
+    "backend/config.py": "4828cf051598516c51ab506bb527a94437eb08c9dc7230812add3ff2d60bd845",
+    "backend/crud.py": "62c9bcaccb5920540531f0d71ed3b59e02bea3b8b9e6ed8a0682626d9e31478e",
+    "backend/database.py": "2bf9c8dea4fb63b7e3ec6b04e763609e73695a6dc21b097fc89082716b5f1ddd",
+    "backend/futurity_tracker.db": "100e7529ab6acd69035d742f9c73610746bb71a12cb1e4f34da494c64daa3762",
+    "backend/main.py": "327c633f5fc6fa6a85c2ad57324db1a988ee706e826c335424628c2e26e6b4c3",
+    "backend/migrations.py": "6c9033f2fb065513daa6dc1d845e3080e9c3eccf0b7eab2a512d7ab2dbba8f60",
+    "backend/models.py": "aa777c1580fed1f35b5a758409cdcfc8c15631a0ca95a47d348bb779c8585b77",
+    "backend/requirements.txt": "b4fe00db176104f3e35a0897279d1ee6f9ac4cf2ae663cdb89b76774f59112c4",
+    "backend/schemas.py": "681ec9bc353ff62a98ba90692591845b8771438d2ad2eb226edf4d1412d28271",
+    "backend/setup.py": "f628206941473094cb8a4b1a4dc4ce9e3704ee206b5d18b62154e52be06a34b2",
+    "dashboard/app.js": "51490f98cf7f3a534a268d1f59bfe707365e0dff659206aa1a820bdfa0fa3ed0",
+    "dashboard/index.html": "d6b2f21c07adee65a53d93a461c71405c1ae9c1931068aeb63b86bbb857c4ede",
+    "dashboard/logo_futurity.png": "b3950b1b03e051138361b92486bee4c732883f7fb76aa5fba72a01cd938fb6e9",
+    "dashboard/styles.css": "d75b26111d8e781cfc2719bbf8e9bba3153ab79c2b625fddb89c2718dee34df8",
+    "dashboard/vendor/images/layers-2x.png": "066daca850d8ffbef007af00b06eac0015728dee279c51f3cb6c716df7c42edf",
+    "dashboard/vendor/images/layers.png": "1dbbe9d028e292f36fcba8f8b3a28d5e8932754fc2215b9ac69e4cdecf5107c6",
+    "dashboard/vendor/images/marker-icon-2x.png": "00179c4c1ee830d3a108412ae0d294f55776cfeb085c60129a39aa6fc4ae2528",
+    "dashboard/vendor/images/marker-icon.png": "574c3a5cca85f4114085b6841596d62f00d7c892c7b03f28cbfa301deb1dc437",
+    "dashboard/vendor/images/marker-shadow.png": "264f5c640339f042dd729062cfc04c17f8ea0f29882b538e3848ed8f10edb4da",
+    "dashboard/vendor/leaflet.css": "a7837102824184820dfa198d1ebcd109ff6d0ff9a2672a074b9a1b4d147d04c6",
+    "dashboard/vendor/leaflet.js": "db49d009c841f5ca34a888c96511ae936fd9f5533e90d8b2c4d57596f4e5641a",
+    "dashboard/vendor/LICENSE": "53e8dc25862014e4324741ca18fbe3611e11d42ef69f59f86ea8c5389647d4cb",
+    "instalar.ps1": "ffe1fbdef0809871326c78431ebb658d3bdb41c45671bef9f65aded7078d12c1",
+    "LEEME-PRIMERO.md": "f1e3970a33fd4fb8a38ac2b1c3f95f55a89124fb3910c7634e585f369e2b9a46",
+    "run_server.py": "f47806c9871e722582143c56c7b11c08222df53e8d41a628bf0e5dbeb394eb1f",
+    "verificar_copia.py": "8dc6e834442811e51924f8da62d89a2b17061e69bb70fbd469d456ed9e56d901"
+  }
+}

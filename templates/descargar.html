@@ -267,15 +267,23 @@
             <h2 class="app-title">Futurity <span style="background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900;">Atlas</span></h2>
             <p class="app-subtitle">Aplicación móvil oficial para técnicos de campo. Permite el registro de visitas, gestión de inventario y seguimiento de ubicación en ruta.</p>
 
-            <!-- Download Button -->
+            <!-- Download Button Principal (App Oficial WebView) -->
             <a href="{{ url_for('static', filename='app/futurity_atlas.apk') }}" class="btn-download" download="futurity_atlas.apk">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     <polyline points="7 10 12 15 17 10"></polyline>
                     <line x1="12" y1="15" x2="12" y2="3"></line>
                 </svg>
-                <span>Descargar para Android (.apk)</span>
+                <span>Descargar App Oficial WebView (.apk)</span>
             </a>
+
+            <!-- Opción secundaria para la app de prueba Flutter -->
+            <div style="margin-top: -15px; margin-bottom: 25px;">
+                <a href="{{ url_for('static', filename='app/futurity_atlas_flutter_test.apk') }}" style="color: #38bdf8; font-size: 0.82rem; text-decoration: underline;" download="futurity_atlas_flutter_test.apk">
+                    🧪 Opcional: Probar versión piloto en Flutter nativo (.apk)
+                </a>
+            </div>
+
 
 
 
