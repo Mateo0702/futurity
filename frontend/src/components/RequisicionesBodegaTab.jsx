@@ -27,7 +27,8 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
   // Items para Aprobación
   const [itemsAprobando, setItemsAprobando] = useState([]);
 
-  const authToken = tokenProp || localStorage.getItem('token') || localStorage.getItem('session_token');
+  const authToken = tokenProp || localStorage.getItem('token') || localStorage.getItem('session_token') || '';
+  const token = authToken;
 
   useEffect(() => {
     if (placasProp && placasProp.length > 0) {
@@ -118,7 +119,7 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
         },
         body: JSON.stringify({
           placa_vehiculo: nuevaPlaca,
@@ -154,7 +155,7 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
       codigo_material: it.codigo_material,
       unidad_medida: it.unidad_medida,
       cantidad_solicitada: it.cantidad_solicitada,
-      cantidad_aprobada: it.cantidad_aprobada || it.cantidad_solicitada,
+      cantidad_aprobada: it.cantidad_aprobada !== undefined && it.cantidad_aprobada !== null ? it.cantidad_aprobada : it.cantidad_solicitada,
       stock_bodega: it.stock_bodega
     })));
     setShowAprobarModal(true);
@@ -369,11 +370,19 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
 
                   <td style={{ padding: '14px 16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', maxHeight: '100px', overflowY: 'auto' }}>
-                      {(req.items || []).map((it, idx) => (
-                        <div key={idx} style={{ fontSize: '11.5px', color: 'var(--text-main, #334155)' }}>
-                          • <strong style={{ color: '#0284c7' }}>{it.cantidad_aprobada || it.cantidad_solicitada} {it.unidad_medida}</strong> - {it.nombre_material}
-                        </div>
-                      ))}
+                      {(req.items || []).map((it, idx) => {
+                        const cant = it.cantidad_aprobada !== undefined && it.cantidad_aprobada !== null
+                          ? Number(it.cantidad_aprobada)
+                          : Number(it.cantidad_solicitada || 0);
+                        return (
+                          <div key={idx} style={{ fontSize: '11.5px', color: 'var(--text-main, #334155)' }}>
+                            • <strong style={{ color: cant === 0 ? '#ef4444' : '#0284c7' }}>
+                              {cant} {it.unidad_medida}
+                              {cant === 0 ? ' (No entregado)' : ''}
+                            </strong> - {it.nombre_material}
+                          </div>
+                        );
+                      })}
                     </div>
                   </td>
 
@@ -689,15 +698,20 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
                   </tr>
                 </thead>
                 <tbody>
-                  {(selectedReq.items || []).map((it, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                      <td style={{ padding: '8px', color: '#64748b' }}>{it.codigo_material}</td>
-                      <td style={{ padding: '8px', fontWeight: '600' }}>{it.nombre_material}</td>
-                      <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: '#0284c7' }}>
-                        {it.cantidad_aprobada || it.cantidad_solicitada} {it.unidad_medida}
-                      </td>
-                    </tr>
-                  ))}
+                  {(selectedReq.items || []).map((it, idx) => {
+                    const cant = it.cantidad_aprobada !== undefined && it.cantidad_aprobada !== null 
+                      ? Number(it.cantidad_aprobada) 
+                      : Number(it.cantidad_solicitada || 0);
+                    return (
+                      <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0', background: cant === 0 ? '#fef2f2' : 'transparent' }}>
+                        <td style={{ padding: '8px', color: '#64748b' }}>{it.codigo_material}</td>
+                        <td style={{ padding: '8px', fontWeight: '600' }}>{it.nombre_material}</td>
+                        <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: cant === 0 ? '#ef4444' : '#0284c7' }}>
+                          {cant > 0 ? `${cant} ${it.unidad_medida}` : `0 ${it.unidad_medida} (No entregado)`}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

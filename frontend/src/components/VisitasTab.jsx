@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 
-function VisitasTab({ token, user }) {
+function VisitasTab({ token, user, activeAreaProp }) {
+  const isCalidadUser = (user?.rol === 'CALIDAD' || user?.role === 'CALIDAD');
+
   const getTodayLocal = (d = new Date()) => {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -11,7 +13,10 @@ function VisitasTab({ token, user }) {
   // Main state
   const [fechaFiltro, setFechaFiltro] = useState(getTodayLocal());
   const [buscarCliente, setBuscarCliente] = useState('');
-  const [activeArea, setActiveArea] = useState('SOPORTE');
+  const [activeArea, setActiveArea] = useState(() => {
+    if (isCalidadUser) return 'INSTALACIONES';
+    return activeAreaProp || 'SOPORTE';
+  });
   
   const [loading, setLoading] = useState(false);
   const [visitas, setVisitas] = useState([]);
@@ -20,6 +25,9 @@ function VisitasTab({ token, user }) {
   const [ayerFecha, setAyerFecha] = useState('');
   const [recordatorios, setRecordatorios] = useState([]);
   const [tecnicos, setTecnicos] = useState([]);
+  const [totalSoporteHoy, setTotalSoporteHoy] = useState(0);
+  const [totalInstalacionesHoy, setTotalInstalacionesHoy] = useState(0);
+  const [cuadrillasEnSoporte, setCuadrillasEnSoporte] = useState([]);
   
   // Expanded rows state (ID array)
   const [expandedRows, setExpandedRows] = useState({});
@@ -46,6 +54,21 @@ function VisitasTab({ token, user }) {
   const [formReagendar, setFormReagendar] = useState({}); // { [id]: { fecha: '', prioridad: 'MEDIA', observacion: '' } }
   const [formReasignar, setFormReasignar] = useState({}); // { [id]: { tecnico: '', apoyo: '' } }
   const [formCancelar, setFormCancelar] = useState({}); // { [id]: { motivo: '', estado: 'CANCELADA' } }
+  const [copiedPhoneId, setCopiedPhoneId] = useState(null);
+
+  const handleCopyPhone = (id, phone) => {
+    if (!phone) return;
+    const clean = phone.replace(/[^0-9]/g, '');
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(clean || phone);
+      }
+    } catch (e) {
+      console.warn("Clipboard failed", e);
+    }
+    setCopiedPhoneId(id);
+    setTimeout(() => setCopiedPhoneId(null), 2000);
+  };
 
   const [modalEditar, setModalEditar] = useState({
     isOpen: false,
@@ -97,6 +120,9 @@ function VisitasTab({ token, user }) {
         setCantPendientesAtrasadas(data.cant_pendientes_atrasadas || 0);
         setAyerFecha(data.ayer_fecha || '');
         setRecordatorios(data.recordatorios || []);
+        if (data.total_soporte_hoy !== undefined) setTotalSoporteHoy(data.total_soporte_hoy);
+        if (data.total_instalaciones_hoy !== undefined) setTotalInstalacionesHoy(data.total_instalaciones_hoy);
+        if (data.cuadrillas_en_soporte) setCuadrillasEnSoporte(data.cuadrillas_en_soporte);
       }
     } catch (e) {
       console.error("Error al cargar visitas del día:", e);
@@ -416,7 +442,7 @@ function VisitasTab({ token, user }) {
 
     const placa = visita.placa_vehiculo_principal ? ` (Vehículo: ${visita.placa_vehiculo_principal})` : '';
 
-    const msg = `Estimado/a *${visita.cliente}*,\nLe saludamos de *Futurity Telecomunicaciones*.\n\n` +
+    const msg = `Estimado/a *${visita.cliente}*,\nLe saludamos de *Futurity*.\n\n` +
       `Le informamos que su *${tipoVisita}* se encuentra programada para el día *${visita.fecha_programada}*.\n` +
       `⏰ Horario estimado: *${horarioPref}*\n` +
       `👤 Técnico asignado: *${tecnicoDisplay}*${placa}\n\n` +
@@ -425,6 +451,17 @@ function VisitasTab({ token, user }) {
     const waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`;
     window.open(waUrl, '_blank');
   };
+
+  const isWeekend = (() => {
+    try {
+      const parts = fechaFiltro.split('-').map(Number);
+      const dt = new Date(parts[0], parts[1] - 1, parts[2]);
+      const day = dt.getDay();
+      return day === 0 || day === 6; // Domingo (0) o Sábado (6)
+    } catch (e) {
+      return false;
+    }
+  })();
 
   return (
     <div id="tab-visitas" className="tab-content active" style={{ display: 'block', padding: '25px', overflowY: 'auto', flexGrow: 1 }}>
@@ -444,43 +481,62 @@ function VisitasTab({ token, user }) {
         {/* Controles de Filtros & Área */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           
-          {/* Selector de Área (Soporte vs Instalaciones) */}
-          <div style={{ background: 'var(--profile-bg)', padding: '4px', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex' }}>
-            <button
-              type="button"
-              onClick={() => setActiveArea('SOPORTE')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '8px',
-                border: 'none',
-                fontWeight: 800,
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-                background: activeArea === 'SOPORTE' ? 'var(--primary)' : 'transparent',
-                color: activeArea === 'SOPORTE' ? 'white' : 'var(--sidebar-text)',
-                transition: 'all 0.2s'
-              }}
-            >
-              🛠️ Soporte
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveArea('INSTALACIONES')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '8px',
-                border: 'none',
-                fontWeight: 800,
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-                background: activeArea === 'INSTALACIONES' ? '#6366f1' : 'transparent',
-                color: activeArea === 'INSTALACIONES' ? 'white' : 'var(--sidebar-text)',
-                transition: 'all 0.2s'
-              }}
-            >
-              📡 Instalaciones
-            </button>
-          </div>
+          {/* Selector de Área (Soporte vs Instalaciones vs Todas - Oculto para CALIDAD) */}
+          {!isCalidadUser && (
+            <div style={{ background: 'var(--profile-bg)', padding: '4px', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', gap: '3px' }}>
+              <button
+                type="button"
+                onClick={() => setActiveArea('SOPORTE')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontWeight: 800,
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  background: activeArea === 'SOPORTE' ? 'var(--primary)' : 'transparent',
+                  color: activeArea === 'SOPORTE' ? 'white' : 'var(--sidebar-text)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                🛠️ Soporte {totalSoporteHoy > 0 ? `(${totalSoporteHoy})` : ''}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveArea('INSTALACIONES')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontWeight: 800,
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  background: activeArea === 'INSTALACIONES' ? '#0284c7' : 'transparent',
+                  color: activeArea === 'INSTALACIONES' ? 'white' : 'var(--sidebar-text)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                ⚡ Instalaciones {totalInstalacionesHoy > 0 ? `(${totalInstalacionesHoy})` : ''}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveArea('TODAS')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontWeight: 800,
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  background: activeArea === 'TODAS' ? 'var(--text-main)' : 'transparent',
+                  color: activeArea === 'TODAS' ? 'var(--card-bg)' : 'var(--sidebar-text)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                🌐 Todas
+              </button>
+            </div>
+          )}
 
           {/* Formulario de Búsqueda y Fecha */}
           <form onSubmit={handleSearchSubmit} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -517,6 +573,88 @@ function VisitasTab({ token, user }) {
         </div>
       </div>
 
+      {/* Banner de Guardia de Fin de Semana para Call Center */}
+      {!isCalidadUser && isWeekend && totalInstalacionesHoy > 0 && activeArea === 'SOPORTE' && (
+        <div style={{
+          background: 'linear-gradient(135deg, #1e3a8a 0%, #0284c7 100%)',
+          color: 'white',
+          padding: '16px 22px',
+          borderRadius: '16px',
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px',
+          boxShadow: '0 4px 15px rgba(2, 132, 199, 0.25)',
+          border: '1px solid #38bdf8'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <span style={{ fontSize: '2rem' }}>🛡️</span>
+            <div>
+              <strong style={{ fontSize: '1rem', display: 'block' }}>
+                Guardia de Fin de Semana: {totalInstalacionesHoy} Instalaciones programadas por Caro para hoy
+              </strong>
+              <span style={{ fontSize: '0.84rem', opacity: 0.9 }}>
+                Supervisa el cumplimiento de las cuadrillas de instalación (Eduardo, Oswaldo, Henry, Bryan).
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveArea('INSTALACIONES')}
+            style={{
+              background: '#ffffff',
+              color: '#0284c7',
+              border: 'none',
+              padding: '8px 18px',
+              borderRadius: '10px',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+            }}
+          >
+            Ver Instalaciones ({totalInstalacionesHoy})
+          </button>
+        </div>
+      )}
+
+      {/* Banner de Cuadrillas de Instalación en Apoyo a Soporte */}
+      {cuadrillasEnSoporte.length > 0 && (
+        <div style={{
+          background: 'rgba(245, 158, 11, 0.08)',
+          border: '1px solid rgba(245, 158, 11, 0.3)',
+          borderRadius: '14px',
+          padding: '12px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '10px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.4rem' }}>🤝</span>
+            <div>
+              <strong style={{ color: '#d97706', fontSize: '0.92rem', display: 'block' }}>
+                Cuadrillas de Instalación apoyando en Soporte hoy ({cuadrillasEnSoporte.length} visita{cuadrillasEnSoporte.length > 1 ? 's' : ''}):
+              </strong>
+              <div style={{ color: 'var(--text-main)', fontSize: '0.82rem', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {cuadrillasEnSoporte.map((c, idx) => (
+                  <span key={idx} style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', padding: '2px 8px', borderRadius: '6px' }}>
+                    <strong>{c.tecnico_principal}</strong> → #{c.contrato} ({c.sector}) [{c.estado}]
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#d97706', background: 'rgba(245, 158, 11, 0.15)', padding: '4px 10px', borderRadius: '8px' }}>
+            {isCalidadUser ? 'Tus cuadrillas en soporte' : 'Apoyo activo'}
+          </span>
+        </div>
+      )}
+
       {/* Banner 1: Visitas pendientes atrasadas de ayer */}
       {cantPendientesAtrasadas > 0 && (
         <div style={{ background: 'rgba(239, 68, 68, 0.12)', borderLeft: '5px solid #ef4444', borderRadius: '16px', padding: '18px 24px', marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
@@ -551,10 +689,69 @@ function VisitasTab({ token, user }) {
             {recordatorios.map((rec) => (
               <div key={rec.id_recordatorio} style={{ background: 'var(--card-bg)', padding: '12px 18px', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
-                  <strong style={{ color: 'var(--text-main)', fontSize: '0.9rem' }}>
-                    [{rec.tipo === 'RECORDATORIO_TECNICO' ? `Técnico: ${rec.tecnico_nombre}` : rec.tipo}] {rec.titulo}
-                  </strong>
-                  {rec.descripcion && <p style={{ margin: '3px 0 0 0', color: 'var(--sidebar-text)', fontSize: '0.83rem' }}>{rec.descripcion}</p>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <strong style={{ color: 'var(--text-main)', fontSize: '0.9rem' }}>
+                      [{rec.tipo === 'RECORDATORIO_TECNICO' ? `Técnico: ${rec.tecnico_nombre}` : rec.tipo}] {rec.titulo}
+                    </strong>
+                    {rec.celular && (() => {
+                      const digits = rec.celular.replace(/[^0-9]/g, '');
+                      const isMobile = digits.startsWith('09') || (digits.length === 9 && digits.startsWith('9')) || digits.length === 10;
+                      const waNumber = digits.startsWith('0') ? '593' + digits.substring(1) : (digits.startsWith('593') ? digits : '593' + digits);
+                      const isCopied = copiedPhoneId === rec.id_recordatorio;
+                      return (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPhone(rec.id_recordatorio, rec.celular)}
+                            title="Haz clic para copiar el número al portapapeles"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              background: isCopied ? '#dcfce7' : 'rgba(37, 99, 235, 0.12)',
+                              color: isCopied ? '#16a34a' : '#2563eb',
+                              border: `1px solid ${isCopied ? '#86efac' : 'rgba(37, 99, 235, 0.25)'}`,
+                              padding: '3px 10px',
+                              borderRadius: '8px',
+                              fontWeight: 800,
+                              fontSize: '0.82rem',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <i className={`fa-solid ${isCopied ? 'fa-check' : 'fa-copy'}`}></i>
+                            <span>{isCopied ? '¡Copiado!' : rec.celular}</span>
+                          </button>
+
+                          {isMobile && (
+                            <a
+                              href={`https://web.whatsapp.com/send?phone=${waNumber}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Abrir chat en WhatsApp Web"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '28px',
+                                height: '28px',
+                                background: 'rgba(34, 197, 94, 0.15)',
+                                color: '#16a34a',
+                                border: '1px solid rgba(34, 197, 94, 0.35)',
+                                borderRadius: '8px',
+                                fontSize: '0.95rem',
+                                textDecoration: 'none',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <i className="fa-brands fa-whatsapp"></i>
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  {rec.descripcion && <p style={{ margin: '4px 0 0 0', color: 'var(--sidebar-text)', fontSize: '0.83rem' }}>{rec.descripcion}</p>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <span className="pro-badge-amber">
@@ -1232,7 +1429,7 @@ function VisitasTab({ token, user }) {
                                               <option value="">-- Selecciona Técnico --</option>
                                               <option value="NO TECNICO">NO TECNICO (Sin Asignar)</option>
                                               {tecnicos.filter(t => t.nombre !== 'NO TECNICO').map(t => (
-                                                <option key={t.id_tecnico} value={t.nombre}>{t.nombre}</option>
+                                                <option key={t.id_tecnico} value={t.nombre}>{t.nombre}{t.area_trabajo === 'INSTALACIONES' ? ' ⚡ (Instalador)' : ''}</option>
                                               ))}
                                             </select>
                                           </div>
@@ -1246,7 +1443,7 @@ function VisitasTab({ token, user }) {
                                               <option value="">-- Sin Apoyo --</option>
                                               <option value="NO TECNICO">NO TECNICO</option>
                                               {tecnicos.filter(t => t.nombre !== 'NO TECNICO').map(t => (
-                                                <option key={t.id_tecnico} value={t.nombre}>{t.nombre}</option>
+                                                <option key={t.id_tecnico} value={t.nombre}>{t.nombre}{t.area_trabajo === 'INSTALACIONES' ? ' ⚡ (Instalador)' : ''}</option>
                                               ))}
                                             </select>
                                           </div>
@@ -1381,7 +1578,9 @@ function VisitasTab({ token, user }) {
                 >
                   <option value="NO TECNICO">-- Sin Asignar / Por Coordinar --</option>
                   {tecnicos.map(t => (
-                    <option key={t.id_tecnico} value={t.nombre}>{t.nombre}</option>
+                    <option key={t.id_tecnico} value={t.nombre}>
+                      {t.nombre}{t.area_trabajo === 'INSTALACIONES' ? ' ⚡ (Instalador)' : ''}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -1535,7 +1734,9 @@ function VisitasTab({ token, user }) {
                     <option value="">-- Sin Asignar --</option>
                     <option value="NO TECNICO">NO TECNICO (Sin Asignar / Por Coordinar)</option>
                     {tecnicos.filter(t => t.nombre !== 'NO TECNICO').map(t => (
-                      <option key={t.id_tecnico} value={t.nombre}>{t.nombre}</option>
+                      <option key={t.id_tecnico} value={t.nombre}>
+                        {t.nombre}{t.area_trabajo === 'INSTALACIONES' ? ' ⚡ (Instalador)' : ''}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -1549,7 +1750,9 @@ function VisitasTab({ token, user }) {
                     <option value="">-- Sin Apoyo --</option>
                     <option value="NO TECNICO">NO TECNICO</option>
                     {tecnicos.filter(t => t.nombre !== 'NO TECNICO').map(t => (
-                      <option key={t.id_tecnico} value={t.nombre}>{t.nombre}</option>
+                      <option key={t.id_tecnico} value={t.nombre}>
+                        {t.nombre}{t.area_trabajo === 'INSTALACIONES' ? ' ⚡ (Instalador)' : ''}
+                      </option>
                     ))}
                   </select>
                 </div>

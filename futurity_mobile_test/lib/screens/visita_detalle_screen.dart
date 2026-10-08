@@ -39,6 +39,12 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
   Map<String, dynamic>? _oltResult;
   bool _showPassword = false;
 
+  // Historial del Cliente (Últimos 3 meses)
+  bool _historialExpandido = false;
+  bool _cargandoHistorial = false;
+  List<dynamic> _historialCliente = [];
+  String? _errorHistorial;
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +65,29 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
     super.dispose();
   }
 
+  // --- CONSULTAR HISTORIAL DEL CLIENTE ---
+  Future<void> _toggleHistorial() async {
+    setState(() {
+      _historialExpandido = !_historialExpandido;
+    });
+    if (_historialExpandido && _historialCliente.isEmpty && !_cargandoHistorial) {
+      setState(() {
+        _cargandoHistorial = true;
+        _errorHistorial = null;
+      });
+      final res = await ApiService.getHistorialCliente(_visita.cliente, contrato: _visita.contrato);
+      if (!mounted) return;
+      setState(() {
+        _cargandoHistorial = false;
+        if (res['success'] == true) {
+          _historialCliente = res['historial'] as List? ?? [];
+        } else {
+          _errorHistorial = res['message'] ?? 'No se pudo obtener el historial';
+        }
+      });
+    }
+  }
+
   // --- ACCIÓN LLAMADA TELEFÓNICA ---
   Future<void> _makePhoneCall(String rawPhone) async {
     final clean = rawPhone.replaceAll(RegExp(r'[^0-9+]'), '');
@@ -69,9 +98,31 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
     }
   }
 
-  // --- ACCIÓN WHATSAPP DIRECTO ---
-  Future<void> _openWhatsApp(String rawPhone, String cliente, int idVisita) async {
-    // Buscar números en la cadena (pueden venir separados por comas o barras)
+  // --- ACCIÓN WHATSAPP CON MAPA DE RASTREO EN VIVO ---
+  Future<void> _mandarMapaAlCliente() async {
+    String? token = _visita.tokenRastreo;
+
+    // Si aún no tiene token o está PENDIENTE, primero activamos "Voy en Camino"
+    if (token == null || token.isEmpty || token == 'null') {
+      setState(() => _actionLoading = true);
+      final res = await ApiService.iniciarRuta(_visita.idVisita);
+      if (!mounted) return;
+      setState(() => _actionLoading = false);
+      if (res['success'] == true) {
+        token = res['token_rastreo']?.toString();
+        setState(() {
+          _visita = _visita.copyWith(
+            estado: 'EN_RUTA',
+            tokenRastreo: token ?? _visita.tokenRastreo,
+          );
+        });
+        LocationTrackingService.setActiveVisita(_visita.idVisita);
+        LocationTrackingService.startTracking(_visita.idVisita);
+        widget.onRefresh();
+      }
+    }
+
+    final rawPhone = _visita.telefonos;
     final numbers = rawPhone.split(RegExp(r'[,/\s]+'));
     String? validCell;
 
@@ -89,7 +140,6 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
       }
     }
 
-    // Fallback: si no se detectó móvil con 09, usar el primer número limpio
     if (validCell == null && numbers.isNotEmpty) {
       final clean = numbers.first.replaceAll(RegExp(r'[^0-9]'), '');
       if (clean.isNotEmpty) {
@@ -109,8 +159,12 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
       return;
     }
 
-    final mensaje =
-        'Hola $cliente, le saluda el personal técnico de Futurity Internet. Estamos en camino a su domicilio para atender su solicitud técnica (Ticket VT-$idVisita).';
+    String mensaje =
+        'Estimado/a cliente, le saluda personal técnico de Futurity. Le informo que ya voy en camino a su domicilio para atender su orden técnica (Ticket VT-${_visita.idVisita}).';
+    if (token != null && token.isNotEmpty && token != 'null') {
+      mensaje += ' Puede seguir mi trayecto en tiempo real ingresando aquí: https://atlas.futurity.com.ec/seguimiento/$token';
+    }
+
     final urlString = 'https://wa.me/$validCell?text=${Uri.encodeComponent(mensaje)}';
     final uri = Uri.parse(urlString);
 
@@ -151,23 +205,71 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
     }
   }
 
-  // --- INICIAR RUTA Y SEGUIMIENTO GPS ---
-  Future<void> _handleIniciarRuta() async {
+  // --- BOTÓN VOY EN CAMINO (INICIAR TRASLADO Y GENERAR TOKEN) ---
+  Future<void> _handleVoyEnCamino() async {
     setState(() => _actionLoading = true);
 
-    await LocationTrackingService.startTracking(_visita.idVisita);
-    await ApiService.iniciarRuta(_visita.idVisita);
+    final res = await ApiService.iniciarRuta(_visita.idVisita);
 
-    if (mounted) {
-      setState(() => _actionLoading = false);
+    if (!mounted) return;
+    setState(() => _actionLoading = false);
+
+    if (res['success'] == true) {
+      final String? token = res['token_rastreo']?.toString();
+      setState(() {
+        _visita = _visita.copyWith(
+          estado: 'EN_RUTA',
+          tokenRastreo: token ?? _visita.tokenRastreo,
+        );
+      });
+      LocationTrackingService.setActiveVisita(_visita.idVisita);
+      LocationTrackingService.startTracking(_visita.idVisita);
+      widget.onRefresh();
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('🚗 Ruta iniciada. GPS transmitiendo en segundo plano a la central.'),
+          content: Text('🚗 ¡En Ruta! GPS transmitiendo en tiempo real al cliente y central.'),
           backgroundColor: Color(0xFF10B981),
         ),
       );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message'] ?? 'Error al iniciar ruta'),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+    }
+  }
+
+  // --- BOTÓN LLEGUÉ AL SITIO / INICIAR VISITA EN SITIO ---
+  Future<void> _handleIniciarTrabajoSitio() async {
+    setState(() => _actionLoading = true);
+
+    final res = await ApiService.iniciarVisita(_visita.idVisita);
+
+    if (!mounted) return;
+    setState(() => _actionLoading = false);
+
+    if (res['success'] == true) {
+      setState(() {
+        _visita = _visita.copyWith(estado: 'EN_PROGRESO');
+      });
       widget.onRefresh();
-      Navigator.pop(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('📍 Llegada al domicilio confirmada. Estado: EN PROGRESO'),
+          backgroundColor: Color(0xFF38BDF8),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message'] ?? 'No se pudo iniciar la atención'),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
     }
   }
 
@@ -414,7 +516,7 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
       return {
         'pct': 0.0,
         'color': const Color(0xFFEF4444),
-        'label': '🔴 Desconectado / Sin Señal',
+        'label': '🔴 Desconectado',
       };
     }
 
@@ -433,28 +535,25 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
       return {
         'pct': 0.9,
         'color': const Color(0xFF10B981),
-        'label': '🟢 Excelente ($val dBm) - Nivel Óptimo',
+        'label': '🟢 Excelente ($val dBm)',
       };
     } else if (val >= -28.99 && val < -25.99) {
       return {
         'pct': 0.55,
         'color': const Color(0xFFF59E0B),
-        'label': '🟡 Atenuado ($val dBm) - Alerta de Pérdida',
+        'label': '🟡 Atenuado ($val dBm)',
       };
     } else {
       return {
         'pct': 0.25,
         'color': const Color(0xFFEF4444),
-        'label': '🔴 Crítico ($val dBm) - Doblez o Falla Física',
+        'label': '🔴 Crítico ($val dBm)',
       };
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    bool isTrackingThis =
-        LocationTrackingService.isTracking && LocationTrackingService.activeVisitaId == _visita.idVisita;
-
     final primaryPhone = _visita.telefonos.split(RegExp(r'[,/]')).first.trim();
 
     return Scaffold(
@@ -554,81 +653,247 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(Icons.access_time_rounded, size: 16, color: Color(0xFFF59E0B)),
-                      const SizedBox(width: 4),
-                      Text(
-                        _visita.preferenciaHoraria,
-                        style: GoogleFonts.inter(
-                            fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFFFBBF24)),
-                      ),
-                      if (_visita.antiguedadFmt != null) ...[
-                        const SizedBox(width: 12),
-                        const Icon(Icons.history_rounded, size: 16, color: Color(0xFF94A3B8)),
-                        const SizedBox(width: 4),
-                        Text(
-                          _visita.antiguedadFmt!,
-                          style: GoogleFonts.inter(
-                              fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF94A3B8)),
+                  if (_visita.preferenciaHoraria.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 2),
+                          child: Icon(Icons.access_time_rounded, size: 15, color: Color(0xFFF59E0B)),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _visita.preferenciaHoraria,
+                            style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFFFBBF24),
+                            ),
+                          ),
                         ),
                       ],
-                    ],
-                  ),
+                    ),
+                  ],
+                  if (_visita.antiguedadFmt != null && _visita.antiguedadFmt!.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.history_rounded, size: 15, color: Color(0xFF94A3B8)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Antigüedad: ${_visita.antiguedadFmt!}',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
 
             const SizedBox(height: 14),
 
-            // 2. ACCIONES RÁPIDAS: GPS, WHATSAPP, LLAMAR
+            // 2. ACCIONES RÁPIDAS: GPS Y LLAMAR AL CLIENTE
             Row(
               children: [
                 // GPS
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () => _openMap(_visita.latitud, _visita.longitud, _visita.direccion),
-                    icon: const Icon(Icons.navigation_rounded, color: Colors.white, size: 16),
-                    label: Text('GPS', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12.5)),
+                    icon: const Icon(Icons.navigation_rounded, color: Colors.white, size: 18),
+                    label: Text('GPS', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 13)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2563EB),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                // WHATSAPP
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _visita.telefonos.isNotEmpty
-                        ? () => _openWhatsApp(_visita.telefonos, _visita.cliente, _visita.idVisita)
-                        : null,
-                    icon: const Icon(Icons.chat_rounded, color: Colors.white, size: 16),
-                    label: Text('WHATSAPP', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF16A34A),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 // LLAMAR
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: primaryPhone.isNotEmpty ? () => _makePhoneCall(primaryPhone) : null,
-                    icon: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 16),
-                    label: Text('LLAMAR', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 12.5)),
+                    icon: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 18),
+                    label: Text('LLAMAR', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 13)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0D9488),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                   ),
                 ),
               ],
+            ),
+
+            const SizedBox(height: 14),
+
+            // 2.1 HISTORIAL DEL CLIENTE (ÚLTIMOS 3 MESES)
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: _historialExpandido
+                      ? const Color(0xFF38BDF8).withValues(alpha: 0.4)
+                      : Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Column(
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: _toggleHistorial,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.history_rounded, size: 18, color: Color(0xFF38BDF8)),
+                              ),
+                              const SizedBox(width: 10),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'HISTORIAL DE ATENCIONES',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF38BDF8),
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Últimos 3 meses del cliente',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          Icon(
+                            _historialExpandido
+                                ? Icons.keyboard_arrow_up_rounded
+                                : Icons.keyboard_arrow_down_rounded,
+                            color: const Color(0xFF94A3B8),
+                            size: 22,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_historialExpandido) ...[
+                    const Divider(height: 1, color: Colors.white10),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: _cargandoHistorial
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(12),
+                                child: CircularProgressIndicator(color: Color(0xFF38BDF8), strokeWidth: 2),
+                              ),
+                            )
+                          : _errorHistorial != null
+                              ? Text(
+                                  _errorHistorial!,
+                                  style: GoogleFonts.inter(color: const Color(0xFFF87171), fontSize: 12),
+                                )
+                              : _historialCliente.isEmpty
+                                  ? Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 8),
+                                        child: Text(
+                                          'No registra atenciones en los últimos 3 meses.',
+                                          style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 12),
+                                        ),
+                                      ),
+                                    )
+                                  : Column(
+                                      children: _historialCliente.map((item) {
+                                        final fecha = item['fecha_programada']?.toString() ?? 'S/F';
+                                        final problema = item['problema']?.toString() ?? 'Soporte';
+                                        final solucion = item['solucion_tecnico']?.toString() ?? 'Atendido';
+                                        final tec = item['tecnico_principal']?.toString() ?? 'Técnico';
+                                        return Container(
+                                          margin: const EdgeInsets.only(bottom: 10),
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF0F172A),
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    fecha,
+                                                    style: GoogleFonts.robotoMono(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w700,
+                                                      color: const Color(0xFF38BDF8),
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    tec,
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: const Color(0xFF94A3B8),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Problema: $problema',
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                'Solución: $solucion',
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 11.5,
+                                                  color: const Color(0xFF34D399),
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                    ),
+                  ],
+                ],
+              ),
             ),
 
             const SizedBox(height: 14),
@@ -922,7 +1187,6 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
                                   'SEÑAL ÓPTICA EN TERRENO',
@@ -932,12 +1196,18 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
                                     color: const Color(0xFF94A3B8),
                                   ),
                                 ),
-                                Text(
-                                  rxProps['label'] as String,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                    color: rxProps['color'] as Color,
+                                const SizedBox(width: 8),
+                                const Spacer(),
+                                Flexible(
+                                  child: Text(
+                                    rxProps['label'] as String,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: rxProps['color'] as Color,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1197,13 +1467,111 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
 
             const SizedBox(height: 24),
 
-            // 7. BOTÓN DE INICIO DE RUTA / RASTREO
-            if (_visita.estado == 'PENDIENTE')
+            // --- ESTADO 1: PENDIENTE / REAGENDADA ---
+            if (_visita.estado == 'PENDIENTE' || _visita.estado == 'REAGENDADA') ...[
+              // Botón Voy en Camino
               Container(
                 height: 54,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF38BDF8), Color(0xFF2563EB)],
+                    colors: [Color(0xFF0284C7), Color(0xFF0369A1)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0284C7).withValues(alpha: 0.4),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    )
+                  ],
+                ),
+                child: ElevatedButton.icon(
+                  onPressed: _actionLoading ? null : _handleVoyEnCamino,
+                  icon: _actionLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Icon(Icons.directions_car_filled_rounded, color: Colors.white, size: 22),
+                  label: Text(
+                    'VOY EN CAMINO',
+                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 0.5),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Botón Posponer
+              OutlinedButton.icon(
+                onPressed: _actionLoading ? null : _handlePosponerVisita,
+                icon: const Icon(Icons.schedule_rounded, color: Color(0xFFF59E0B), size: 18),
+                label: Text(
+                  'POSPONER PARA MÁS TARDE HOY',
+                  style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFFF59E0B)),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFF59E0B), width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+              ),
+            ],
+
+            // --- ESTADO 2: EN_RUTA ---
+            if (_visita.estado == 'EN_RUTA') ...[
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0284C7).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0284C7).withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.navigation_rounded, color: Color(0xFF38BDF8), size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '🚗 EN RUTA AL DOMICILIO',
+                            style: GoogleFonts.outfit(color: const Color(0xFF38BDF8), fontWeight: FontWeight.w900, fontSize: 14),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'El GPS está activo y el cliente puede seguir tu trayectoria en vivo.',
+                            style: GoogleFonts.inter(color: const Color(0xFFCBD5E1), fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Botón Llegué / Iniciar Trabajo
+              Container(
+                height: 54,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
                   ),
@@ -1217,17 +1585,17 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
                   ],
                 ),
                 child: ElevatedButton.icon(
-                  onPressed: _actionLoading ? null : _handleIniciarRuta,
+                  onPressed: _actionLoading ? null : _handleIniciarTrabajoSitio,
                   icon: _actionLoading
                       ? const SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
-                      : const Icon(Icons.local_shipping_rounded, color: Colors.white, size: 22),
+                      : const Icon(Icons.play_circle_filled_rounded, color: Colors.white, size: 24),
                   label: Text(
-                    'INICIAR RUTA Y RASTREO GPS',
-                    style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.w800, color: Colors.white),
+                    'LLEGUÉ AL SITIO / INICIAR VISITA',
+                    style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 0.5),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
@@ -1236,33 +1604,90 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 10),
 
-            if (isTrackingThis)
+              // Reenviar link de WhatsApp
+              if (_visita.telefonos.isNotEmpty)
+                Container(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF16A34A),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: _actionLoading ? null : _mandarMapaAlCliente,
+                    icon: const Icon(Icons.chat_rounded, color: Colors.white, size: 20),
+                    label: Text(
+                      'AVISAR AL CLIENTE POR WHATSAPP (MAPA)',
+                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 10),
+
+              // Posponer
+              OutlinedButton.icon(
+                onPressed: _actionLoading ? null : _handlePosponerVisita,
+                icon: const Icon(Icons.schedule_rounded, color: Color(0xFFF59E0B), size: 18),
+                label: Text(
+                  'POSPONER VISITA',
+                  style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFFF59E0B)),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFF59E0B), width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+              ),
+            ],
+
+            // --- ESTADO 3: EN_PROGRESO ---
+            if (_visita.estado == 'EN_PROGRESO') ...[
               Container(
-                margin: const EdgeInsets.only(top: 10),
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.gps_fixed_rounded, color: Color(0xFF34D399), size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Rastreo activo en segundo plano',
-                      style: GoogleFonts.inter(
-                          color: const Color(0xFF34D399), fontWeight: FontWeight.w700, fontSize: 13),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.handyman_rounded, color: Color(0xFF38BDF8), size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '🛠️ ATENCIÓN EN SITIO EN PROGRESO',
+                            style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Trabajo técnico en curso. Procede al cierre una vez terminada la labor.',
+                            style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 12),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(height: 14),
 
-            // 8. BOTÓN PARA FINALIZAR Y CERRAR VISITA TÉCNICA
-            if (_visita.estado != 'FINALIZADA') ...[
-              const SizedBox(height: 12),
+              // Botón Finalizar / Cerrar Visita
               Container(
                 height: 54,
                 decoration: BoxDecoration(
@@ -1282,10 +1707,10 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
                 ),
                 child: ElevatedButton.icon(
                   onPressed: _handleAbrirCierre,
-                  icon: const Icon(Icons.check_circle_rounded, color: Colors.white, size: 22),
+                  icon: const Icon(Icons.check_circle_rounded, color: Colors.white, size: 24),
                   label: Text(
                     'FINALIZAR / CERRAR VISITA',
-                    style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.w800, color: Colors.white),
+                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 0.5),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
@@ -1295,11 +1720,13 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
                 ),
               ),
               const SizedBox(height: 10),
+
+              // Posponer
               OutlinedButton.icon(
                 onPressed: _actionLoading ? null : _handlePosponerVisita,
                 icon: const Icon(Icons.schedule_rounded, color: Color(0xFFF59E0B), size: 18),
                 label: Text(
-                  'POSPONER / REAGENDAR VISITA',
+                  'POSPONER VISITA',
                   style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, color: const Color(0xFFF59E0B)),
                 ),
                 style: OutlinedButton.styleFrom(
@@ -1309,6 +1736,43 @@ class _VisitaDetalleScreenState extends State<VisitaDetalleScreen> {
                 ),
               ),
             ],
+
+            // --- ESTADO 4: FINALIZADA ---
+            if (_visita.estado == 'FINALIZADA')
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.verified_rounded, color: Color(0xFF34D399), size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'VISITA FINALIZADA',
+                            style: GoogleFonts.outfit(
+                              color: const Color(0xFF34D399),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Esta orden ya fue concluida con éxito y reportada a la central.',
+                            style: GoogleFonts.inter(color: const Color(0xFFCBD5E1), fontSize: 12.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),

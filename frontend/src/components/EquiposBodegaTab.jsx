@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-export default function EquiposBodegaTab() {
+export default function EquiposBodegaTab({ token: tokenProp } = {}) {
   const [resumen, setResumen] = useState({
     totales: { en_bodega: 0, en_vehiculo: 0, instalados: 0, retirados: 0, total: 0 },
     modelos: [],
@@ -42,6 +42,24 @@ export default function EquiposBodegaTab() {
   const [ingresoObservacion, setIngresoObservacion] = useState('');
   const [guardandoIngreso, setGuardandoIngreso] = useState(false);
 
+  const deducirMarca = (modelo) => {
+    if (!modelo) return 'GENERAL';
+    const m = modelo.toUpperCase();
+    if (m.includes('KINGTYPE')) return 'KINGTYPE';
+    if (m.includes('CDATA') || m.includes('C-DATA') || m.includes('FD511')) return 'CDATA';
+    if (m.includes('HUAWEI')) return 'HUAWEI';
+    if (m.includes('MERCUSYS')) return 'MERCUSYS';
+    if (m.includes('MIKROTIK')) return 'MIKROTIK';
+    if (m.includes('ZHIYI')) return 'ZHIYI';
+    if (m.includes('CISCO')) return 'CISCO';
+    if (m.includes('ZTE')) return 'ZTE';
+    if (m.includes('FIBERHOME')) return 'FIBERHOME';
+    if (m.includes('TPLINK') || m.includes('TP-LINK') || m.includes('EX511') || m.includes('XX231') || m.includes('XX530') || m.includes('XZ000') || m.includes('XN020') || m.includes('840N') || m.includes('ARCHER')) {
+      return 'TP-LINK';
+    }
+    return 'GENERAL';
+  };
+
   // Formulario de Despacho a Buseta
   const [despachoPlaca, setDespachoPlaca] = useState('');
   const [despachoSerialInput, setDespachoSerialInput] = useState('');
@@ -51,7 +69,11 @@ export default function EquiposBodegaTab() {
   const inputIngresoRef = useRef(null);
   const inputDespachoRef = useRef(null);
 
-  const getToken = () => localStorage.getItem('token') || localStorage.getItem('session_token') || '';
+  const getToken = () => tokenProp || localStorage.getItem('token') || localStorage.getItem('session_token') || '';
+  const getAuthHeaders = (extra = {}) => {
+    const t = getToken();
+    return t ? { ...extra, 'Authorization': `Bearer ${t}` } : { ...extra };
+  };
 
   // Sonido de confirmación con Web Audio API al escanear
   const playBeep = () => {
@@ -101,7 +123,7 @@ export default function EquiposBodegaTab() {
 
     // 1. Cargar Vehículos / Placas
     try {
-      const resVeh = await fetch('/api/admin/vehiculos', { headers: { 'Authorization': `Bearer ${token}` } });
+      const resVeh = await fetch('/api/admin/vehiculos', { headers: getAuthHeaders() });
       const dataVeh = await resVeh.json();
       if (dataVeh?.status === 'ok' && dataVeh.vehiculos?.length > 0) {
         setVehiculos(dataVeh.vehiculos);
@@ -161,7 +183,7 @@ export default function EquiposBodegaTab() {
     ];
 
     try {
-      const resOnt = await fetch('/api/admin/catalogo_ont', { headers: { 'Authorization': `Bearer ${token}` } });
+      const resOnt = await fetch('/api/admin/catalogo_ont', { headers: getAuthHeaders() });
       const dataOnt = await resOnt.json();
       if (dataOnt?.catalogos && dataOnt.catalogos.length > 0) {
         setCatalogoModelosOnt(dataOnt.catalogos);
@@ -174,7 +196,7 @@ export default function EquiposBodegaTab() {
     }
 
     try {
-      const resRouter = await fetch('/api/admin/catalogo_router', { headers: { 'Authorization': `Bearer ${token}` } });
+      const resRouter = await fetch('/api/admin/catalogo_router', { headers: getAuthHeaders() });
       const dataRouter = await resRouter.json();
       if (dataRouter?.catalogos && dataRouter.catalogos.length > 0) {
         setCatalogoModelosRouter(dataRouter.catalogos);
@@ -189,9 +211,8 @@ export default function EquiposBodegaTab() {
 
   const cargarResumen = async () => {
     try {
-      const token = getToken();
       const res = await fetch('/api/equipos/resumen', {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: getAuthHeaders()
       });
       const data = await res.json();
       if (data?.status === 'ok') {
@@ -212,9 +233,8 @@ export default function EquiposBodegaTab() {
       if (filtroTipo) params.append('tipo', filtroTipo);
       if (busqueda) params.append('search', busqueda);
 
-      const token = getToken();
       const res = await fetch(`/api/equipos/lista?${params.toString()}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: getAuthHeaders()
       });
       const data = await res.json();
       if (data?.status === 'ok') {
@@ -230,9 +250,8 @@ export default function EquiposBodegaTab() {
   const cargarEquiposRetirados = async () => {
     setLoadingRetirados(true);
     try {
-      const token = getToken();
       let url = `/api/admin/equipos_retirados?estado_custodia=${filtroCustodiaRetirados}&placa=${filtroPlacaRetirados}&search=${encodeURIComponent(busquedaRetirados)}`;
-      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      const res = await fetch(url, { headers: getAuthHeaders() });
       const data = await res.json();
       if (data?.status === 'ok') {
         setEquiposRetirados(data.equipos_retirados || []);
@@ -247,10 +266,9 @@ export default function EquiposBodegaTab() {
   const handleRecibirEquipoRetirado = async (id_retiro) => {
     if (!window.confirm("¿Confirmas la recepción física de este equipo en Bodega Central?")) return;
     try {
-      const token = getToken();
       const res = await fetch(`/api/admin/equipos_retirados/${id_retiro}/recibir_bodega`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: getAuthHeaders()
       });
       const data = await res.json();
       if (data?.status === 'ok') {
@@ -297,13 +315,9 @@ export default function EquiposBodegaTab() {
     }
     setGuardandoIngreso(true);
     try {
-      const token = getToken();
       const res = await fetch('/api/equipos/ingreso_masivo', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           tipo_equipo: ingresoTipo,
           modelo: ingresoModelo,
@@ -332,27 +346,92 @@ export default function EquiposBodegaTab() {
     }
   };
 
-  // Manejador de escaneo en Despacho a Buseta
-  const handleKeyDownDespacho = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const sn = despachoSerialInput.trim().toUpperCase();
-      if (!sn) return;
+  // Validador y agregador de serial en Despacho a Buseta
+  const agregarSerialDespacho = async (snRaw) => {
+    const sn = (snRaw || '').trim().toUpperCase();
+    if (!sn) return;
 
-      if (despachoSeriales.includes(sn)) {
+    if (despachoSeriales.some(item => (typeof item === 'string' ? item : item.sn) === sn)) {
+      playErrorSound();
+      alert(`⚠️ El serial "${sn}" ya fue escaneado.`);
+      setDespachoSerialInput('');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/equipos/verificar_serial_despacho?sn=${encodeURIComponent(sn)}&placa=${encodeURIComponent(despachoPlaca)}`, {
+        headers: getAuthHeaders()
+      });
+      const data = await res.json();
+
+      if (data.status === 'not_found') {
         playErrorSound();
-        alert(`⚠️ El serial "${sn}" ya fue escaneado.`);
+        alert(`❌ ${data.message || `El serial "${sn}" no existe en inventario.`}`);
         setDespachoSerialInput('');
         return;
       }
 
+      if (data.status === 'same_vehicle') {
+        playErrorSound();
+        alert(`⚠️ ${data.message}`);
+        setDespachoSerialInput('');
+        return;
+      }
+
+      if (data.status === 'installed_warning') {
+        playErrorSound();
+        const continuar = window.confirm(`⚠️ ADVERTENCIA: ${data.message}\n\n¿Estás seguro de que deseas despacharlo a la buseta?`);
+        if (!continuar) {
+          setDespachoSerialInput('');
+          return;
+        }
+      }
+
+      if (data.status === 'danger_warning') {
+        playErrorSound();
+        const continuar = window.confirm(`⛔ ADVERTENCIA: ${data.message}\n\n¿Estás seguro de querer subir un equipo averiado al vehículo?`);
+        if (!continuar) {
+          setDespachoSerialInput('');
+          return;
+        }
+      }
+
+      const eq = data.equipo || {};
+      const esTraspaso = (data.status === 'transfer_warning');
+
+      if (esTraspaso) {
+        playErrorSound();
+      } else {
+        playBeep();
+      }
+
+      setDespachoSeriales(prev => [{
+        sn,
+        tipo: eq.tipo_equipo || 'EQUIPO',
+        modelo: eq.modelo || 'Sin modelo',
+        marca: eq.marca || '',
+        placa_previa: data.placa_actual || eq.ubicacion_placa || 'Otra Buseta',
+        es_traspaso: esTraspaso
+      }, ...prev]);
+
+      setDespachoSerialInput('');
+    } catch (err) {
+      console.error('Error al verificar serial:', err);
       playBeep();
-      setDespachoSeriales([sn, ...despachoSeriales]);
+      setDespachoSeriales(prev => [{ sn, tipo: 'EQUIPO', modelo: '', es_traspaso: false }, ...prev]);
       setDespachoSerialInput('');
     }
   };
 
-  // Guardar Despacho a Buseta
+  // Manejador de escaneo en Despacho a Buseta
+  const handleKeyDownDespacho = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      agregarSerialDespacho(despachoSerialInput);
+    }
+  };
+
+  // Guardar Despacho a Buseta con confirmación de traspaso
   const handleGuardarDespacho = async () => {
     if (despachoSeriales.length === 0) {
       alert('Por favor pistolea al menos un equipo a despachar.');
@@ -363,18 +442,29 @@ export default function EquiposBodegaTab() {
       return;
     }
 
+    const traspasosDetectados = despachoSeriales.filter(item => item.es_traspaso);
+    if (traspasosDetectados.length > 0) {
+      const lista = traspasosDetectados.map(t => `• ${t.sn} (${t.modelo || t.tipo}) ➔ Custodia actual: Buseta ${t.placa_previa}`).join('\n');
+      const confirmacion = window.confirm(
+        `⚠️ ATENCIÓN: TRASPASO DE CUSTODIA DETECTADO\n\n` +
+        `Los siguientes ${traspasosDetectados.length} equipo(s) pertenecen actualmente a otras busetas:\n\n${lista}\n\n` +
+        `¿Confirmas el traspaso directo de estos equipos hacia la buseta "${despachoPlaca}"?`
+      );
+      if (!confirmacion) {
+        return;
+      }
+    }
+
+    const serialesSolo = despachoSeriales.map(item => (typeof item === 'string' ? item : item.sn));
+
     setGuardandoDespacho(true);
     try {
-      const token = getToken();
       const res = await fetch('/api/equipos/despacho_buseta', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           placa_vehiculo: despachoPlaca,
-          seriales: despachoSeriales
+          seriales: serialesSolo
         })
       });
       const data = await res.json();
@@ -399,10 +489,9 @@ export default function EquiposBodegaTab() {
   const handleEliminarEquipo = async (id, sn) => {
     if (!window.confirm(`¿Estás seguro de eliminar el equipo con serial "${sn}"?`)) return;
     try {
-      const token = getToken();
       await fetch(`/api/equipos/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: getAuthHeaders()
       });
       cargarResumen();
       cargarEquipos();
@@ -412,12 +501,14 @@ export default function EquiposBodegaTab() {
   };
 
   const modelosRapidos = [
+    { label: 'KINGTYPE (ONT)', modelo: 'KINGTYPE', tipo: 'ONT', marca: 'KINGTYPE' },
     { label: 'EX511 (Wi-Fi 6)', modelo: 'Router TPLink EX511', tipo: 'ROUTER', marca: 'TP-LINK' },
     { label: 'XX231v (ONT GPON)', modelo: 'XX231v', tipo: 'ONT', marca: 'TP-LINK' },
     { label: 'XX530v (ONT Dual Band)', modelo: 'XX530v', tipo: 'ONT', marca: 'TP-LINK' },
     { label: 'Huawei AX3', modelo: 'Router Huawei AX3', tipo: 'ROUTER', marca: 'HUAWEI' },
     { label: 'Huawei AX2', modelo: 'Router Huawei AX2', tipo: 'ROUTER', marca: 'HUAWEI' },
     { label: 'Mercusys MR70X', modelo: 'ROUTER MERCUSYS MR70X', tipo: 'ROUTER', marca: 'MERCUSYS' },
+    { label: 'CDATA (ONT)', modelo: 'CDATA', tipo: 'ONT', marca: 'CDATA' },
   ];
 
   return (
@@ -839,8 +930,8 @@ export default function EquiposBodegaTab() {
 
             {/* Contenido */}
             <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', flex: 1 }}>
-              {/* Selección de Tipo y Modelo */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              {/* Selección de Tipo, Modelo y Marca */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 800, color: 'var(--sidebar-text)', textTransform: 'uppercase', marginBottom: '6px' }}>
                     Tipo de Equipo
@@ -848,12 +939,16 @@ export default function EquiposBodegaTab() {
                   <select
                     value={ingresoTipo}
                     onChange={(e) => {
-                      setIngresoTipo(e.target.value);
-                      if (e.target.value === 'ONT' && catalogoModelosOnt.length > 0) {
-                        setIngresoModelo(catalogoModelosOnt[0].nombre);
-                      } else if (e.target.value === 'ROUTER' && catalogoModelosRouter.length > 0) {
-                        setIngresoModelo(catalogoModelosRouter[0].nombre);
+                      const t = e.target.value;
+                      setIngresoTipo(t);
+                      let primerModelo = '';
+                      if (t === 'ONT' && catalogoModelosOnt.length > 0) {
+                        primerModelo = catalogoModelosOnt[0].nombre;
+                      } else if (t === 'ROUTER' && catalogoModelosRouter.length > 0) {
+                        primerModelo = catalogoModelosRouter[0].nombre;
                       }
+                      setIngresoModelo(primerModelo);
+                      setIngresoMarca(deducirMarca(primerModelo));
                     }}
                     style={{ width: '100%', padding: '10px 12px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontWeight: 800 }}
                   >
@@ -868,12 +963,39 @@ export default function EquiposBodegaTab() {
                   </label>
                   <select
                     value={ingresoModelo}
-                    onChange={(e) => setIngresoModelo(e.target.value)}
+                    onChange={(e) => {
+                      const m = e.target.value;
+                      setIngresoModelo(m);
+                      setIngresoMarca(deducirMarca(m));
+                    }}
                     style={{ width: '100%', padding: '10px 12px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontWeight: 800 }}
                   >
                     {ingresoTipo === 'ROUTER'
                       ? catalogoModelosRouter.map((r) => <option key={r.id_router} value={r.nombre}>{r.nombre}</option>)
                       : catalogoModelosOnt.map((o) => <option key={o.id_ont} value={o.nombre}>{o.nombre}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 800, color: 'var(--sidebar-text)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Marca / Fabricante
+                  </label>
+                  <select
+                    value={ingresoMarca}
+                    onChange={(e) => setIngresoMarca(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontWeight: 800 }}
+                  >
+                    <option value="KINGTYPE">KINGTYPE</option>
+                    <option value="TP-LINK">TP-LINK</option>
+                    <option value="HUAWEI">HUAWEI</option>
+                    <option value="CDATA">CDATA</option>
+                    <option value="MERCUSYS">MERCUSYS</option>
+                    <option value="MIKROTIK">MIKROTIK</option>
+                    <option value="ZHIYI">ZHIYI</option>
+                    <option value="CISCO">CISCO</option>
+                    <option value="ZTE">ZTE</option>
+                    <option value="FIBERHOME">FIBERHOME</option>
+                    <option value="GENERAL">GENERAL / OTRA</option>
                   </select>
                 </div>
               </div>
@@ -1095,14 +1217,7 @@ export default function EquiposBodegaTab() {
                   />
                   <button
                     type="button"
-                    onClick={() => {
-                      const sn = despachoSerialInput.trim().toUpperCase();
-                      if (sn && !despachoSeriales.includes(sn)) {
-                        playBeep();
-                        setDespachoSeriales([sn, ...despachoSeriales]);
-                        setDespachoSerialInput('');
-                      }
-                    }}
+                    onClick={() => agregarSerialDespacho(despachoSerialInput)}
                     style={{ padding: '0 16px', background: '#1f497d', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}
                   >
                     Agregar
@@ -1110,28 +1225,78 @@ export default function EquiposBodegaTab() {
                 </div>
               </div>
 
+              {/* Banner de Traspasos si los hay */}
+              {despachoSeriales.some(item => item.es_traspaso) && (
+                <div style={{ padding: '10px 14px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.4)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <i className="fa-solid fa-triangle-exclamation" style={{ color: '#f59e0b', fontSize: '1.1rem' }}></i>
+                  <div style={{ fontSize: '0.78rem', color: '#f59e0b', fontWeight: 700 }}>
+                    <strong>Alerta de Traspaso:</strong> Se detectaron equipos que pertenecen a otras busetas. Se requerirá tu confirmación al despachar.
+                  </div>
+                </div>
+              )}
+
               {/* Lista escaneada */}
               {despachoSeriales.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 800, color: 'var(--sidebar-text)' }}>
-                    <span>Equipos a transferir ({despachoSeriales.length}):</span>
+                    <span>Equipos a despachar / transferir ({despachoSeriales.length}):</span>
                     <button type="button" onClick={() => setDespachoSeriales([])} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: 800 }}>
                       Limpiar lista
                     </button>
                   </div>
-                  <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--profile-bg)', padding: '8px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                    {despachoSeriales.map((sn, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg)', padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem' }}>
-                        <span style={{ fontFamily: 'monospace', fontWeight: 800, color: '#1f497d' }}>{sn}</span>
-                        <button
-                          type="button"
-                          onClick={() => setDespachoSeriales(despachoSeriales.filter((_, i) => i !== idx))}
-                          style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: 800 }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
+                  <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', background: 'var(--profile-bg)', padding: '8px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                    {despachoSeriales.map((item, idx) => {
+                      const sn = typeof item === 'string' ? item : item.sn;
+                      const esTraspaso = item.es_traspaso;
+                      return (
+                        <div key={idx} style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center', 
+                          background: esTraspaso ? 'rgba(245, 158, 11, 0.1)' : 'var(--card-bg)', 
+                          border: esTraspaso ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid var(--border-color)',
+                          padding: '8px 12px', 
+                          borderRadius: '10px', 
+                          fontSize: '0.82rem' 
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ 
+                              padding: '2px 6px', 
+                              borderRadius: '6px', 
+                              fontSize: '0.68rem', 
+                              fontWeight: 900, 
+                              background: item.tipo === 'ROUTER' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                              color: item.tipo === 'ROUTER' ? '#60a5fa' : '#34d399'
+                            }}>
+                              {item.tipo || 'EQUIPO'}
+                            </span>
+                            <span style={{ fontFamily: 'monospace', fontWeight: 900, color: 'var(--text-main)' }}>{sn}</span>
+                            {item.modelo && (
+                              <span style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
+                                ({item.modelo})
+                              </span>
+                            )}
+                            {esTraspaso ? (
+                              <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '0.68rem', fontWeight: 900, background: '#f59e0b', color: '#1e293b' }}>
+                                🔄 De Buseta {item.placa_previa}
+                              </span>
+                            ) : (
+                              <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '0.68rem', fontWeight: 800, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
+                                ✅ En Bodega
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setDespachoSeriales(despachoSeriales.filter((_, i) => i !== idx))}
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem' }}
+                            title="Quitar de la lista"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

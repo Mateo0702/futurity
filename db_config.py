@@ -11,7 +11,8 @@ DB_CONFIG = {
     'host': os.environ.get('DB_HOST', 'localhost'),
     'user': os.environ.get('DB_USER', 'root'),
     'password': os.environ.get('DB_PASSWORD', 'Futurity2026'),
-    'database': os.environ.get('DB_DATABASE', 'optimizador_rutas')
+    'database': os.environ.get('DB_DATABASE', 'optimizador_rutas'),
+    'use_pure': True
 }
 
 def get_db_connection():

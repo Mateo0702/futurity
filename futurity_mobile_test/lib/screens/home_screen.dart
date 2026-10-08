@@ -41,6 +41,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // Iniciar rastreo satelital obligatorio
+    LocationTrackingService.startTracking();
     _loadData();
   }
 
@@ -55,10 +57,18 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
 
     if (result['success'] == true) {
+      final rawVisitas = (result['visitas'] as List<VisitaModel>?) ?? [];
+      
+      // Sincronizar visita activa en ruta con el servicio de rastreo
+      final enRuta = rawVisitas.where((v) => v.estado == 'EN_RUTA').toList();
+      if (enRuta.isNotEmpty) {
+        LocationTrackingService.setActiveVisita(enRuta.first.idVisita);
+      }
+
       setState(() {
         _tecnicoNombre = result['tecnico']?['nombre'] ?? 'Técnico';
         _areaTrabajo = result['tecnico']?['area_trabajo'] ?? 'SOPORTE';
-        _visitas = (result['visitas'] as List<VisitaModel>?) ?? [];
+        _visitas = rawVisitas;
         _materiales = (result['materiales'] as List<dynamic>?) ?? [];
         _soluciones = (result['soluciones'] as List<dynamic>?) ?? [];
         _catalogoOnt = (result['catalogo_ont'] as List<dynamic>?) ?? [];
@@ -137,8 +147,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    bool isTracking = LocationTrackingService.isTracking;
-
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
@@ -183,36 +191,56 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          // Banner de GPS en segundo plano
-          if (isTracking)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              color: const Color(0xFF10B981).withValues(alpha: 0.2),
-              child: Row(
-                children: [
-                  const Icon(Icons.satellite_alt_rounded, color: Color(0xFF34D399), size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'GPS activo: Transmitiendo ubicación a la central',
-                      style: GoogleFonts.inter(color: const Color(0xFF34D399), fontSize: 12.5, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        LocationTrackingService.stopTracking();
-                      });
-                    },
-                    style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 30)),
-                    child: Text(
-                      'Detener',
-                      style: GoogleFonts.inter(color: const Color(0xFFF87171), fontWeight: FontWeight.w800, fontSize: 12),
-                    ),
-                  )
-                ],
+          // Banner de Supervisión Satelital Ininterrumpida
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF064E3B).withValues(alpha: 0.4),
+              border: const Border(
+                bottom: BorderSide(color: Color(0xFF059669), width: 0.8),
               ),
             ),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF10B981),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'GPS Conectado a Central (Supervisión Operativa)',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF6EE7B7),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    'EN VIVO',
+                    style: GoogleFonts.outfit(
+                      color: const Color(0xFF34D399),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
 
           // Header de resumen de ruta
           Padding(
@@ -399,6 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                               children: [
                                                 Row(
+                                                  mainAxisSize: MainAxisSize.min,
                                                   children: [
                                                     Container(
                                                       width: 32,
@@ -437,27 +466,36 @@ class _HomeScreenState extends State<HomeScreen> {
                                                     ),
                                                   ],
                                                 ),
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
-                                                    borderRadius: BorderRadius.circular(8),
-                                                  ),
-                                                  child: Row(
-                                                    children: [
-                                                      const Icon(Icons.access_time_rounded, size: 13, color: Color(0xFFFBBF24)),
-                                                      const SizedBox(width: 4),
-                                                      Text(
-                                                        v.preferenciaHoraria,
-                                                        style: GoogleFonts.inter(
-                                                          fontSize: 11.5,
-                                                          fontWeight: FontWeight.w700,
-                                                          color: const Color(0xFFFBBF24),
-                                                        ),
+                                                if (v.preferenciaHoraria.isNotEmpty)
+                                                  Flexible(
+                                                    child: Container(
+                                                      margin: const EdgeInsets.only(left: 8),
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                                                        borderRadius: BorderRadius.circular(8),
                                                       ),
-                                                    ],
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          const Icon(Icons.access_time_rounded, size: 13, color: Color(0xFFFBBF24)),
+                                                          const SizedBox(width: 4),
+                                                          Flexible(
+                                                            child: Text(
+                                                              v.preferenciaHoraria,
+                                                              maxLines: 1,
+                                                              overflow: TextOverflow.ellipsis,
+                                                              style: GoogleFonts.inter(
+                                                                fontSize: 11.5,
+                                                                fontWeight: FontWeight.w700,
+                                                                color: const Color(0xFFFBBF24),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
                                                   ),
-                                                ),
                                               ],
                                             ),
                                             const SizedBox(height: 12),
@@ -478,12 +516,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                               children: [
                                                 const Icon(Icons.location_on_rounded, size: 14, color: Color(0xFF38BDF8)),
                                                 const SizedBox(width: 4),
-                                                Text(
-                                                  v.sector,
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: 12.5,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: const Color(0xFF38BDF8),
+                                                Flexible(
+                                                  child: Text(
+                                                    v.sector,
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 12.5,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: const Color(0xFF38BDF8),
+                                                    ),
                                                   ),
                                                 ),
                                                 const SizedBox(width: 8),

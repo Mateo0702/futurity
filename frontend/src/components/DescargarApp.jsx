@@ -20,10 +20,10 @@ export default function DescargarApp() {
           </div>
 
           <h2 style={styles.appTitle}>
-            Futurity <span style={styles.appTitleGradient}>Atlas</span>
+            Futurity <span style={styles.appTitleGradient}>App</span>
           </h2>
           <p style={styles.appSubtitle}>
-            Aplicación móvil oficial para técnicos de campo. Permite el registro de visitas, gestión de inventario y seguimiento de ubicación en ruta.
+            Aplicación móvil oficial de Futurity para técnicos de campo (potenciada por Atlas). Permite el registro de visitas, gestión de inventario y seguimiento de ubicación en ruta.
           </p>
 
           {/* Download Button */}

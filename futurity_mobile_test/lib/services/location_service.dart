@@ -14,6 +14,11 @@ class LocationTrackingService {
   static bool get isTracking => _isTracking;
   static int? get activeVisitaId => _activeVisitaId;
 
+  static void setActiveVisita(int? idVisita) {
+    _activeVisitaId = idVisita;
+    debugPrint('[GPS Tracker] Visita activa establecida: $_activeVisitaId');
+  }
+
   // Inicializar notificaciones y solicitar permisos
   static Future<void> initNotifications() async {
     try {
@@ -39,6 +44,7 @@ class LocationTrackingService {
 
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
+      debugPrint('[GPS Tracker] Servicio de ubicación deshabilitado en el dispositivo');
       return false;
     }
 
@@ -46,11 +52,13 @@ class LocationTrackingService {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
+        debugPrint('[GPS Tracker] Permiso de ubicación denegado');
         return false;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
+      debugPrint('[GPS Tracker] Permiso de ubicación denegado permanentemente');
       return false;
     }
 
@@ -59,12 +67,22 @@ class LocationTrackingService {
 
   // Iniciar rastreo de GPS continuo en primer plano y segundo plano
   static Future<bool> startTracking([int? idVisita]) async {
+    if (_isTracking && idVisita == null) {
+      debugPrint('[GPS Tracker] Ya se encuentra rastreando activamente.');
+      return true;
+    }
+
     bool hasPermission = await requestPermissions();
     if (!hasPermission) return false;
 
-    stopTracking(); // Detener cualquier sesión previa
+    if (idVisita != null) {
+      _activeVisitaId = idVisita;
+    }
 
-    _activeVisitaId = idVisita ?? 0;
+    if (_isTracking) {
+      debugPrint('[GPS Tracker] Actualizando visita activa a $_activeVisitaId en rastreador existente.');
+      return true;
+    }
 
     _isTracking = true;
 
@@ -74,14 +92,18 @@ class LocationTrackingService {
         desiredAccuracy: LocationAccuracy.high,
         timeLimit: const Duration(seconds: 5),
       );
-      await ApiService.enviarUbicacionGps(_activeVisitaId!, initialPos.latitude, initialPos.longitude);
-
-      debugPrint('[GPS Tracker] Ubicación inicial enviada: ${initialPos.latitude}, ${initialPos.longitude}');
+      // Siempre enviar a ping_global para mapa central
+      await ApiService.enviarPingGlobal(initialPos.latitude, initialPos.longitude);
+      // Si hay visita activa, enviar a rastreo de visita
+      if (_activeVisitaId != null && _activeVisitaId! > 0) {
+        await ApiService.enviarUbicacionGps(_activeVisitaId!, initialPos.latitude, initialPos.longitude);
+      }
+      debugPrint('[GPS Tracker] Ubicación inicial emitida: ${initialPos.latitude}, ${initialPos.longitude}');
     } catch (e) {
       debugPrint('[GPS Tracker] Error obteniendo ubicación inicial: $e');
     }
 
-    // 2. Configurar ajustes con Foreground Service para mantener GPS activo con pantalla apagada o en segundo plano
+    // 2. Configurar Foreground Service para mantener GPS activo con pantalla apagada o en segundo plano
     late LocationSettings locationSettings;
 
     if (defaultTargetPlatform == TargetPlatform.android) {
@@ -91,8 +113,8 @@ class LocationTrackingService {
         forceLocationManager: false,
         intervalDuration: const Duration(seconds: 5),
         foregroundNotificationConfig: const ForegroundNotificationConfig(
-          notificationTitle: "🚗 Futurity - Ruta en Curso",
-          notificationText: "Rastreando tu ubicación en vivo hacia la visita técnica.",
+          notificationTitle: "🟢 Futurity - Operaciones Conectadas",
+          notificationText: "Rastreo satelital activo en tiempo real.",
           notificationIcon: AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
           enableWakeLock: true,
           enableWifiLock: true,
@@ -115,20 +137,23 @@ class LocationTrackingService {
 
     // 3. Stream continuo de GPS
     _positionStreamSubscription = Geolocator.getPositionStream(locationSettings: locationSettings).listen(
-      (Position position) {
-        if (_activeVisitaId != null) {
-          ApiService.enviarUbicacionGps(_activeVisitaId!, position.latitude, position.longitude);
-          debugPrint('[GPS Tracker Background] Coordenadas emitidas: ${position.latitude}, ${position.longitude}');
+      (Position position) async {
+        // Enviar a supervisión central siempre
+        await ApiService.enviarPingGlobal(position.latitude, position.longitude);
+
+        // Si hay una visita activa en ruta, enviar al seguimiento del cliente
+        if (_activeVisitaId != null && _activeVisitaId! > 0) {
+          await ApiService.enviarUbicacionGps(_activeVisitaId!, position.latitude, position.longitude);
         }
       },
       onError: (error) {
-        debugPrint('[GPS Tracker Background] Error en stream de ubicación: $error');
+        debugPrint('[GPS Tracker Stream] Error en stream de ubicación: $error');
       },
     );
 
-    // 4. Temporizador de respaldo cada 12 segundos (para semáforos o vehículos detenidos)
-    _timer = Timer.periodic(const Duration(seconds: 12), (timer) async {
-      if (!_isTracking || _activeVisitaId == null) {
+    // 4. Temporizador de respaldo periódico cada 15 segundos (para semáforos o vehículos detenidos)
+    _timer = Timer.periodic(const Duration(seconds: 15), (timer) async {
+      if (!_isTracking) {
         timer.cancel();
         return;
       }
@@ -137,17 +162,19 @@ class LocationTrackingService {
           desiredAccuracy: LocationAccuracy.high,
           timeLimit: const Duration(seconds: 4),
         );
-        await ApiService.enviarUbicacionGps(_activeVisitaId!, pos.latitude, pos.longitude);
-        debugPrint('[GPS Tracker Tick] Fallback 12s enviado: ${pos.latitude}, ${pos.longitude}');
+        await ApiService.enviarPingGlobal(pos.latitude, pos.longitude);
+        if (_activeVisitaId != null && _activeVisitaId! > 0) {
+          await ApiService.enviarUbicacionGps(_activeVisitaId!, pos.latitude, pos.longitude);
+        }
       } catch (e) {
-        debugPrint('[GPS Tracker Tick] Error en tick: $e');
+        debugPrint('[GPS Tracker Heartbeat] Error en ping periódico: $e');
       }
     });
 
     return true;
   }
 
-  // Detener rastreo
+  // Detener rastreo (solo invocado internamente al cerrar sesión)
   static void stopTracking() {
     _isTracking = false;
     _activeVisitaId = null;
@@ -155,6 +182,6 @@ class LocationTrackingService {
     _positionStreamSubscription = null;
     _timer?.cancel();
     _timer = null;
-    debugPrint('[GPS Tracker] Rastreo detenido.');
+    debugPrint('[GPS Tracker] Rastreo detenido por cierre de sesión.');
   }
 }

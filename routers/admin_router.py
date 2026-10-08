@@ -38,14 +38,14 @@ def api_dashboard_calidad():
     if token and token.startswith("Bearer "):
         from utils_jwt import verify_token
         user = verify_token(token)
-    elif 'user_id' in session:
+    if not user and 'user_id' in session:
         user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
 
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver datos de control de calidad."}), 403
         
     conexion = get_db_connection()
@@ -122,12 +122,13 @@ def api_dashboard_calidad():
 
         # 3. Consulta para la Tabla con Filtros Aplicados
         query_tabla = f"""
-            SELECT id_visita, cliente, sector, tecnico_principal, 
-                   calificacion_estrellas, calificacion_comentario, hora_fin_visita,
-                   encuesta_rapidez, encuesta_atencion, encuesta_explicacion
+            SELECT id_visita, cliente, contrato, telefonos, sector, tecnico_principal, 
+                   calificacion_estrellas, calificacion_comentario, hora_fin_visita, fecha_programada,
+                   encuesta_rapidez, encuesta_atencion, encuesta_explicacion,
+                   arcotel_p1_trato, arcotel_p2_paciencia, arcotel_p3_disponibilidad, arcotel_p4_agilidad, arcotel_p5_tiempo_espera, arcotel_sugerencia
             FROM visitas_tecnicas
             {base_where}
-            ORDER BY hora_fin_visita DESC LIMIT 100
+            ORDER BY hora_fin_visita DESC, id_visita DESC LIMIT 150
         """
         cursor.execute(query_tabla, params)
         resenas_detalladas = cursor.fetchall()
@@ -136,6 +137,52 @@ def api_dashboard_calidad():
         for r in resenas_detalladas:
             if r['hora_fin_visita']:
                 r['hora_fin_visita'] = r['hora_fin_visita'].isoformat()
+            if r.get('fecha_programada'):
+                r['fecha_programada'] = str(r['fecha_programada'])
+
+        # 4. Tabulación Oficial ARCOTEL
+        cursor.execute(f"""
+            SELECT 
+                COUNT(*) AS total_arcotel,
+                -- P1: Trato o actitud
+                COALESCE(SUM(CASE WHEN arcotel_p1_trato = 5 THEN 1 ELSE 0 END), 0) AS p1_5,
+                COALESCE(SUM(CASE WHEN arcotel_p1_trato = 4 THEN 1 ELSE 0 END), 0) AS p1_4,
+                COALESCE(SUM(CASE WHEN arcotel_p1_trato = 3 THEN 1 ELSE 0 END), 0) AS p1_3,
+                COALESCE(SUM(CASE WHEN arcotel_p1_trato = 2 THEN 1 ELSE 0 END), 0) AS p1_2,
+                COALESCE(SUM(CASE WHEN arcotel_p1_trato = 1 THEN 1 ELSE 0 END), 0) AS p1_1,
+                ROUND(AVG(arcotel_p1_trato), 2) AS p1_prom,
+                -- P2: Paciencia quejas y sugerencias
+                COALESCE(SUM(CASE WHEN arcotel_p2_paciencia = 5 THEN 1 ELSE 0 END), 0) AS p2_5,
+                COALESCE(SUM(CASE WHEN arcotel_p2_paciencia = 4 THEN 1 ELSE 0 END), 0) AS p2_4,
+                COALESCE(SUM(CASE WHEN arcotel_p2_paciencia = 3 THEN 1 ELSE 0 END), 0) AS p2_3,
+                COALESCE(SUM(CASE WHEN arcotel_p2_paciencia = 2 THEN 1 ELSE 0 END), 0) AS p2_2,
+                COALESCE(SUM(CASE WHEN arcotel_p2_paciencia = 1 THEN 1 ELSE 0 END), 0) AS p2_1,
+                ROUND(AVG(arcotel_p2_paciencia), 2) AS p2_prom,
+                -- P3: Disponibilidad
+                COALESCE(SUM(CASE WHEN arcotel_p3_disponibilidad = 5 THEN 1 ELSE 0 END), 0) AS p3_5,
+                COALESCE(SUM(CASE WHEN arcotel_p3_disponibilidad = 4 THEN 1 ELSE 0 END), 0) AS p3_4,
+                COALESCE(SUM(CASE WHEN arcotel_p3_disponibilidad = 3 THEN 1 ELSE 0 END), 0) AS p3_3,
+                COALESCE(SUM(CASE WHEN arcotel_p3_disponibilidad = 2 THEN 1 ELSE 0 END), 0) AS p3_2,
+                COALESCE(SUM(CASE WHEN arcotel_p3_disponibilidad = 1 THEN 1 ELSE 0 END), 0) AS p3_1,
+                ROUND(AVG(arcotel_p3_disponibilidad), 2) AS p3_prom,
+                -- P4: Agilidad o rapidez
+                COALESCE(SUM(CASE WHEN arcotel_p4_agilidad = 5 THEN 1 ELSE 0 END), 0) AS p4_5,
+                COALESCE(SUM(CASE WHEN arcotel_p4_agilidad = 4 THEN 1 ELSE 0 END), 0) AS p4_4,
+                COALESCE(SUM(CASE WHEN arcotel_p4_agilidad = 3 THEN 1 ELSE 0 END), 0) AS p4_3,
+                COALESCE(SUM(CASE WHEN arcotel_p4_agilidad = 2 THEN 1 ELSE 0 END), 0) AS p4_2,
+                COALESCE(SUM(CASE WHEN arcotel_p4_agilidad = 1 THEN 1 ELSE 0 END), 0) AS p4_1,
+                ROUND(AVG(arcotel_p4_agilidad), 2) AS p4_prom,
+                -- P5: Tiempo de espera
+                COALESCE(SUM(CASE WHEN arcotel_p5_tiempo_espera = 5 THEN 1 ELSE 0 END), 0) AS p5_5,
+                COALESCE(SUM(CASE WHEN arcotel_p5_tiempo_espera = 4 THEN 1 ELSE 0 END), 0) AS p5_4,
+                COALESCE(SUM(CASE WHEN arcotel_p5_tiempo_espera = 3 THEN 1 ELSE 0 END), 0) AS p5_3,
+                COALESCE(SUM(CASE WHEN arcotel_p5_tiempo_espera = 2 THEN 1 ELSE 0 END), 0) AS p5_2,
+                COALESCE(SUM(CASE WHEN arcotel_p5_tiempo_espera = 1 THEN 1 ELSE 0 END), 0) AS p5_1,
+                ROUND(AVG(arcotel_p5_tiempo_espera), 2) AS p5_prom
+            FROM visitas_tecnicas
+            {base_where} AND arcotel_p1_trato IS NOT NULL
+        """, params)
+        tabulacion_arcotel = cursor.fetchone() or {}
         
         # Traer lista de técnicos para el combobox del filtro
         cursor.execute("SELECT nombre FROM tecnicos WHERE activo = 1")
@@ -146,9 +193,291 @@ def api_dashboard_calidad():
             "kpis": kpis,
             "ranking": ranking_tecnicos,
             "resenas": resenas_detalladas,
+            "tabulacion_arcotel": tabulacion_arcotel,
             "tecnicos": lista_tecnicos,
             "filtros": {'fecha_inicio': fecha_inicio, 'fecha_fin': fecha_fin, 'cliente': cliente_filtro}
         })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@admin_bp.route('/api/admin/control_calidad/exportar_arcotel_excel', methods=['GET'])
+def exportar_arcotel_excel():
+    """Genera archivo Excel oficial de tabulación de calidad para ARCOTEL."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+    import io
+
+    fecha_inicio = request.args.get('fecha_inicio', '')
+    fecha_fin = request.args.get('fecha_fin', '')
+    cliente_filtro = request.args.get('cliente', '').strip()
+    es_instalacion = request.args.get('es_instalacion', '').strip()
+
+    hoy = datetime.now().strftime('%Y-%m-%d')
+    if not fecha_inicio:
+        fecha_inicio = hoy
+    if not fecha_fin:
+        fecha_fin = fecha_inicio
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a BD"}), 500
+
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        base_where = "WHERE fecha_programada >= %s AND fecha_programada <= %s AND arcotel_p1_trato IS NOT NULL"
+        params = [fecha_inicio, fecha_fin]
+
+        if cliente_filtro:
+            base_where += " AND cliente LIKE %s"
+            params.append(f"%{cliente_filtro}%")
+
+        if es_instalacion in ['0', '1']:
+            base_where += " AND es_instalacion = %s"
+            params.append(int(es_instalacion))
+
+        # 1. Obtener tabulación consolidada
+        cursor.execute(f"""
+            SELECT 
+                COUNT(*) AS total_encuestas,
+                COALESCE(SUM(CASE WHEN arcotel_p1_trato = 5 THEN 1 ELSE 0 END), 0) AS p1_5,
+                COALESCE(SUM(CASE WHEN arcotel_p1_trato = 4 THEN 1 ELSE 0 END), 0) AS p1_4,
+                COALESCE(SUM(CASE WHEN arcotel_p1_trato = 3 THEN 1 ELSE 0 END), 0) AS p1_3,
+                COALESCE(SUM(CASE WHEN arcotel_p1_trato = 2 THEN 1 ELSE 0 END), 0) AS p1_2,
+                COALESCE(SUM(CASE WHEN arcotel_p1_trato = 1 THEN 1 ELSE 0 END), 0) AS p1_1,
+                ROUND(AVG(arcotel_p1_trato), 2) AS p1_prom,
+
+                COALESCE(SUM(CASE WHEN arcotel_p2_paciencia = 5 THEN 1 ELSE 0 END), 0) AS p2_5,
+                COALESCE(SUM(CASE WHEN arcotel_p2_paciencia = 4 THEN 1 ELSE 0 END), 0) AS p2_4,
+                COALESCE(SUM(CASE WHEN arcotel_p2_paciencia = 3 THEN 1 ELSE 0 END), 0) AS p2_3,
+                COALESCE(SUM(CASE WHEN arcotel_p2_paciencia = 2 THEN 1 ELSE 0 END), 0) AS p2_2,
+                COALESCE(SUM(CASE WHEN arcotel_p2_paciencia = 1 THEN 1 ELSE 0 END), 0) AS p2_1,
+                ROUND(AVG(arcotel_p2_paciencia), 2) AS p2_prom,
+
+                COALESCE(SUM(CASE WHEN arcotel_p3_disponibilidad = 5 THEN 1 ELSE 0 END), 0) AS p3_5,
+                COALESCE(SUM(CASE WHEN arcotel_p3_disponibilidad = 4 THEN 1 ELSE 0 END), 0) AS p3_4,
+                COALESCE(SUM(CASE WHEN arcotel_p3_disponibilidad = 3 THEN 1 ELSE 0 END), 0) AS p3_3,
+                COALESCE(SUM(CASE WHEN arcotel_p3_disponibilidad = 2 THEN 1 ELSE 0 END), 0) AS p3_2,
+                COALESCE(SUM(CASE WHEN arcotel_p3_disponibilidad = 1 THEN 1 ELSE 0 END), 0) AS p3_1,
+                ROUND(AVG(arcotel_p3_disponibilidad), 2) AS p3_prom,
+
+                COALESCE(SUM(CASE WHEN arcotel_p4_agilidad = 5 THEN 1 ELSE 0 END), 0) AS p4_5,
+                COALESCE(SUM(CASE WHEN arcotel_p4_agilidad = 4 THEN 1 ELSE 0 END), 0) AS p4_4,
+                COALESCE(SUM(CASE WHEN arcotel_p4_agilidad = 3 THEN 1 ELSE 0 END), 0) AS p4_3,
+                COALESCE(SUM(CASE WHEN arcotel_p4_agilidad = 2 THEN 1 ELSE 0 END), 0) AS p4_2,
+                COALESCE(SUM(CASE WHEN arcotel_p4_agilidad = 1 THEN 1 ELSE 0 END), 0) AS p4_1,
+                ROUND(AVG(arcotel_p4_agilidad), 2) AS p4_prom,
+
+                COALESCE(SUM(CASE WHEN arcotel_p5_tiempo_espera = 5 THEN 1 ELSE 0 END), 0) AS p5_5,
+                COALESCE(SUM(CASE WHEN arcotel_p5_tiempo_espera = 4 THEN 1 ELSE 0 END), 0) AS p5_4,
+                COALESCE(SUM(CASE WHEN arcotel_p5_tiempo_espera = 3 THEN 1 ELSE 0 END), 0) AS p5_3,
+                COALESCE(SUM(CASE WHEN arcotel_p5_tiempo_espera = 2 THEN 1 ELSE 0 END), 0) AS p5_2,
+                COALESCE(SUM(CASE WHEN arcotel_p5_tiempo_espera = 1 THEN 1 ELSE 0 END), 0) AS p5_1,
+                ROUND(AVG(arcotel_p5_tiempo_espera), 2) AS p5_prom
+            FROM visitas_tecnicas
+            {base_where}
+        """, params)
+        tab = cursor.fetchone() or {}
+
+        # 2. Detalle de respuestas individuales
+        cursor.execute(f"""
+            SELECT id_visita, fecha_programada, cliente, contrato, telefonos, tecnico_principal,
+                   arcotel_p1_trato, arcotel_p2_paciencia, arcotel_p3_disponibilidad,
+                   arcotel_p4_agilidad, arcotel_p5_tiempo_espera, arcotel_sugerencia,
+                   ROUND((arcotel_p1_trato + arcotel_p2_paciencia + arcotel_p3_disponibilidad + arcotel_p4_agilidad + arcotel_p5_tiempo_espera) / 5.0, 2) AS promedio_cliente
+            FROM visitas_tecnicas
+            {base_where}
+            ORDER BY fecha_programada DESC, id_visita DESC
+        """, params)
+        detalles = cursor.fetchall()
+
+        wb = Workbook()
+
+        font_header_main = Font(name="Calibri", size=13, bold=True, color="FFFFFF")
+        font_title = Font(name="Calibri", size=11, bold=True, color="1F497D")
+        font_data = Font(name="Calibri", size=10)
+        font_bold = Font(name="Calibri", size=10, bold=True)
+
+        fill_navy = PatternFill("solid", fgColor="1F497D")
+        fill_blue_light = PatternFill("solid", fgColor="D9E1F2")
+        fill_green_light = PatternFill("solid", fgColor="E2EFDA")
+
+        thin_border = Border(
+            left=Side(style='thin', color='D9D9D9'),
+            right=Side(style='thin', color='D9D9D9'),
+            top=Side(style='thin', color='D9D9D9'),
+            bottom=Side(style='thin', color='D9D9D9')
+        )
+
+        align_center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        align_left = Alignment(horizontal='left', vertical='center')
+        align_right = Alignment(horizontal='right', vertical='center')
+
+        # --- HOJA 1: TABULACIÓN OFICIAL ---
+        ws1 = wb.active
+        ws1.title = "Tabulación ARCOTEL"
+        ws1.views.sheetView[0].showGridLines = True
+
+        ws1.merge_cells("A1:K1")
+        ws1["A1"] = "FUTURITY S.A. - TABULACIÓN OFICIAL DE ATENCIÓN AL CLIENTE (ARCOTEL)"
+        ws1["A1"].font = font_header_main
+        ws1["A1"].fill = fill_navy
+        ws1["A1"].alignment = align_center
+        ws1.row_dimensions[1].height = 32
+
+        ws1.merge_cells("A2:K2")
+        ws1["A2"] = f"Período evaluado: {fecha_inicio} al {fecha_fin}  |  Total de encuestas válidas: {tab.get('total_encuestas') or 0}"
+        ws1["A2"].font = font_title
+        ws1["A2"].alignment = align_center
+        ws1.row_dimensions[2].height = 20
+
+        headers_matriz = [
+            "No.", "Dimensión", "Aspecto Evaluado",
+            "Muy Bueno (5)", "Bueno (4)", "Aceptable (3)", "Malo (2)", "Muy Malo (1)",
+            "Total Respuestas", "Promedio (1-5)", "% Satisfacción (4+5)"
+        ]
+        ws1.row_dimensions[4].height = 28
+        for col_idx, h in enumerate(headers_matriz, 1):
+            cell = ws1.cell(row=4, column=col_idx, value=h)
+            cell.font = font_bold
+            cell.fill = fill_blue_light
+            cell.alignment = align_center
+            cell.border = thin_border
+
+        preguntas_meta = [
+            (1, "AMABILIDAD", "1. El trato o actitud del personal hacia el usuario.", "p1"),
+            (2, "AMABILIDAD", "2. La paciencia para atender las quejas y sugerencias de los usuarios.", "p2"),
+            (3, "DISPONIBILIDAD", "3. La disponibilidad del personal para ayudarle a solucionar sus requerimientos.", "p3"),
+            (4, "RAPIDEZ", "4. Agilidad o rapidez para resolver las consultas o reclamos formulados por el usuario.", "p4"),
+            (5, "RAPIDEZ", "5. Tiempo de espera para ser atendido, al momento de comunicar un reclamo o queja.", "p5"),
+        ]
+
+        for idx, (num, dim, text, prefix) in enumerate(preguntas_meta, 5):
+            c5 = tab.get(f"{prefix}_5") or 0
+            c4 = tab.get(f"{prefix}_4") or 0
+            c3 = tab.get(f"{prefix}_3") or 0
+            c2 = tab.get(f"{prefix}_2") or 0
+            c1 = tab.get(f"{prefix}_1") or 0
+            prom = tab.get(f"{prefix}_prom") or 0.0
+            sum_resp = c5 + c4 + c3 + c2 + c1
+            pct_sat = round(((c5 + c4) / sum_resp * 100), 1) if sum_resp > 0 else 0.0
+
+            ws1.row_dimensions[idx].height = 24
+            ws1.cell(row=idx, column=1, value=num).alignment = align_center
+            ws1.cell(row=idx, column=2, value=dim).alignment = align_center
+            ws1.cell(row=idx, column=3, value=text).alignment = align_left
+
+            ws1.cell(row=idx, column=4, value=c5).alignment = align_center
+            ws1.cell(row=idx, column=5, value=c4).alignment = align_center
+            ws1.cell(row=idx, column=6, value=c3).alignment = align_center
+            ws1.cell(row=idx, column=7, value=c2).alignment = align_center
+            ws1.cell(row=idx, column=8, value=c1).alignment = align_center
+            ws1.cell(row=idx, column=9, value=sum_resp).alignment = align_center
+            ws1.cell(row=idx, column=10, value=prom).alignment = align_center
+            cell_sat = ws1.cell(row=idx, column=11, value=f"{pct_sat}%")
+            cell_sat.alignment = align_center
+            cell_sat.font = font_bold
+
+            for col_i in range(1, 12):
+                c = ws1.cell(row=idx, column=col_i)
+                c.border = thin_border
+                c.font = font_data if col_i != 11 else font_bold
+
+        row_tot = 10
+        ws1.row_dimensions[row_tot].height = 26
+        ws1.merge_cells(f"A{row_tot}:C{row_tot}")
+        ws1.cell(row=row_tot, column=1, value="PROMEDIO Y TOTALES GENERALES:").alignment = align_right
+        ws1.cell(row=row_tot, column=1).font = font_bold
+        ws1.cell(row=row_tot, column=1).fill = fill_green_light
+
+        for col_i, formula in [
+            (4, "=SUM(D5:D9)"),
+            (5, "=SUM(E5:E9)"),
+            (6, "=SUM(F5:F9)"),
+            (7, "=SUM(G5:G9)"),
+            (8, "=SUM(H5:H9)"),
+            (9, "=SUM(I5:I9)"),
+            (10, "=ROUND(AVERAGE(J5:J9), 2)"),
+            (11, "=ROUND(AVERAGE(K5:K9), 1)")
+        ]:
+            cell_f = ws1.cell(row=row_tot, column=col_i, value=formula)
+            cell_f.font = font_bold
+            cell_f.alignment = align_center
+            cell_f.fill = fill_green_light
+            cell_f.border = thin_border
+
+        for col_i in range(1, 4):
+            ws1.cell(row=row_tot, column=col_i).fill = fill_green_light
+            ws1.cell(row=row_tot, column=col_i).border = thin_border
+
+        col_widths1 = [6, 18, 55, 14, 12, 14, 12, 14, 16, 15, 20]
+        for i, w in enumerate(col_widths1, 1):
+            ws1.column_dimensions[get_column_letter(i)].width = w
+
+        # --- HOJA 2: DETALLE DE RESPUESTAS ---
+        ws2 = wb.create_sheet(title="Detalle de Respuestas")
+        ws2.views.sheetView[0].showGridLines = True
+
+        ws2.merge_cells("A1:M1")
+        ws2["A1"] = f"DETALLE DE ENCUESTAS INDIVIDUALES ({fecha_inicio} al {fecha_fin})"
+        ws2["A1"].font = font_header_main
+        ws2["A1"].fill = fill_navy
+        ws2["A1"].alignment = align_center
+        ws2.row_dimensions[1].height = 28
+
+        headers_det = [
+            "Ticket", "Fecha", "Cliente", "Contrato", "Teléfono", "Técnico Asignado",
+            "P1: Trato", "P2: Paciencia", "P3: Disponibilidad", "P4: Agilidad", "P5: Tiempo Espera",
+            "Promedio (1-5)", "Sugerencia del Cliente"
+        ]
+        ws2.row_dimensions[2].height = 24
+        for col_idx, h in enumerate(headers_det, 1):
+            cell = ws2.cell(row=2, column=col_idx, value=h)
+            cell.font = font_bold
+            cell.fill = fill_blue_light
+            cell.alignment = align_center
+            cell.border = thin_border
+
+        for r_idx, d in enumerate(detalles, 3):
+            ws2.row_dimensions[r_idx].height = 20
+            ws2.cell(row=r_idx, column=1, value=f"#VT-{d['id_visita']}").alignment = align_center
+            ws2.cell(row=r_idx, column=2, value=str(d.get('fecha_programada') or '—')).alignment = align_center
+            ws2.cell(row=r_idx, column=3, value=d.get('cliente') or '—').alignment = align_left
+            ws2.cell(row=r_idx, column=4, value=d.get('contrato') or 'S/C').alignment = align_center
+            ws2.cell(row=r_idx, column=5, value=d.get('telefonos') or '—').alignment = align_center
+            ws2.cell(row=r_idx, column=6, value=d.get('tecnico_principal') or '—').alignment = align_left
+            ws2.cell(row=r_idx, column=7, value=d.get('arcotel_p1_trato')).alignment = align_center
+            ws2.cell(row=r_idx, column=8, value=d.get('arcotel_p2_paciencia')).alignment = align_center
+            ws2.cell(row=r_idx, column=9, value=d.get('arcotel_p3_disponibilidad')).alignment = align_center
+            ws2.cell(row=r_idx, column=10, value=d.get('arcotel_p4_agilidad')).alignment = align_center
+            ws2.cell(row=r_idx, column=11, value=d.get('arcotel_p5_tiempo_espera')).alignment = align_center
+            ws2.cell(row=r_idx, column=12, value=d.get('promedio_cliente')).alignment = align_center
+            ws2.cell(row=r_idx, column=13, value=d.get('arcotel_sugerencia') or '—').alignment = align_left
+
+            for col_i in range(1, 14):
+                c = ws2.cell(row=r_idx, column=col_i)
+                c.border = thin_border
+                c.font = font_data
+
+        col_widths2 = [12, 13, 30, 14, 15, 24, 12, 14, 16, 13, 16, 14, 45]
+        for i, w in enumerate(col_widths2, 1):
+            ws2.column_dimensions[get_column_letter(i)].width = w
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = f"Tabulacion_ARCOTEL_{fecha_inicio}_al_{fecha_fin}.xlsx"
+        return send_file(
+            output,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=filename
+        )
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
@@ -162,14 +491,14 @@ def auditoria_cliente():
     if token and token.startswith("Bearer "):
         from utils_jwt import verify_token
         user = verify_token(token)
-    elif 'user_id' in session:
+    if not user and 'user_id' in session:
         user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'role': session.get('user_role')}
 
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para realizar auditorías de clientes."}), 403
 
     contrato = request.args.get('contrato', '').strip()
@@ -315,52 +644,79 @@ def api_tecnicos_ubicaciones():
     if token and token.startswith("Bearer "):
         from utils_jwt import verify_token
         user = verify_token(token)
-    elif 'user_id' in session:
+    if not user and 'user_id' in session:
         user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
 
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'BODEGA', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver la ubicación de los técnicos."}), 403
         
-    active_area = request.args.get('area') or session.get('active_area', 'SOPORTE')
+    raw_area = request.args.get('area') or session.get('active_area', 'TODOS')
+    active_area = raw_area.strip().upper()
     conexion = get_db_connection()
     if not conexion:
         return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
         
     cursor = conexion.cursor(dictionary=True)
     try:
-        # Consulta para traer la ubicación actual global de cada técnico y su estado de conexión
-        query = """
-            SELECT id_tecnico,
-                   nombre AS tecnico, 
-                   latitud_actual AS lat, 
-                   longitud_actual AS lon, 
-                   ultima_conexion AS ultima_actualizacion, 
-                   estado_actividad AS estado, 
-                   foto_perfil,
-                   foto_vehiculo,
-                   placa_vehiculo,
-                   alerta_panico,
-                   mensaje_panico,
+        if active_area in ['INSTALACIONES', 'SOPORTE']:
+            area_filter = "AND t.area_trabajo = %s"
+            params = (active_area,)
+        else:
+            area_filter = ""
+            params = ()
+
+        # Consulta para traer la ubicación actual global de cada técnico, su estado de conexión
+        # y qué visita/orden tiene en curso actualmente (Instalación o Soporte)
+        query = f"""
+            SELECT t.id_tecnico,
+                   t.nombre AS tecnico, 
+                   t.area_trabajo,
+                   t.latitud_actual AS lat, 
+                   t.longitud_actual AS lon, 
+                   t.ultima_conexion AS ultima_actualizacion, 
+                   t.estado_actividad AS estado, 
+                   t.foto_perfil,
+                   t.foto_vehiculo,
+                   t.placa_vehiculo,
+                   t.alerta_panico,
+                   t.mensaje_panico,
                    CASE 
-                      WHEN latitud_actual IS NOT NULL 
-                       AND longitud_actual IS NOT NULL 
-                       AND estado_actividad NOT IN ('Desconectado', 'DESCONECTADO', 'Inactivo', 'INACTIVO') 
-                       AND (ultima_conexion >= DATE_SUB(NOW(), INTERVAL 15 MINUTE) OR alerta_panico = 1) 
+                      WHEN t.latitud_actual IS NOT NULL 
+                       AND t.longitud_actual IS NOT NULL 
+                       AND t.estado_actividad NOT IN ('Desconectado', 'DESCONECTADO', 'Inactivo', 'INACTIVO') 
+                       AND (t.ultima_conexion >= DATE_SUB(NOW(), INTERVAL 15 MINUTE) OR t.alerta_panico = 1) 
                         THEN 1 
                       ELSE 0 
-                    END AS conectado
-            FROM tecnicos
-            WHERE activo = 1 
-              AND area_trabajo = %s
-              AND UPPER(nombre) NOT LIKE '%NO TECNICO%'
-              AND UPPER(nombre) NOT LIKE '%TECNOLOGIA%'
-              AND UPPER(nombre) NOT LIKE '%TECNOLOGÍA%'
+                    END AS conectado,
+                   v.id_visita AS visita_activa_id,
+                   v.cliente AS visita_activa_cliente,
+                   v.contrato AS visita_activa_contrato,
+                   v.servicio AS visita_activa_servicio,
+                   v.problema AS visita_activa_problema,
+                   v.sector AS visita_activa_sector,
+                   v.direccion AS visita_activa_direccion,
+                   v.estado AS visita_activa_estado,
+                   v.es_instalacion AS visita_activa_es_instalacion
+            FROM tecnicos t
+            LEFT JOIN visitas_tecnicas v ON v.id_visita = (
+                SELECT MAX(v2.id_visita) 
+                FROM visitas_tecnicas v2 
+                WHERE v2.tecnico_principal = t.nombre 
+                  AND v2.fecha_programada = CURDATE() 
+                  AND v2.estado IN ('EN_RUTA', 'EN_PROGRESO')
+            )
+            WHERE t.activo = 1 
+              {area_filter}
+              AND UPPER(t.nombre) NOT LIKE '%NO TECNICO%'
+              AND UPPER(t.nombre) NOT LIKE '%TECNOLOGIA%'
+              AND UPPER(t.nombre) NOT LIKE '%TECNOLOGÍA%'
+            ORDER BY t.area_trabajo DESC, t.nombre ASC
         """
-        cursor.execute(query, (active_area,))
+        cursor.execute(query, params)
         ubicaciones = cursor.fetchall()
         
         # Formatear fecha/hora a ISO para serialización JSON
@@ -368,7 +724,7 @@ def api_tecnicos_ubicaciones():
             if u['ultima_actualizacion']:
                 u['ultima_actualizacion'] = u['ultima_actualizacion'].isoformat()
             
-        return jsonify({"status": "ok", "ubicaciones": ubicaciones})
+        return jsonify({"status": "ok", "ubicaciones": ubicaciones, "area_aplicada": active_area})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
@@ -377,12 +733,24 @@ def api_tecnicos_ubicaciones():
 
 @admin_bp.route('/api/admin/metricas_globales', methods=['GET'])
 def metricas_globales():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    if not user and 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'role': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    
+    user_role = user.get('role') or user.get('rol')
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas globales."}), 403
 
-    active_area = session.get('active_area', 'SOPORTE')
+    active_area = request.args.get('area') or session.get('active_area')
+    if not active_area:
+        active_area = 'INSTALACIONES' if user_role == 'CALIDAD' else 'SOPORTE'
     es_instalacion_val = 1 if active_area == 'INSTALACIONES' else 0
 
     # Obtener parámetros de filtros (hoy y hace 3 meses por defecto si no se especifican)
@@ -483,16 +851,16 @@ def metricas_globales():
         # 4. Top 5 Problemas comunes (o Productos en caso de instalación)
         if es_instalacion_val == 1:
             query_problemas = f"""
-                SELECT producto as problema, COUNT(*) as cantidad
+                SELECT COALESCE(NULLIF(producto, ''), 'Sin Producto') as problema, COUNT(*) as cantidad
                 FROM visitas_tecnicas
                 {where_clause}
-                GROUP BY producto
+                GROUP BY problema
                 ORDER BY cantidad DESC
                 LIMIT 5
             """
         else:
             query_problemas = f"""
-                SELECT problema, COUNT(*) as cantidad
+                SELECT COALESCE(NULLIF(problema, ''), 'Sin Especificar') as problema, COUNT(*) as cantidad
                 FROM visitas_tecnicas
                 {where_clause}
                 GROUP BY problema
@@ -502,12 +870,13 @@ def metricas_globales():
         cursor.execute(query_problemas, params)
         top_problemas = cursor.fetchall()
         
-        # 5. Evolución semanal
+        # 5. Evolución semanal (Total vs Completadas)
         query_evolucion = f"""
             SELECT 
                 DATE_FORMAT(fecha_programada, '%Y-%u') as semana,
                 MIN(fecha_programada) as inicio_semana,
-                COUNT(*) as cantidad
+                COUNT(*) as total,
+                SUM(CASE WHEN estado IN ('FINALIZADA', 'SOLVENTADA_REMOTA') THEN 1 ELSE 0 END) as completadas
             FROM visitas_tecnicas
             {where_clause}
             GROUP BY semana
@@ -520,9 +889,13 @@ def metricas_globales():
         for row in evolucion_raw:
             fecha_dt = row['inicio_semana']
             fecha_str = fecha_dt.strftime('%d/%m') if isinstance(fecha_dt, (datetime, date)) else str(fecha_dt)
+            tot = int(row['total'] or 0)
+            comp = int(row['completadas'] or 0)
             evolucion.append({
                 'label': f"Sem {fecha_str}",
-                'cantidad': row['cantidad']
+                'total': tot,
+                'completadas': comp,
+                'cantidad': tot
             })
 
         # 6. Obtener lista de técnicos activos para los filtros (excluyendo no técnico y tecnología)
@@ -539,6 +912,7 @@ def metricas_globales():
             'estados': estados,
             'top_clientes': top_clientes,
             'top_problemas': top_problemas,
+            'problemas': [{'motivo': p['problema'], 'problema': p['problema'], 'cantidad': p['cantidad']} for p in top_problemas],
             'evolucion': evolucion,
             'tecnicos': tecnicos
         }
@@ -597,14 +971,14 @@ def reporte_pdf():
     if token and token.startswith("Bearer "):
         from utils_jwt import verify_token
         user = verify_token(token)
-    elif 'user_id' in session:
+    if not user and 'user_id' in session:
         user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'role': session.get('user_role')}
 
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para descargar reportes."}), 403
 
     contrato = request.args.get('contrato', '').strip()
@@ -1875,7 +2249,10 @@ def preview_reporte_dia_siguiente():
                 problema,
                 estado
             FROM visitas_tecnicas
-            WHERE fecha_programada = %s AND (estado = 'PENDIENTE' OR estado IS NULL)
+            WHERE fecha_programada = %s 
+              AND (estado = 'PENDIENTE' OR estado IS NULL)
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
+              AND (problema NOT LIKE '%INSTALACION NUEVA%' AND problema NOT LIKE '%INSTALACIÓN NUEVA%' OR problema IS NULL)
         """
         cursor.execute(query, (target_date,))
         rows = cursor.fetchall()
@@ -1961,7 +2338,10 @@ def download_excel_reporte_dia_siguiente():
                 problema,
                 estado
             FROM visitas_tecnicas
-            WHERE fecha_programada = %s AND (estado = 'PENDIENTE' OR estado IS NULL)
+            WHERE fecha_programada = %s 
+              AND (estado = 'PENDIENTE' OR estado IS NULL)
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
+              AND (problema NOT LIKE '%INSTALACION NUEVA%' AND problema NOT LIKE '%INSTALACIÓN NUEVA%' OR problema IS NULL)
         """
         cursor.execute(query, (target_date,))
         rows = cursor.fetchall()
@@ -2029,6 +2409,156 @@ def download_excel_reporte_dia_siguiente():
         )
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+# =========================================================================
+# REPORTES REGULATORIOS ARCOTEL (GPON, HFC, VELOCIDAD)
+# =========================================================================
+
+@admin_bp.route('/api/admin/reportes_arcotel/preview', methods=['GET'])
+def preview_reportes_arcotel():
+    token = request.headers.get('Authorization') or request.args.get('token')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif token and not token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(f"Bearer {token}")
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
+
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+
+    try:
+        hoy = date.today()
+        mes = int(request.args.get('mes', hoy.month))
+        anio = int(request.args.get('anio', hoy.year))
+        excluir_param = request.args.get('excluir_24h', '1').lower()
+        excluir_24h = (excluir_param in ['1', 'true', 'si'])
+
+        import reportes_arcotel
+        datos = reportes_arcotel.obtener_datos_arcotel(mes, anio, excluir_24h)
+        return jsonify({"status": "ok", **datos})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@admin_bp.route('/api/admin/reportes_arcotel/descargar', methods=['GET'])
+def descargar_reportes_arcotel():
+    token = request.headers.get('Authorization') or request.args.get('token')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif token and not token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(f"Bearer {token}")
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
+
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+
+    try:
+        hoy = date.today()
+        mes = int(request.args.get('mes', hoy.month))
+        anio = int(request.args.get('anio', hoy.year))
+        tipo = request.args.get('tipo', 'zip').lower().strip()
+        excluir_param = request.args.get('excluir_24h', '1').lower()
+        excluir_24h = (excluir_param in ['1', 'true', 'si'])
+
+        import reportes_arcotel
+        mes_str = reportes_arcotel.MESES_NOMBRES.get(mes, f"MES_{mes}")
+        mes_abrev = reportes_arcotel.MESES_ABREV.get(mes, f"M{mes}")
+
+        if tipo == 'zip':
+            zip_buf = reportes_arcotel.generar_zip_arcotel(mes, anio, excluir_24h)
+            filename = f"REPORTES_ARCOTEL_{mes_str}_{anio}.zip"
+            return send_file(
+                zip_buf,
+                mimetype='application/zip',
+                as_attachment=True,
+                download_name=filename
+            )
+        
+        datos = reportes_arcotel.obtener_datos_arcotel(mes, anio, excluir_24h)
+        if tipo == 'gpon':
+            excel_buf = reportes_arcotel.generar_excel_arcotel_gpon(datos['gpon'], mes, anio)
+            filename = f"GPON-{mes_str}-{anio}.xlsx"
+        elif tipo == 'hfc':
+            excel_buf = reportes_arcotel.generar_excel_arcotel_hfc(datos['hfc'], mes, anio)
+            filename = f"HFC_{mes_abrev}_{anio}.xlsx"
+        elif tipo == 'velocidad':
+            excel_buf = reportes_arcotel.generar_excel_arcotel_velocidad(datos['velocidad'], mes, anio)
+            filename = f"VELOCIDAD-{mes_str}-{anio}.xlsx"
+        else:
+            return jsonify({"status": "error", "message": "Tipo de reporte inválido (gpon, hfc, velocidad, zip)"}), 400
+
+        return send_file(
+            excel_buf,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@admin_bp.route('/api/admin/reportes_arcotel/descargar_personalizado', methods=['POST'])
+def descargar_reporte_arcotel_personalizado():
+    token = request.headers.get('Authorization') or request.args.get('token')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif token and not token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(f"Bearer {token}")
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
+
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+
+    try:
+        body = request.get_json() or {}
+        tipo = body.get('tipo', 'gpon').lower().strip()
+        mes = int(body.get('mes', date.today().month))
+        anio = int(body.get('anio', date.today().year))
+        filas = body.get('filas', [])
+
+        import reportes_arcotel
+        mes_str = reportes_arcotel.MESES_NOMBRES.get(mes, f"MES_{mes}")
+        mes_abrev = reportes_arcotel.MESES_ABREV.get(mes, f"M{mes}")
+
+        # Asegurar formato de fechas
+        for f in filas:
+            for k in ['fecha_registro', 'hora_fin_visita']:
+                if f.get(k):
+                    f[k] = reportes_arcotel.parse_datetime_flexible(f[k])
+
+        if tipo == 'gpon':
+            excel_buf = reportes_arcotel.generar_excel_arcotel_gpon(filas, mes, anio)
+            filename = f"GPON-{mes_str}-{anio}.xlsx"
+        elif tipo == 'hfc':
+            excel_buf = reportes_arcotel.generar_excel_arcotel_hfc(filas, mes, anio)
+            filename = f"HFC_{mes_abrev}_{anio}.xlsx"
+        elif tipo == 'velocidad':
+            excel_buf = reportes_arcotel.generar_excel_arcotel_velocidad(filas, mes, anio)
+            filename = f"VELOCIDAD-{mes_str}-{anio}.xlsx"
+        else:
+            return jsonify({"status": "error", "message": "Tipo de reporte inválido"}), 400
+
+        return send_file(
+            excel_buf,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 
 def map_solucion(sol):
@@ -2121,6 +2651,21 @@ def preview_cuadro_mando():
         cursor.execute("SELECT nombre FROM callcenter WHERE activo = 1 ORDER BY nombre ASC")
         agentes_list = [row['nombre'] for row in cursor.fetchall()]
         
+        # 1.5. Consultar si existe configuración previamente guardada para esta fecha
+        cursor.execute("""
+            SELECT agente_a, agente_b, agente_c, horario_a, horario_b, horario_c, soporte_a, soporte_b, soporte_c
+            FROM cuadro_mando_config
+            WHERE fecha = %s
+        """, (fecha,))
+        saved_config = cursor.fetchone() or {}
+        
+        horario_a = saved_config.get('horario_a') or '7 AM - 4 PM'
+        horario_b = saved_config.get('horario_b') or '2 PM - 9 PM'
+        horario_c = saved_config.get('horario_c') or '10 AM - 8 PM'
+        soporte_a = saved_config.get('soporte_a') if saved_config.get('soporte_a') is not None else 0
+        soporte_b = saved_config.get('soporte_b') if saved_config.get('soporte_b') is not None else 0
+        soporte_c = saved_config.get('soporte_c') if saved_config.get('soporte_c') is not None else 0
+
         # 2. Intentar auto-detectar los 3 agentes más activos en esta fecha
         cursor.execute("""
             SELECT agente, COUNT(*) as c 
@@ -2145,9 +2690,9 @@ def preview_cuadro_mando():
         while len(detected_agentes) < 3:
             detected_agentes.append('Sin asignar')
             
-        agente_a = request.args.get('agente_a', detected_agentes[0])
-        agente_b = request.args.get('agente_b', detected_agentes[1])
-        agente_c = request.args.get('agente_c', detected_agentes[2])
+        agente_a = request.args.get('agente_a') or saved_config.get('agente_a') or detected_agentes[0]
+        agente_b = request.args.get('agente_b') or saved_config.get('agente_b') or detected_agentes[1]
+        agente_c = request.args.get('agente_c') or saved_config.get('agente_c') or detected_agentes[2]
         
         agentes = [agente_a, agente_b, agente_c]
         
@@ -2201,16 +2746,18 @@ def preview_cuadro_mando():
             """, (fecha, ag))
             atenciones_data['otros'][i] = cursor.fetchone()['total'] or 0
             
-        # 4. KPIs de Visitas Técnicas de Campo (derecha)
+        # 4. KPIs de Visitas Técnicas de Campo (derecha - Solo Daños/Soporte)
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
             WHERE fecha_programada = %s AND DATE(fecha_registro) < %s AND (estado != 'CANCELADA' OR estado IS NULL)
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
         """, (fecha, fecha))
         kpi_pendientes_anteriores = cursor.fetchone()['total'] or 0
         
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
             WHERE COALESCE(DATE(hora_fin_visita), fecha_programada) = %s AND estado = 'FINALIZADA'
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
               AND tecnico_principal IS NOT NULL 
               AND tecnico_principal NOT IN ('', 'NO TECNICO', 'SIN ASIGNAR', 'NONE', 'NAN')
               AND solucion_tecnico IS NOT NULL 
@@ -2226,17 +2773,19 @@ def preview_cuadro_mando():
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
             WHERE fecha_programada = %s AND (estado = 'PENDIENTE' OR estado IS NULL)
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
         """, (manana,))
         kpi_pendientes_manana = cursor.fetchone()['total'] or 0
         
         kpi_generadas_hoy = max(0, kpi_atendidas_hoy + kpi_pendientes_manana - kpi_pendientes_anteriores)
         kpi_total_carga = kpi_pendientes_anteriores + kpi_generadas_hoy
         
-        # 5. Listados de problemas / soluciones
+        # 5. Listados de problemas / soluciones (Solo Daños/Soporte)
         cursor.execute("""
             SELECT solucion_tecnico, COUNT(*) as cantidad
             FROM visitas_tecnicas
             WHERE COALESCE(DATE(hora_fin_visita), fecha_programada) = %s AND estado = 'FINALIZADA'
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
               AND tecnico_principal IS NOT NULL 
               AND tecnico_principal NOT IN ('', 'NO TECNICO', 'SIN ASIGNAR', 'NONE', 'NAN')
               AND solucion_tecnico IS NOT NULL 
@@ -2274,6 +2823,7 @@ def preview_cuadro_mando():
             SELECT problema, COUNT(*) as cantidad
             FROM visitas_tecnicas
             WHERE fecha_programada = %s AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
               AND problema IS NOT NULL AND problema != ''
             GROUP BY problema
         """, (manana,))
@@ -2308,6 +2858,12 @@ def preview_cuadro_mando():
             "agente_a": agente_a,
             "agente_b": agente_b,
             "agente_c": agente_c,
+            "horario_a": horario_a,
+            "horario_b": horario_b,
+            "horario_c": horario_c,
+            "soporte_a": soporte_a,
+            "soporte_b": soporte_b,
+            "soporte_c": soporte_c,
             "atenciones": atenciones_data,
             "kpis": {
                 "pendientes_anteriores": kpi_pendientes_anteriores,
@@ -2320,6 +2876,78 @@ def preview_cuadro_mando():
             "problemas": problemas_dict
         })
     except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@admin_bp.route('/api/admin/cuadro_mando/guardar_config', methods=['POST'])
+def guardar_cuadro_mando_config():
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    elif 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'nombre': session.get('user_name', 'Admin')}
+
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+
+    data = request.get_json() or {}
+    fecha = data.get('fecha')
+    if not fecha:
+        return jsonify({"status": "error", "message": "Fecha requerida"}), 400
+
+    agente_a = data.get('agente_a', 'CC. Luis Saenz')
+    agente_b = data.get('agente_b', 'CC. Guissella Quezada')
+    agente_c = data.get('agente_c', 'CC. Mateo Samaniego')
+    horario_a = data.get('horario_a', '7 AM - 4 PM')
+    horario_b = data.get('horario_b', '2 PM - 9 PM')
+    horario_c = data.get('horario_c', '10 AM - 8 PM')
+    
+    try:
+        soporte_a = int(data.get('soporte_a', 0))
+    except (ValueError, TypeError):
+        soporte_a = 0
+    try:
+        soporte_b = int(data.get('soporte_b', 0))
+    except (ValueError, TypeError):
+        soporte_b = 0
+    try:
+        soporte_c = int(data.get('soporte_c', 0))
+    except (ValueError, TypeError):
+        soporte_c = 0
+
+    usuario_nombre = user.get('nombre') or user.get('usuario') or f"User-{user.get('id_usuario', 'admin')}"
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de base de datos"}), 500
+
+    try:
+        cursor = conexion.cursor()
+        cursor.execute("""
+            INSERT INTO cuadro_mando_config
+            (fecha, agente_a, agente_b, agente_c, horario_a, horario_b, horario_c, soporte_a, soporte_b, soporte_c, actualizado_por)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                agente_a = VALUES(agente_a),
+                agente_b = VALUES(agente_b),
+                agente_c = VALUES(agente_c),
+                horario_a = VALUES(horario_a),
+                horario_b = VALUES(horario_b),
+                horario_c = VALUES(horario_c),
+                soporte_a = VALUES(soporte_a),
+                soporte_b = VALUES(soporte_b),
+                soporte_c = VALUES(soporte_c),
+                actualizado_por = VALUES(actualizado_por)
+        """, (fecha, agente_a, agente_b, agente_c, horario_a, horario_b, horario_c, soporte_a, soporte_b, soporte_c, usuario_nombre))
+        conexion.commit()
+        return jsonify({"status": "ok", "message": "Configuración guardada correctamente"})
+    except Exception as e:
+        conexion.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()
@@ -2379,45 +3007,51 @@ def download_excel_cuadro_mando():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     if request.method == 'POST':
-        data = request.get_json() or {}
-        fecha = data.get('fecha', date.today().isoformat())
-        agente_a = data.get('agente_a', 'CC. Luis Saenz')
-        agente_b = data.get('agente_b', 'CC. Guissella Quezada')
-        agente_c = data.get('agente_c', 'CC. Mateo Samaniego')
-        horario_a = data.get('horario_a', '7 AM - 4 PM')
-        horario_b = data.get('horario_b', '2 PM - 9 PM')
-        horario_c = data.get('horario_c', '10 AM - 8 PM')
+        req_data = request.get_json() or {}
     else:
-        fecha = request.args.get('fecha', date.today().isoformat())
-        agente_a = request.args.get('agente_a', 'CC. Luis Saenz')
-        agente_b = request.args.get('agente_b', 'CC. Guissella Quezada')
-        agente_c = request.args.get('agente_c', 'CC. Mateo Samaniego')
-        horario_a = request.args.get('horario_a', '7 AM - 4 PM')
-        horario_b = request.args.get('horario_b', '2 PM - 9 PM')
-        horario_c = request.args.get('horario_c', '10 AM - 8 PM')
-    
-    try:
-        soporte_a = int(data.get('soporte_a', 0))
-    except:
-        soporte_a = 0
-        
-    try:
-        soporte_b = int(data.get('soporte_b', 0))
-    except:
-        soporte_b = 0
-        
-    try:
-        soporte_c = int(data.get('soporte_c', 0))
-    except:
-        soporte_c = 0
-        
+        req_data = request.args.to_dict()
+
+    fecha = req_data.get('fecha', date.today().isoformat())
+
     conexion = get_db_connection()
     if not conexion:
         return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
         
     try:
         cursor = conexion.cursor(dictionary=True)
-        
+        # Consultar si existe configuración guardada para esta fecha
+        cursor.execute("""
+            SELECT agente_a, agente_b, agente_c, horario_a, horario_b, horario_c, soporte_a, soporte_b, soporte_c
+            FROM cuadro_mando_config
+            WHERE fecha = %s
+        """, (fecha,))
+        saved = cursor.fetchone() or {}
+
+        agente_a = req_data.get('agente_a') or saved.get('agente_a') or 'CC. Luis Saenz'
+        agente_b = req_data.get('agente_b') or saved.get('agente_b') or 'CC. Guissella Quezada'
+        agente_c = req_data.get('agente_c') or saved.get('agente_c') or 'CC. Mateo Samaniego'
+
+        horario_a = req_data.get('horario_a') or saved.get('horario_a') or '7 AM - 4 PM'
+        horario_b = req_data.get('horario_b') or saved.get('horario_b') or '2 PM - 9 PM'
+        horario_c = req_data.get('horario_c') or saved.get('horario_c') or '10 AM - 8 PM'
+
+        def parse_soporte(val, fallback):
+            if val is not None and str(val).strip() != '':
+                try:
+                    return int(val)
+                except (ValueError, TypeError):
+                    pass
+            if fallback is not None:
+                try:
+                    return int(fallback)
+                except (ValueError, TypeError):
+                    pass
+            return 0
+
+        soporte_a = parse_soporte(req_data.get('soporte_a'), saved.get('soporte_a'))
+        soporte_b = parse_soporte(req_data.get('soporte_b'), saved.get('soporte_b'))
+        soporte_c = parse_soporte(req_data.get('soporte_c'), saved.get('soporte_c'))
+
         # 1. Contar gestiones por agente y categoría
         agentes = [agente_a, agente_b, agente_c]
         atenciones_data = {
@@ -2469,16 +3103,18 @@ def download_excel_cuadro_mando():
             """, (fecha, ag))
             atenciones_data['otros'][i] = cursor.fetchone()['total'] or 0
             
-        # 2. KPIs de Visitas Técnicas de Campo
+        # 2. KPIs de Visitas Técnicas de Campo (Solo Daños/Soporte)
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
             WHERE fecha_programada = %s AND DATE(fecha_registro) < %s AND (estado != 'CANCELADA' OR estado IS NULL)
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
         """, (fecha, fecha))
         kpi_pendientes_anteriores = cursor.fetchone()['total'] or 0
         
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
             WHERE COALESCE(DATE(hora_fin_visita), fecha_programada) = %s AND estado = 'FINALIZADA'
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
               AND tecnico_principal IS NOT NULL 
               AND tecnico_principal NOT IN ('', 'NO TECNICO', 'SIN ASIGNAR', 'NONE', 'NAN')
               AND solucion_tecnico IS NOT NULL 
@@ -2494,17 +3130,19 @@ def download_excel_cuadro_mando():
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
             WHERE fecha_programada = %s AND (estado = 'PENDIENTE' OR estado IS NULL)
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
         """, (manana,))
         kpi_pendientes_manana = cursor.fetchone()['total'] or 0
         
         kpi_generadas_hoy = max(0, kpi_atendidas_hoy + kpi_pendientes_manana - kpi_pendientes_anteriores)
         kpi_total_carga = kpi_pendientes_anteriores + kpi_generadas_hoy
         
-        # Listados de problemas / soluciones
+        # Listados de problemas / soluciones (Solo Daños/Soporte)
         cursor.execute("""
             SELECT solucion_tecnico, COUNT(*) as cantidad
             FROM visitas_tecnicas
             WHERE COALESCE(DATE(hora_fin_visita), fecha_programada) = %s AND estado = 'FINALIZADA'
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
               AND tecnico_principal IS NOT NULL 
               AND tecnico_principal NOT IN ('', 'NO TECNICO', 'SIN ASIGNAR', 'NONE', 'NAN')
               AND solucion_tecnico IS NOT NULL 
@@ -2542,6 +3180,7 @@ def download_excel_cuadro_mando():
             SELECT problema, COUNT(*) as cantidad
             FROM visitas_tecnicas
             WHERE fecha_programada = %s AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
               AND problema IS NOT NULL AND problema != ''
             GROUP BY problema
         """, (manana,))
@@ -2943,9 +3582,9 @@ def api_obtener_inventario():
         from utils_jwt import verify_token
         user = verify_token(token)
         if user:
-            role = user.get('role')
-    elif 'user_id' in session:
-        user = {'sub': session['user_id']}
+            role = user.get('role') or user.get('rol')
+    if not user and 'user_id' in session:
+        user = {'sub': session['user_id'], 'id_usuario': session['user_id']}
         role = session.get('user_role')
 
     if not user:
@@ -3045,10 +3684,10 @@ def api_bodega_ingreso():
         from utils_jwt import verify_token
         user = verify_token(token)
         if user:
-            role = user.get('role')
-            user_name = user.get('nombre') or user.get('sub') or 'BODEGA'
-    elif 'user_id' in session:
-        user = {'sub': session['user_id']}
+            role = user.get('role') or user.get('rol')
+            user_name = user.get('nombre') or user.get('username') or user.get('sub') or 'BODEGA'
+    if not user and 'user_id' in session:
+        user = {'sub': session['user_id'], 'id_usuario': session['user_id']}
         role = session.get('user_role')
         user_name = session.get('user_name') or 'BODEGA'
 
@@ -3154,10 +3793,10 @@ def api_tecnico_entrega():
         from utils_jwt import verify_token
         user = verify_token(token)
         if user:
-            role = user.get('role')
-            user_name = user.get('nombre') or user.get('sub') or 'BODEGA'
-    elif 'user_id' in session:
-        user = {'sub': session['user_id']}
+            role = user.get('role') or user.get('rol')
+            user_name = user.get('nombre') or user.get('username') or user.get('sub') or 'BODEGA'
+    if not user and 'user_id' in session:
+        user = {'sub': session['user_id'], 'id_usuario': session['user_id']}
         role = session.get('user_role')
         user_name = session.get('user_name') or 'BODEGA'
 
@@ -3501,9 +4140,9 @@ def api_tecnico_devolucion():
         from utils_jwt import verify_token
         user = verify_token(token)
         if user:
-            role = user.get('role')
-    elif 'user_id' in session:
-        user = {'sub': session['user_id']}
+            role = user.get('role') or user.get('rol')
+    if not user and 'user_id' in session:
+        user = {'sub': session['user_id'], 'id_usuario': session['user_id']}
         role = session.get('user_role')
 
     if not user:
@@ -3705,7 +4344,16 @@ def api_eliminar_material(id_material):
 
 @admin_bp.route('/api/admin/tecnicos/mas_cercano', methods=['GET'])
 def obtener_tecnico_mas_cercano():
-    if 'user_id' not in session or session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    if not user and 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
+
+    user_role = user.get('role') or user.get('rol') if user else None
+    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'BODEGA', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     lat_str = request.args.get('lat')
@@ -3781,12 +4429,24 @@ def obtener_tecnico_mas_cercano():
 
 @admin_bp.route('/api/admin/metricas_tiempos', methods=['GET'])
 def metricas_tiempos():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    if not user and 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'role': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    
+    user_role = user.get('role') or user.get('rol')
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas de tiempos."}), 403
 
-    active_area = session.get('active_area', 'SOPORTE')
+    active_area = request.args.get('area') or session.get('active_area')
+    if not active_area:
+        active_area = 'INSTALACIONES' if user_role == 'CALIDAD' else 'SOPORTE'
     es_instalacion_val = 1 if active_area == 'INSTALACIONES' else 0
 
     # Obtener parámetros de filtros (hoy y hace 3 meses por defecto si no se especifican)
@@ -4072,11 +4732,11 @@ def crear_recordatorio():
     if token and token.startswith("Bearer "):
         from utils_jwt import verify_token
         user = verify_token(token)
-    elif 'user_id' in session:
+    if not user and 'user_id' in session:
         user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'nombre': session.get('user_name')}
 
     user_role = user.get('role') or user.get('rol') if user else None
-    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     datos = request.get_json() or {}
@@ -4087,6 +4747,9 @@ def crear_recordatorio():
     hora_inicio = datos.get('hora_inicio') or None
     hora_fin = datos.get('hora_fin') or None
     tecnico_id = datos.get('tecnico_id') or None
+    contrato = (datos.get('contrato') or '').strip() or None
+    cliente = (datos.get('cliente') or '').strip() or None
+    celular = (datos.get('celular') or '').strip() or None
     
     if not titulo or not tipo or not fecha:
         return jsonify({"status": "error", "message": "Título, Tipo y Fecha son obligatorios."}), 400
@@ -4098,13 +4761,27 @@ def crear_recordatorio():
         return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
         
     try:
+        # Si es LLAMAR A CLIENTE y no viene celular pero sí contrato, autocompletar desde directorio_clientes
+        if tipo == 'LLAMAR A CLIENTE' and contrato and not celular:
+            try:
+                c_temp = conexion.cursor(dictionary=True)
+                c_temp.execute("SELECT nombre_cliente, telefono1, telefono2, telefono3 FROM directorio_clientes WHERE contrato = %s LIMIT 1", (contrato,))
+                cli_r = c_temp.fetchone()
+                if cli_r:
+                    celular = cli_r['telefono1'] or cli_r['telefono2'] or cli_r['telefono3'] or None
+                    if not cliente:
+                        cliente = cli_r['nombre_cliente']
+                c_temp.close()
+            except:
+                pass
+
         cursor = conexion.cursor()
         query = """
             INSERT INTO recordatorios_bloqueos 
-            (titulo, descripcion, tipo, fecha, hora_inicio, hora_fin, tecnico_id, creado_por, activo)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1)
+            (titulo, descripcion, tipo, fecha, hora_inicio, hora_fin, tecnico_id, creado_por, activo, contrato, cliente, celular)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1, %s, %s, %s)
         """
-        cursor.execute(query, (titulo, descripcion, tipo, fecha, hora_inicio, hora_fin, tecnico_id, creado_por))
+        cursor.execute(query, (titulo, descripcion, tipo, fecha, hora_inicio, hora_fin, tecnico_id, creado_por, contrato, cliente, celular))
         conexion.commit()
         return jsonify({"status": "ok", "message": "Recordatorio/Bloqueo creado con éxito."})
     except Exception as e:
@@ -4121,11 +4798,11 @@ def eliminar_recordatorio(id_recordatorio):
     if token and token.startswith("Bearer "):
         from utils_jwt import verify_token
         user = verify_token(token)
-    elif 'user_id' in session:
+    if not user and 'user_id' in session:
         user = {'id_usuario': session['user_id'], 'rol': session.get('user_role')}
 
     user_role = user.get('role') or user.get('rol') if user else None
-    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     conexion = get_db_connection()
@@ -4239,14 +4916,14 @@ def editar_visita(id_visita):
     if token and token.startswith("Bearer "):
         from utils_jwt import verify_token
         user = verify_token(token)
-    elif 'user_id' in session:
+    if not user and 'user_id' in session:
         user = {'id_usuario': session['user_id'], 'rol': session.get('user_role')}
 
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes permiso para editar visitas."}), 403
 
     # Validar que la visita no esté cerrada o en progreso antes de editar
@@ -4607,9 +5284,14 @@ def api_equipos_lista():
             query = """
                 SELECT er.id_retiro as id_equipo, er.id_retiro, er.tipo_equipo,
                        CASE 
+                           WHEN er.modelo LIKE '%KINGTYPE%' THEN 'KINGTYPE'
+                           WHEN er.modelo LIKE '%CDATA%' OR er.modelo LIKE '%C-DATA%' OR er.modelo LIKE '%FD511%' THEN 'CDATA'
                            WHEN er.modelo LIKE '%HUAWEI%' THEN 'HUAWEI'
-                           WHEN er.modelo LIKE '%TP-LINK%' OR er.modelo LIKE '%TPLINK%' OR er.modelo LIKE '%EX511%' OR er.modelo LIKE '%XX231%' OR er.modelo LIKE '%XX530%' THEN 'TP-LINK'
+                           WHEN er.modelo LIKE '%TP-LINK%' OR er.modelo LIKE '%TPLINK%' OR er.modelo LIKE '%EX511%' OR er.modelo LIKE '%XX231%' OR er.modelo LIKE '%XX530%' OR er.modelo LIKE '%XZ000%' OR er.modelo LIKE '%XN020%' OR er.modelo LIKE '%840N%' OR er.modelo LIKE '%ARCHER%' THEN 'TP-LINK'
                            WHEN er.modelo LIKE '%MERCUSYS%' OR er.modelo LIKE '%MR70%' THEN 'MERCUSYS'
+                           WHEN er.modelo LIKE '%MIKROTIK%' THEN 'MIKROTIK'
+                           WHEN er.modelo LIKE '%ZHIYI%' THEN 'ZHIYI'
+                           WHEN er.modelo LIKE '%CISCO%' THEN 'CISCO'
                            WHEN er.modelo LIKE '%FIBERHOME%' THEN 'FIBERHOME'
                            WHEN er.modelo LIKE '%ZTE%' THEN 'ZTE'
                            ELSE ''
@@ -4696,10 +5378,46 @@ def api_equipos_ingreso_masivo():
     data = request.get_json() or {}
     tipo_equipo = (data.get('tipo_equipo') or 'ONT').strip().upper()
     modelo = (data.get('modelo') or '').strip()
-    marca = (data.get('marca') or 'GENERAL').strip().upper()
+    marca_recibida = (data.get('marca') or '').strip().upper()
     seriales_raw = data.get('seriales') or []
     observacion = (data.get('observacion') or '').strip()
-    user_name = session.get('user_name', 'Administrador')
+
+    # Usuario registrador
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    if not user and 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'nombre': session.get('user_name')}
+    user_name = (user.get('nombre') if user else None) or session.get('user_name', 'Bodega Central')
+
+    # Deducir o corregir la marca según el modelo
+    mod_upper = modelo.upper()
+    if 'KINGTYPE' in mod_upper:
+        marca = 'KINGTYPE'
+    elif 'CDATA' in mod_upper or 'C-DATA' in mod_upper or 'FD511' in mod_upper:
+        marca = 'CDATA'
+    elif 'HUAWEI' in mod_upper:
+        marca = 'HUAWEI'
+    elif 'MERCUSYS' in mod_upper:
+        marca = 'MERCUSYS'
+    elif 'MIKROTIK' in mod_upper:
+        marca = 'MIKROTIK'
+    elif 'ZHIYI' in mod_upper:
+        marca = 'ZHIYI'
+    elif 'CISCO' in mod_upper:
+        marca = 'CISCO'
+    elif 'ZTE' in mod_upper:
+        marca = 'ZTE'
+    elif 'FIBERHOME' in mod_upper:
+        marca = 'FIBERHOME'
+    elif any(tp in mod_upper for tp in ['TP-LINK', 'TPLINK', 'EX511', 'XX231', 'XX530', 'XZ000', 'XN020', '840N', 'ARCHER']):
+        marca = 'TP-LINK'
+    elif marca_recibida and marca_recibida not in ['GENERAL', 'TODAS', '']:
+        marca = marca_recibida
+    else:
+        marca = 'GENERAL'
 
     if not modelo:
         return jsonify({"status": "error", "message": "Debe especificar el modelo"}), 400
@@ -4770,12 +5488,88 @@ def api_equipos_ingreso_masivo():
         conexion.close()
 
 
+@admin_bp.route('/api/equipos/verificar_serial_despacho', methods=['GET'])
+def api_equipos_verificar_serial_despacho():
+    sn = (request.args.get('sn') or '').strip().upper()
+    placa = (request.args.get('placa') or '').strip().upper()
+    if not sn:
+        return jsonify({"status": "error", "message": "Serial no proporcionado"}), 400
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de base de datos"}), 500
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT id_equipo, tipo_equipo, modelo, marca, numero_serie, estado, 
+                   ubicacion_placa, nombre_cliente, contrato_cliente
+            FROM trazabilidad_equipos
+            WHERE numero_serie = %s
+        """, (sn,))
+        eq = cursor.fetchone()
+        if not eq:
+            return jsonify({
+                "status": "not_found",
+                "message": f"El serial '{sn}' no existe en inventario. Debe registrarlo primero en Ingreso de Equipos."
+            })
+
+        estado = eq['estado']
+        placa_actual = (eq.get('ubicacion_placa') or '').strip().upper()
+
+        if estado == 'EN_BODEGA':
+            return jsonify({
+                "status": "ok",
+                "message": "Equipo disponible en bodega central",
+                "equipo": eq
+            })
+        elif estado == 'EN_VEHICULO':
+            if placa and placa_actual == placa:
+                return jsonify({
+                    "status": "same_vehicle",
+                    "message": f"El equipo ya se encuentra asignado a la buseta {placa}.",
+                    "equipo": eq,
+                    "placa_actual": placa_actual
+                })
+            else:
+                return jsonify({
+                    "status": "transfer_warning",
+                    "message": f"El equipo está actualmente en custodia de la buseta {placa_actual}. Se registrará como traspaso.",
+                    "equipo": eq,
+                    "placa_actual": placa_actual
+                })
+        elif estado == 'INSTALADO_CLIENTE':
+            cli = eq.get('nombre_cliente') or 'Cliente'
+            cont = eq.get('contrato_cliente') or 'S/N'
+            return jsonify({
+                "status": "installed_warning",
+                "message": f"El equipo figura instalado en {cli} (Contrato: {cont}).",
+                "equipo": eq
+            })
+        elif estado == 'RETIRADO_AVERIA':
+            return jsonify({
+                "status": "danger_warning",
+                "message": "El equipo figura como RETIRADO POR AVERÍA en bodega.",
+                "equipo": eq
+            })
+        else:
+            return jsonify({
+                "status": "warning",
+                "message": f"El equipo se encuentra en estado '{estado}'.",
+                "equipo": eq
+            })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
 @admin_bp.route('/api/equipos/despacho_buseta', methods=['POST'])
 def api_equipos_despacho_buseta():
     data = request.get_json() or {}
     placa_vehiculo = (data.get('placa_vehiculo') or '').strip().upper()
     seriales_raw = data.get('seriales') or []
-    observacion = (data.get('observacion') or '').strip()
+    observacion_extra = (data.get('observacion') or '').strip()
 
     if not placa_vehiculo:
         return jsonify({"status": "error", "message": "Debe seleccionar una placa de destino"}), 400
@@ -4784,24 +5578,46 @@ def api_equipos_despacho_buseta():
     if not seriales:
         return jsonify({"status": "error", "message": "No se enviaron seriales a despachar"}), 400
 
+    user = getattr(request, 'user', None)
+    if not user and 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'nombre': session.get('user_name')}
+    user_name = (user.get('nombre') if user else None) or session.get('user_name', 'Bodega Central')
+
     conexion = get_db_connection()
     if not conexion:
         return jsonify({"status": "error", "message": "Error de base de datos"}), 500
     try:
         cursor = conexion.cursor(dictionary=True)
         format_strings = ','.join(['%s'] * len(seriales))
-        cursor.execute(f"SELECT numero_serie, estado, modelo FROM trazabilidad_equipos WHERE numero_serie IN ({format_strings})", tuple(seriales))
+        cursor.execute(f"""
+            SELECT id_equipo, numero_serie, estado, modelo, marca, tipo_equipo, ubicacion_placa 
+            FROM trazabilidad_equipos 
+            WHERE numero_serie IN ({format_strings})
+        """, tuple(seriales))
         encontrados = {r['numero_serie']: r for r in cursor.fetchall()}
 
         despachados = 0
         no_encontrados = []
-        ya_en_vehiculo = []
+        traspasos = []
+        ahora_str = datetime.now().strftime('%Y-%m-%d %H:%M')
 
         for sn in seriales:
             if sn not in encontrados:
                 no_encontrados.append(sn)
             else:
                 eq = encontrados[sn]
+                placa_anterior = (eq.get('ubicacion_placa') or '').strip().upper()
+                es_traspaso = (eq.get('estado') == 'EN_VEHICULO' and placa_anterior and placa_anterior != placa_vehiculo)
+
+                if es_traspaso:
+                    obs_log = f" | Traspaso de custodia: de {placa_anterior} a {placa_vehiculo} por {user_name} ({ahora_str})"
+                    traspasos.append({"sn": sn, "de_placa": placa_anterior, "a_placa": placa_vehiculo, "modelo": eq.get('modelo')})
+                else:
+                    obs_log = f" | Despachado a {placa_vehiculo} por {user_name} ({ahora_str})"
+
+                if observacion_extra:
+                    obs_log += f" - {observacion_extra}"
+
                 cursor.execute("""
                     UPDATE trazabilidad_equipos
                     SET estado = 'EN_VEHICULO',
@@ -4809,14 +5625,20 @@ def api_equipos_despacho_buseta():
                         fecha_entrega_vehiculo = NOW(),
                         observacion = CONCAT(COALESCE(observacion, ''), %s)
                     WHERE numero_serie = %s
-                """, (placa_vehiculo, f" | Despachado a {placa_vehiculo}", sn))
+                """, (placa_vehiculo, obs_log, sn))
                 despachados += 1
 
         conexion.commit()
+
+        msg = f"Despacho exitoso: {despachados} equipos asignados a {placa_vehiculo}."
+        if traspasos:
+            msg += f" (Incluye {len(traspasos)} traspaso(s) desde otras busetas)."
+
         return jsonify({
             "status": "ok",
-            "message": f"Despacho exitoso: {despachados} equipos asignados a {placa_vehiculo}.",
+            "message": msg,
             "despachados": despachados,
+            "traspasos": traspasos,
             "no_encontrados": no_encontrados
         })
     except Exception as e:
@@ -5385,7 +6207,7 @@ def api_admin_inventario_liquidacion_mensual():
             JOIN tecnicos t ON vt.tecnico_principal = t.nombre
             WHERE (t.placa_vehiculo = %s OR t.placa_asignada_hoy = %s)
               AND vt.estado = 'FINALIZADA'
-              AND vt.fecha BETWEEN %s AND %s
+              AND COALESCE(DATE(vt.hora_fin_visita), vt.fecha_programada, DATE(vt.fecha_registro)) BETWEEN %s AND %s
             GROUP BY vm.id_material
         """, (placa, placa, f_ini, f_fin))
         consumo_map = {r['id_material']: int(r['total_consumido'] or 0) for r in cur.fetchall()}
@@ -5610,24 +6432,24 @@ def api_admin_visitas_materiales_reporte():
 
         query = """
             SELECT v.id_visita, v.fecha_programada, v.hora_inicio_visita, v.hora_fin_visita,
-                   v.tecnico_principal, v.tecnico_apoyo, v.estado, v.prioridad,
+                   v.tecnico_principal, v.tecnico_apoyo, v.tecnico_cierre, v.placa_cierre, v.estado, v.prioridad,
                    v.cliente, v.contrato, v.telefonos, v.direccion, v.sector, v.servicio,
                    v.problema, v.solucion_tecnico, v.observacion_tecnico,
                    v.modelo_onu, v.numero_serie_onu, v.modelo_router, v.numero_serie_router,
                    v.router_secundario, v.numero_serie_router_secundario,
-                   COALESCE(t.placa_asignada_hoy, t.placa_vehiculo, 'S/P') as placa_vehiculo
+                   COALESCE(NULLIF(v.placa_cierre, ''), t.placa_asignada_hoy, t.placa_vehiculo, 'S/P') as placa_vehiculo
             FROM visitas_tecnicas v
-            LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
+            LEFT JOIN tecnicos t ON COALESCE(v.tecnico_cierre, v.tecnico_principal) = t.nombre
             WHERE DATE(v.fecha_programada) = %s
         """
         params = [fecha]
 
         if tecnico and tecnico != 'TODOS':
-            query += " AND v.tecnico_principal = %s"
-            params.append(tecnico)
+            query += " AND (v.tecnico_principal = %s OR v.tecnico_cierre = %s OR v.tecnico_apoyo = %s)"
+            params.extend([tecnico, tecnico, tecnico])
         if placa and placa != 'TODAS':
-            query += " AND (t.placa_asignada_hoy = %s OR t.placa_vehiculo = %s)"
-            params.extend([placa, placa])
+            query += " AND (v.placa_cierre = %s OR t.placa_asignada_hoy = %s OR t.placa_vehiculo = %s)"
+            params.extend([placa, placa, placa])
         if estado and estado != 'TODOS':
             query += " AND v.estado = %s"
             params.append(estado)
@@ -5773,14 +6595,14 @@ def api_admin_calidad_visitas_lista():
     if token and token.startswith("Bearer "):
         from utils_jwt import verify_token
         user = verify_token(token)
-    elif 'user_id' in session:
+    if not user and 'user_id' in session:
         user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role'), 'nombre': session.get('user_name')}
 
     if not user:
         return jsonify({"status": "error", "message": "No autorizado."}), 401
 
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver datos de control de calidad."}), 403
 
     fecha_inicio = request.args.get('fecha_inicio', '')
@@ -5803,6 +6625,7 @@ def api_admin_calidad_visitas_lista():
         query = """
             SELECT 
                 v.id_visita, v.contrato, v.cliente, v.telefonos, v.sector, v.direccion,
+                v.servicio, v.producto, v.es_instalacion,
                 v.tecnico_principal, v.tecnico_apoyo, COALESCE(t.placa_vehiculo, '') as placa_vehiculo,
                 v.problema as problema_inicial, v.solucion_tecnico, v.observacion_tecnico,
                 v.fecha_programada as fecha_visita, v.estado as estado_visita,
@@ -5930,14 +6753,14 @@ def api_admin_calidad_visitas_guardar():
     if token and token.startswith("Bearer "):
         from utils_jwt import verify_token
         user = verify_token(token)
-    elif 'user_id' in session:
+    if not user and 'user_id' in session:
         user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role'), 'nombre': session.get('user_name')}
 
     if not user:
         return jsonify({"status": "error", "message": "No autorizado."}), 401
 
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para registrar control de calidad."}), 403
 
     user_name = user.get('nombre') or user.get('usuario') or 'Auditor Calidad'

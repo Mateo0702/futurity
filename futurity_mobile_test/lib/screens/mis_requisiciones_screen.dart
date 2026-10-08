@@ -314,7 +314,19 @@ class _MisRequisicionesScreenState extends State<MisRequisicionesScreen> {
           children: [
             const Icon(Icons.inventory_rounded, color: Color(0xFF38BDF8), size: 22),
             const SizedBox(width: 10),
-            Text('Requisiciones a Bodega', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
+            Text('Requisiciones', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
+            if (_totalListasParaFirmar > 0) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF10B981)),
+                ),
+                child: Text('$_totalListasParaFirmar por firmar', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF34D399), fontWeight: FontWeight.w700)),
+              ),
+            ],
           ],
         ),
         actions: [

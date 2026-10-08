@@ -710,7 +710,9 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
                 <option value="">-- Seleccione Técnico Responsable --</option>
                 <option value="NO TECNICO">NO TECNICO (Sin Asignar / Por Coordinar)</option>
                 {tecnicos.filter(t => t.nombre !== 'NO TECNICO').map((tec) => (
-                  <option key={tec.id_tecnico} value={tec.nombre}>{tec.nombre}</option>
+                  <option key={tec.id_tecnico} value={tec.nombre}>
+                    {tec.nombre} {tec.area_trabajo === 'INSTALACIONES' ? '⚡ (Instalador)' : ''}
+                  </option>
                 ))}
               </select>
             </div>
@@ -729,7 +731,9 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
                 <option value="">-- Sin Apoyo --</option>
                 <option value="NO TECNICO">NO TECNICO</option>
                 {tecnicos.filter(t => t.nombre !== 'NO TECNICO').map((tec) => (
-                  <option key={tec.id_tecnico} value={tec.nombre}>{tec.nombre}</option>
+                  <option key={tec.id_tecnico} value={tec.nombre}>
+                    {tec.nombre} {tec.area_trabajo === 'INSTALACIONES' ? '⚡ (Instalador)' : ''}
+                  </option>
                 ))}
               </select>
             </div>

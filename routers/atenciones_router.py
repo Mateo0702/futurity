@@ -196,6 +196,24 @@ def registrar_atencion():
         
     cursor = conn.cursor()
     try:
+        # Prevención de duplicados por doble clic o peticiones concurrentes repetidas (últimos 20 segundos)
+        cursor.execute("""
+            SELECT id_atencion FROM atenciones
+            WHERE contrato = %s AND cliente = %s AND agente = %s AND observacion = %s
+              AND fecha_registro >= NOW() - INTERVAL 20 SECOND
+            ORDER BY id_atencion DESC
+            LIMIT 1
+        """, (contrato, cliente, agente, observacion))
+        existente = cursor.fetchone()
+        if existente:
+            id_existente = existente[0] if isinstance(existente, (list, tuple)) else existente.get('id_atencion')
+            return jsonify({
+                "status": "success", 
+                "message": "Atención registrada exitosamente",
+                "id_atencion": id_existente,
+                "agente": agente
+            })
+
         query_insert = """
             INSERT INTO atenciones (
                 fecha, hora, fecha_hora, contrato, cliente, fecha_instalacion, 
@@ -295,9 +313,19 @@ def atenciones_recientes():
 
 @atenciones_bp.route('/api/admin/metricas_atenciones', methods=['GET'])
 def metricas_atenciones():
-    if 'user_id' not in session:
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    if not user and 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'role': session.get('user_role')}
+
+    if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    
+    user_role = user.get('role') or user.get('rol')
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas de atenciones."}), 403
 
     # Obtener parámetros de filtros (hoy y hace 3 meses por defecto si no se especifican)
@@ -405,7 +433,8 @@ def metricas_atenciones():
             fecha_str = fecha_dt.strftime('%d/%m') if isinstance(fecha_dt, (datetime, date)) else str(fecha_dt)
             evolucion.append({
                 "label": f"Sem {fecha_str}",
-                "cantidad": row['cantidad']
+                "cantidad": row['cantidad'],
+                "total": row['cantidad']
             })
             
         return jsonify({
@@ -593,7 +622,12 @@ def registrar_atenciones_masivo():
                 SELECT a.id_atencion, a.contrato, a.cliente, a.telefono1, a.telefono2, a.sector, a.motivo, a.agente, a.fecha
                 FROM atenciones a
                 LEFT JOIN auditoria_calidad_atenciones aud ON a.id_atencion = aud.id_atencion
-                WHERE a.fecha = %s AND aud.id_auditoria IS NULL
+                WHERE a.fecha = %s 
+                  AND aud.id_auditoria IS NULL
+                  AND UPPER(COALESCE(a.motivo, '')) NOT LIKE '%VISITA%'
+                  AND UPPER(COALESCE(a.motivo, '')) NOT LIKE '%ACTIVACI%'
+                  AND UPPER(COALESCE(a.motivo, '')) NOT LIKE '%CORTE%'
+                  AND UPPER(COALESCE(a.motivo, '')) NOT LIKE '%RECONEXI%'
                 ORDER BY a.id_atencion ASC
             """, (f_dt.isoformat(),))
             pendientes = cur_sync.fetchall()
@@ -1001,10 +1035,26 @@ def diagnostico_smartolt(sn):
 # GESTIÓN Y AUDITORÍA DE CALIDAD ATC (CALL CENTER)
 # ==========================================================
 
+def es_motivo_excluido_auditoria(motivo):
+    """
+    Retorna True si el motivo de atención corresponde a operaciones
+    que no son objeto de auditoría de calidad ATC (visitas técnicas,
+    activaciones de servicio, cortes y reconexiones).
+    """
+    if not motivo:
+        return False
+    m = str(motivo).upper()
+    return any(p in m for p in ['VISITA', 'ACTIVACI', 'CORTE', 'RECONEXI'])
+
+
 def asignar_auditoria_atencion(conn, cursor, id_atencion, contrato, cliente, telefono1, telefono2, sector, motivo, agente, fecha_atencion):
     """
     Asigna una atención registrada al auditor con menor carga del día (Round-Robin entre rol ATC_AUDITOR).
+    Excluye automáticamente atenciones operativas (visitas técnicas, activaciones, cortes y reconexiones).
     """
+    if es_motivo_excluido_auditoria(motivo):
+        return
+
     try:
         c_aud = conn.cursor(dictionary=True)
         c_aud.execute("SELECT nombre FROM usuarios_callcenter WHERE rol = 'ATC_AUDITOR' AND activo = 1 ORDER BY id_usuario ASC")
@@ -1050,7 +1100,7 @@ def api_atc_auditoria_lista():
     user = obtener_usuario_actual(request)
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if user.get('rol') not in ['ADMIN', 'ATC_AUDITOR', 'CALIDAD']:
+    if user.get('rol') not in ['ADMIN', 'ATC_AUDITOR', 'AUDITOR']:
         return jsonify({"status": "error", "message": "Acceso restringido a auditores ATC."}), 403
 
     fecha = request.args.get('fecha', date.today().isoformat()).strip()
@@ -1065,7 +1115,14 @@ def api_atc_auditoria_lista():
 
     try:
         cursor = conn.cursor(dictionary=True)
-        query = "SELECT * FROM auditoria_calidad_atenciones WHERE 1=1"
+        query = """
+            SELECT * FROM auditoria_calidad_atenciones 
+            WHERE 1=1
+              AND UPPER(COALESCE(motivo_atencion, '')) NOT LIKE '%VISITA%'
+              AND UPPER(COALESCE(motivo_atencion, '')) NOT LIKE '%ACTIVACI%'
+              AND UPPER(COALESCE(motivo_atencion, '')) NOT LIKE '%CORTE%'
+              AND UPPER(COALESCE(motivo_atencion, '')) NOT LIKE '%RECONEXI%'
+        """
         params = []
 
         if fecha:
@@ -1115,7 +1172,7 @@ def api_atc_auditoria_guardar():
     user = obtener_usuario_actual(request)
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if user.get('rol') not in ['ADMIN', 'ATC_AUDITOR', 'CALIDAD']:
+    if user.get('rol') not in ['ADMIN', 'ATC_AUDITOR', 'AUDITOR']:
         return jsonify({"status": "error", "message": "Acceso restringido a auditores ATC."}), 403
 
     data = request.get_json() or {}
@@ -1362,7 +1419,12 @@ def api_atc_auditoria_sincronizar_dia():
             SELECT a.id_atencion, a.contrato, a.cliente, a.telefono1, a.telefono2, a.sector, a.motivo, a.agente, a.fecha
             FROM atenciones a
             LEFT JOIN auditoria_calidad_atenciones aud ON a.id_atencion = aud.id_atencion
-            WHERE a.fecha = %s AND aud.id_auditoria IS NULL
+            WHERE a.fecha = %s 
+              AND aud.id_auditoria IS NULL
+              AND UPPER(COALESCE(a.motivo, '')) NOT LIKE '%VISITA%'
+              AND UPPER(COALESCE(a.motivo, '')) NOT LIKE '%ACTIVACI%'
+              AND UPPER(COALESCE(a.motivo, '')) NOT LIKE '%CORTE%'
+              AND UPPER(COALESCE(a.motivo, '')) NOT LIKE '%RECONEXI%'
             ORDER BY a.id_atencion ASC
         """, (fecha,))
         pendientes = cursor.fetchall()

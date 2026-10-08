@@ -196,11 +196,38 @@ class ApiService {
     }
   }
 
+  // --- 3.1 ENVIAR PING GLOBAL (SUPERVISIÓN CENTRAL) ---
+  static Future<bool> enviarPingGlobal(double latitud, double longitud) async {
+    final url = Uri.parse('$baseUrl/api/tecnico/ping_global');
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token') ?? '';
+    final username = prefs.getString('user_name') ?? '';
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'latitud': latitud,
+          'longitud': longitud,
+          'tecnico_nombre': username,
+        }),
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // --- 4. CAMBIAR ESTADO A EN RUTA ---
   static Future<Map<String, dynamic>> iniciarRuta(int idVisita) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('jwt_token') ?? '';
-    final url = Uri.parse('$baseUrl/tecnico/iniciar_ruta/$idVisita');
+    final url = Uri.parse('$baseUrl/api/tecnico/en_camino/$idVisita');
 
     try {
       final response = await http.post(
@@ -211,10 +238,81 @@ class ApiService {
         },
       );
 
-      if (response.statusCode == 200 || response.statusCode == 302) {
-        return {'success': true};
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && (data['status'] == 'ok' || data['status'] == 'success')) {
+        return {
+          'success': true,
+          'token_rastreo': data['token_rastreo'],
+          'message': data['message'] ?? 'Puesto en camino con éxito'
+        };
       }
-      return {'success': false, 'message': 'No se pudo iniciar ruta'};
+      return {
+        'success': false,
+        'message': data['message'] ?? 'No se pudo iniciar ruta'
+      };
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  // --- HISTORIAL DEL CLIENTE (ÚLTIMOS 3 MESES) ---
+  static Future<Map<String, dynamic>> getHistorialCliente(String nombreCliente, {String contrato = ''}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token') ?? '';
+    final encodedName = Uri.encodeComponent(nombreCliente.trim());
+    final url = Uri.parse('$baseUrl/api/cliente/historial/$encodedName?contrato=${Uri.encodeComponent(contrato.trim())}');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['status'] == 'ok') {
+        return {
+          'success': true,
+          'historial': data['historial'] as List? ?? [],
+        };
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Error al consultar historial',
+        'historial': []
+      };
+    } catch (e) {
+      return {'success': false, 'message': e.toString(), 'historial': []};
+    }
+  }
+
+  // --- VERIFICAR FIRMA REMOTA EN TIEMPO REAL ---
+  static Future<Map<String, dynamic>> verificarFirmaRemota(int idVisita) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token') ?? '';
+    final url = Uri.parse('$baseUrl/api/tecnico/verificar_firma/$idVisita');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'status': data['status'], // 'firmado' | 'pendiente'
+          'firma_url': data['firma_url'],
+          'token': data['token'],
+        };
+      }
+      return {'success': false, 'message': data['message'] ?? 'Error al verificar firma'};
     } catch (e) {
       return {'success': false, 'message': e.toString()};
     }

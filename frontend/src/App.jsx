@@ -8,6 +8,7 @@ import RegistroVisitasTab from './components/RegistroVisitasTab';
 import BuscadorClienteTab from './components/BuscadorClienteTab';
 import UsuariosTab from './components/UsuariosTab';
 import MapaTecnicosTab from './components/MapaTecnicosTab';
+import MapaTrackerTab from './components/MapaTrackerTab';
 import ControlCalidadTab from './components/ControlCalidadTab';
 import AuditoriaAtcTab from './components/AuditoriaAtcTab';
 import ReportesTab from './components/ReportesTab';
@@ -118,7 +119,12 @@ function App() {
 
     if (savedToken) {
       setToken(savedToken);
-      if (parsedUser) setUser(parsedUser);
+      if (parsedUser) {
+        setUser(parsedUser);
+        if (parsedUser.rol === 'CALIDAD' || parsedUser.role === 'CALIDAD') {
+          setActiveArea('INSTALACIONES');
+        }
+      }
     } else {
       setToken(null);
       setUser(null);
@@ -155,6 +161,9 @@ function App() {
   const handleLoginSuccess = (newToken, newUser) => {
     setToken(newToken);
     setUser(newUser);
+    if (newUser?.rol === 'CALIDAD' || newUser?.role === 'CALIDAD') {
+      setActiveArea('INSTALACIONES');
+    }
   };
 
   const handleLogout = async () => {
@@ -248,6 +257,9 @@ function App() {
     if (activeTab === 'mapa-tecnicos') {
       return <MapaTecnicosTab token={token} activeArea={activeArea} />;
     }
+    if (activeTab === 'tracker-pmt') {
+      return <MapaTrackerTab token={token} />;
+    }
     if (activeTab === 'registro') {
       return (
         <RegistroVisitasTab 
@@ -260,10 +272,10 @@ function App() {
       );
     }
     if (activeTab === 'visitas') {
-      return <VisitasTab token={token} user={user} />;
+      return <VisitasTab token={token} user={user} activeAreaProp={activeArea} />;
     }
     if (activeTab === 'metricas') {
-      return <MetricasTab token={token} />;
+      return <MetricasTab token={token} user={user} />;
     }
     if (activeTab === 'reportes') {
       return <ReportesTab token={token} user={user} initialSubTab={initialSubTabFromUrl} initialFecha={initialFechaFromUrl} />;

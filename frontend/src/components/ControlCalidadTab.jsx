@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AuditoriaVisitasTab from './AuditoriaVisitasTab';
 
+const PREGUNTAS_ARCOTEL = [
+  { key: 'p1', num: 1, dim: 'AMABILIDAD', label: 'El trato o actitud del personal hacia el usuario', color: '#0284c7', icon: 'fa-solid fa-handshake-angle' },
+  { key: 'p2', num: 2, dim: 'AMABILIDAD', label: 'La paciencia para atender las quejas y sugerencias de los usuarios', color: '#06b6d4', icon: 'fa-solid fa-heart' },
+  { key: 'p3', num: 3, dim: 'DISPONIBILIDAD', label: 'La disponibilidad del personal para ayudarle a solucionar sus requerimientos', color: '#8b5cf6', icon: 'fa-solid fa-user-clock' },
+  { key: 'p4', num: 4, dim: 'RAPIDEZ', label: 'Agilidad o rapidez para resolver las consultas o reclamos formulados por el usuario', color: '#f59e0b', icon: 'fa-solid fa-bolt' },
+  { key: 'p5', num: 5, dim: 'RAPIDEZ', label: 'Tiempo de espera para ser atendido, al momento de comunicar un reclamo o queja', color: '#10b981', icon: 'fa-solid fa-stopwatch' },
+];
+
 function ControlCalidadTab({ token }) {
   const [subTab, setSubTab] = useState('auditoria-visitas');
 
@@ -30,6 +38,7 @@ function ControlCalidadTab({ token }) {
 
   const [ranking, setRanking] = useState([]);
   const [resenas, setResenas] = useState([]);
+  const [tabulacionArcotel, setTabulacionArcotel] = useState(null);
 
   // Chart ref
   const chartRef = useRef(null);
@@ -47,6 +56,7 @@ function ControlCalidadTab({ token }) {
         setKpis(data.kpis || {});
         setRanking(data.ranking || []);
         setResenas(data.resenas || []);
+        setTabulacionArcotel(data.tabulacion_arcotel || null);
         renderChart(data.ranking || []);
       }
     } catch (e) {
@@ -78,6 +88,15 @@ function ControlCalidadTab({ token }) {
     setClienteFilter('');
     setTipoServicio('');
     setTimeout(fetchCalidadData, 50);
+  };
+
+  const handleExportarExcelArcotel = () => {
+    const params = new URLSearchParams();
+    params.append('fecha_inicio', fechaInicio);
+    params.append('fecha_fin', fechaFin);
+    if (clienteFilter.trim()) params.append('cliente', clienteFilter.trim());
+    if (tipoServicio) params.append('es_instalacion', tipoServicio);
+    window.open(`/api/admin/control_calidad/exportar_arcotel_excel?${params.toString()}`, '_blank');
   };
 
   // Render Chart.js Stacked Bar Chart for Technician Ranking
@@ -265,7 +284,7 @@ function ControlCalidadTab({ token }) {
                   <option value="1">Instalaciones</option>
                 </select>
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <button
                   type="submit"
                   style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer', height: '44px', display: 'flex', alignItems: 'center', gap: '8px' }}
@@ -278,6 +297,27 @@ function ControlCalidadTab({ token }) {
                   style={{ background: 'var(--profile-bg)', color: 'var(--text-main)', border: '1px solid var(--border-color)', padding: '10px 18px', borderRadius: '12px', fontWeight: 700, cursor: 'pointer', height: '44px' }}
                 >
                   Limpiar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportarExcelArcotel}
+                  title="Descargar matriz consolidada y detalle de respuestas para ARCOTEL en Excel"
+                  style={{
+                    background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                    color: 'white',
+                    border: 'none',
+                    padding: '10px 18px',
+                    borderRadius: '12px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    height: '44px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)'
+                  }}
+                >
+                  <i className="fa-solid fa-file-excel"></i> Exportar ARCOTEL (.xlsx)
                 </button>
               </div>
             </form>
@@ -356,6 +396,157 @@ function ControlCalidadTab({ token }) {
             </div>
           </div>
 
+          {/* TABULACIÓN OFICIAL ARCOTEL */}
+          <div style={{ background: 'var(--card-bg)', borderRadius: '20px', border: '1px solid var(--border-color)', padding: '24px', marginBottom: '25px', boxShadow: 'var(--shadow-sm)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-main)', fontWeight: 850, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <i className="fa-solid fa-building-columns" style={{ color: '#0284c7' }}></i> Tabulación Oficial ARCOTEL (Escala 1 al 5)
+                </h4>
+                <p style={{ margin: '4px 0 0 0', color: 'var(--sidebar-text)', fontSize: '0.84rem', fontWeight: 600 }}>
+                  Consolidado oficial de satisfacción por dimensión para auditorías regulatorias
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleExportarExcelArcotel}
+                style={{
+                  background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '10px 18px',
+                  borderRadius: '12px',
+                  fontWeight: 800,
+                  fontSize: '0.86rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)'
+                }}
+              >
+                <i className="fa-solid fa-file-excel"></i> Descargar Reporte ARCOTEL (.xlsx)
+              </button>
+            </div>
+
+            {tabulacionArcotel && tabulacionArcotel.total_arcotel > 0 ? (
+              <>
+                {/* Resumen Superior ARCOTEL */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' }}>
+                  <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '16px' }}>
+                    <span style={{ color: 'var(--sidebar-text)', fontSize: '0.74rem', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Total Encuestas ARCOTEL</span>
+                    <h3 style={{ margin: 0, fontSize: '1.9rem', color: 'var(--text-main)', fontWeight: 900 }}>
+                      {tabulacionArcotel.total_arcotel}
+                    </h3>
+                  </div>
+                  <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '16px' }}>
+                    <span style={{ color: 'var(--sidebar-text)', fontSize: '0.74rem', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Promedio Global ARCOTEL</span>
+                    <h3 style={{ margin: 0, fontSize: '1.9rem', color: '#0284c7', fontWeight: 900 }}>
+                      {(
+                        ((parseFloat(tabulacionArcotel.p1_prom || 0) +
+                          parseFloat(tabulacionArcotel.p2_prom || 0) +
+                          parseFloat(tabulacionArcotel.p3_prom || 0) +
+                          parseFloat(tabulacionArcotel.p4_prom || 0) +
+                          parseFloat(tabulacionArcotel.p5_prom || 0)) / 5.0).toFixed(2)
+                      )} <span style={{ fontSize: '0.9rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>/ 5.00</span>
+                    </h3>
+                  </div>
+                  <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '16px' }}>
+                    <span style={{ color: 'var(--sidebar-text)', fontSize: '0.74rem', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>% Nivel de Satisfacción</span>
+                    {(() => {
+                      const totalRatings = (tabulacionArcotel.total_arcotel || 1) * 5;
+                      const goodRatings = (
+                        (tabulacionArcotel.p1_5 || 0) + (tabulacionArcotel.p1_4 || 0) +
+                        (tabulacionArcotel.p2_5 || 0) + (tabulacionArcotel.p2_4 || 0) +
+                        (tabulacionArcotel.p3_5 || 0) + (tabulacionArcotel.p3_4 || 0) +
+                        (tabulacionArcotel.p4_5 || 0) + (tabulacionArcotel.p4_4 || 0) +
+                        (tabulacionArcotel.p5_5 || 0) + (tabulacionArcotel.p5_4 || 0)
+                      );
+                      const pct = totalRatings > 0 ? ((goodRatings / totalRatings) * 100).toFixed(1) : '0.0';
+                      return (
+                        <h3 style={{ margin: 0, fontSize: '1.9rem', color: parseFloat(pct) >= 80 ? '#10b981' : parseFloat(pct) >= 60 ? '#f59e0b' : '#ef4444', fontWeight: 900 }}>
+                          {pct}%
+                        </h3>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Tabla Matriz ARCOTEL */}
+                <div style={{ overflowX: 'auto', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.84rem' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--profile-bg)', borderBottom: '1px solid var(--border-color)' }}>
+                        <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--text-main)' }}>#</th>
+                        <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--text-main)' }}>Dimensión</th>
+                        <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--text-main)', minWidth: '280px' }}>Pregunta ARCOTEL</th>
+                        <th style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 800, color: '#10b981' }}>5 (Muy Bueno)</th>
+                        <th style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 800, color: '#0284c7' }}>4 (Bueno)</th>
+                        <th style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 800, color: '#f59e0b' }}>3 (Aceptable)</th>
+                        <th style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 800, color: '#ea580c' }}>2 (Malo)</th>
+                        <th style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 800, color: '#ef4444' }}>1 (Muy Malo)</th>
+                        <th style={{ padding: '12px 12px', textAlign: 'center', fontWeight: 800, color: 'var(--text-main)' }}>Total</th>
+                        <th style={{ padding: '12px 12px', textAlign: 'center', fontWeight: 800, color: 'var(--text-main)' }}>Promedio</th>
+                        <th style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 800, color: 'var(--text-main)' }}>% Satisfacción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {PREGUNTAS_ARCOTEL.map((p, idx) => {
+                        const c5 = tabulacionArcotel[`${p.key}_5`] || 0;
+                        const c4 = tabulacionArcotel[`${p.key}_4`] || 0;
+                        const c3 = tabulacionArcotel[`${p.key}_3`] || 0;
+                        const c2 = tabulacionArcotel[`${p.key}_2`] || 0;
+                        const c1 = tabulacionArcotel[`${p.key}_1`] || 0;
+                        const totalP = c5 + c4 + c3 + c2 + c1;
+                        const prom = parseFloat(tabulacionArcotel[`${p.key}_prom`] || 0).toFixed(2);
+                        const satisfaccionPct = totalP > 0 ? (((c5 + c4) / totalP) * 100).toFixed(1) : '0.0';
+
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)', background: idx % 2 === 0 ? 'var(--card-bg)' : 'var(--profile-bg)' }}>
+                            <td style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--sidebar-text)' }}>{p.num}</td>
+                            <td style={{ padding: '12px 14px' }}>
+                              <span style={{ background: `${p.color}15`, color: p.color, padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, whiteSpace: 'nowrap' }}>
+                                <i className={p.icon} style={{ marginRight: '5px' }}></i>{p.dim}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 14px', color: 'var(--text-main)', fontWeight: 600 }}>{p.label}</td>
+                            <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 700, color: '#10b981' }}>{c5}</td>
+                            <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 700, color: '#0284c7' }}>{c4}</td>
+                            <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 700, color: '#f59e0b' }}>{c3}</td>
+                            <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 700, color: '#ea580c' }}>{c2}</td>
+                            <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 700, color: '#ef4444' }}>{c1}</td>
+                            <td style={{ padding: '12px 12px', textAlign: 'center', fontWeight: 800, color: 'var(--text-main)' }}>{totalP}</td>
+                            <td style={{ padding: '12px 12px', textAlign: 'center', fontWeight: 900, color: '#0284c7' }}>{prom} / 5</td>
+                            <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                              <span style={{
+                                background: parseFloat(satisfaccionPct) >= 80 ? 'rgba(16, 185, 129, 0.15)' : parseFloat(satisfaccionPct) >= 60 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                color: parseFloat(satisfaccionPct) >= 80 ? '#059669' : parseFloat(satisfaccionPct) >= 60 ? '#d97706' : '#dc2626',
+                                padding: '4px 10px',
+                                borderRadius: '12px',
+                                fontWeight: 800,
+                                fontSize: '0.78rem'
+                              }}>
+                                {satisfaccionPct}%
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '30px 20px', background: 'var(--profile-bg)', borderRadius: '14px', border: '1px dashed var(--border-color)' }}>
+                <i className="fa-solid fa-clipboard-check" style={{ fontSize: '2.5rem', color: 'var(--sidebar-text)', opacity: 0.5, marginBottom: '10px', display: 'block' }}></i>
+                <h5 style={{ margin: '0 0 6px 0', color: 'var(--text-main)', fontWeight: 800 }}>Aún no hay encuestas ARCOTEL en el rango seleccionado</h5>
+                <p style={{ margin: 0, color: 'var(--sidebar-text)', fontSize: '0.85rem' }}>
+                  Cuando los clientes completen la encuesta móvil al finalizar las visitas, las respuestas se tabularán aquí en tiempo real y podrás descargarlas en Excel para auditoría.
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Dual Charts & Reviews Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '25px', marginBottom: '30px' }}>
 
@@ -417,7 +608,35 @@ function ControlCalidadTab({ token }) {
                         </div>
 
                         {/* Encuestas Detalladas Pills */}
-                        {r.encuesta_rapidez !== null && (
+                        {r.arcotel_p1_trato !== null ? (
+                          <div style={{ marginTop: '12px', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '10px' }}>
+                            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <i className="fa-solid fa-award"></i> Oficial ARCOTEL (Escala 1 a 5):
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: r.arcotel_sugerencia ? '8px' : '0' }}>
+                              <span style={{ background: 'rgba(2, 132, 199, 0.12)', color: '#0284c7', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                                1. Trato: {r.arcotel_p1_trato}/5
+                              </span>
+                              <span style={{ background: 'rgba(6, 182, 212, 0.12)', color: '#0891b2', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                                2. Paciencia: {r.arcotel_p2_paciencia}/5
+                              </span>
+                              <span style={{ background: 'rgba(139, 92, 246, 0.12)', color: '#7c3aed', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                                3. Disponibilidad: {r.arcotel_p3_disponibilidad}/5
+                              </span>
+                              <span style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                                4. Agilidad: {r.arcotel_p4_agilidad}/5
+                              </span>
+                              <span style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                                5. Espera: {r.arcotel_p5_tiempo_espera}/5
+                              </span>
+                            </div>
+                            {r.arcotel_sugerencia && (
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-main)', background: 'rgba(2, 132, 199, 0.05)', padding: '6px 10px', borderRadius: '6px', fontStyle: 'italic', borderLeft: '3px solid #0284c7' }}>
+                                <strong>Sugerencia ARCOTEL:</strong> "{r.arcotel_sugerencia}"
+                              </div>
+                            )}
+                          </div>
+                        ) : r.encuesta_rapidez !== null ? (
                           <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
                             <span style={{ background: 'rgba(2, 132, 199, 0.12)', color: '#0284c7', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
                               ⚡ Rapidez: {r.encuesta_rapidez}/10
@@ -429,7 +648,7 @@ function ControlCalidadTab({ token }) {
                               📢 Explicación: {r.encuesta_explicacion}/10
                             </span>
                           </div>
-                        )}
+                        ) : null}
                       </div>
                     );
                   })

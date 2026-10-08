@@ -302,11 +302,14 @@ def list_tecnicos():
     if token and token.startswith("Bearer "):
         from utils_jwt import verify_token
         user = verify_token(token)
-    elif 'user_id' in session:
-        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role')}
+    if not user and 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'role': session.get('user_role')}
+
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
 
     user_role = user.get('role') or user.get('rol')
-    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'BODEGA']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver la lista de técnicos."}), 403
 
     conn = get_db_connection()

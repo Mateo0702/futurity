@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-function MetricasTab({ token }) {
+function MetricasTab({ token, user }) {
   // Date helpers
   const formatLocalIso = (d = new Date()) => {
     const year = d.getFullYear();
@@ -22,7 +22,10 @@ function MetricasTab({ token }) {
   const [tecnicosList, setTecnicosList] = useState([]);
 
   // Subtab navigation
-  const [subTab, setSubTab] = useState('visitas'); // 'visitas', 'atenciones', 'tiempos', 'modernizacion'
+  const [subTab, setSubTab] = useState(() => {
+    if (user?.rol === 'CALIDAD' || user?.role === 'CALIDAD') return 'tiempos';
+    return 'visitas';
+  }); // 'visitas', 'atenciones', 'tiempos', 'modernizacion'
 
   // Loading states
   const [loading, setLoading] = useState(false);
@@ -298,7 +301,7 @@ function MetricasTab({ token }) {
           datasets: [
             {
               label: 'Completadas',
-              data: evolucion.map(e => e.completadas),
+              data: evolucion.map(e => (e.completadas !== undefined ? e.completadas : (e.cantidad || 0))),
               borderColor: '#10b981',
               backgroundColor: 'rgba(16, 185, 129, 0.1)',
               borderWidth: 2,
@@ -307,7 +310,7 @@ function MetricasTab({ token }) {
             },
             {
               label: 'Total Visitas',
-              data: evolucion.map(e => e.total),
+              data: evolucion.map(e => (e.total !== undefined ? e.total : (e.cantidad || 0))),
               borderColor: '#6366f1',
               borderWidth: 2,
               fill: false,
@@ -332,13 +335,13 @@ function MetricasTab({ token }) {
     // 3. Problemas Comunes
     if (canvasProblemasRef.current) {
       const ctx = canvasProblemasRef.current.getContext('2d');
-      const problemas = data.problemas || [];
+      const problemas = data.problemas || data.top_problemas || [];
       chartsRef.current.problemas = new window.Chart(ctx, {
         type: 'bar',
         data: {
-          labels: problemas.map(p => p.motivo),
+          labels: problemas.map(p => p.motivo || p.problema || 'Sin especificar'),
           datasets: [{
-            data: problemas.map(p => p.cantidad),
+            data: problemas.map(p => p.cantidad || 0),
             backgroundColor: '#ef4444',
             borderRadius: 6
           }]
@@ -402,7 +405,7 @@ function MetricasTab({ token }) {
           labels: evolucion.map(e => e.label),
           datasets: [{
             label: 'Atenciones',
-            data: evolucion.map(e => e.total),
+            data: evolucion.map(e => (e.total !== undefined ? e.total : (e.cantidad || 0))),
             borderColor: '#6366f1',
             backgroundColor: 'rgba(99, 102, 241, 0.1)',
             borderWidth: 2,

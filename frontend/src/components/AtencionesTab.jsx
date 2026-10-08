@@ -28,6 +28,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
   // UI state
   const [loadingContrato, setLoadingContrato] = useState(false);
   const [contratoOk, setContratoOk] = useState(false);
+  const [submittingSingle, setSubmittingSingle] = useState(false);
   const [sectores, setSectores] = useState([]);
   
   // Multi-contract selector state & Plan metadata
@@ -209,11 +210,13 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
   // Submit standard single attention registration
   const handleSingleSubmit = async (e, shouldGenerateVisit = false) => {
     if (e) e.preventDefault();
+    if (submittingSingle) return;
     if (!contrato.trim() || !cliente.trim() || !observacion.trim()) {
       alert("Por favor completa los campos obligatorios (Contrato, Cliente, Observación).");
       return;
     }
 
+    setSubmittingSingle(true);
     try {
       const res = await fetch('/api/admin/atenciones', {
         method: 'POST',
@@ -274,6 +277,8 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
       }
     } catch (err) {
       alert("Error de conexión al guardar la atención.");
+    } finally {
+      setSubmittingSingle(false);
     }
   };
 
@@ -766,10 +771,11 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                 </div>
                 <button 
                   type="button" 
+                  disabled={submittingSingle}
                   onClick={() => handleSingleSubmit(null, true)}
-                  style={{ background: '#6366f1', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '10px', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                  style={{ background: '#6366f1', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '10px', fontWeight: 800, fontSize: '0.82rem', cursor: submittingSingle ? 'not-allowed' : 'pointer', opacity: submittingSingle ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
                 >
-                  <i className="fa-solid fa-calendar-plus"></i> Agendar Visita
+                  <i className={submittingSingle ? "fa-solid fa-spinner fa-spin" : "fa-solid fa-calendar-plus"}></i> {submittingSingle ? 'Guardando...' : 'Agendar Visita'}
                 </button>
               </div>
             )}
@@ -791,6 +797,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
 
             <button
               type="submit"
+              disabled={submittingSingle}
               className="btn"
               style={{
                 width: '100%',
@@ -801,7 +808,8 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                 border: 'none',
                 fontWeight: 800,
                 fontSize: '1rem',
-                cursor: 'pointer',
+                cursor: submittingSingle ? 'not-allowed' : 'pointer',
+                opacity: submittingSingle ? 0.7 : 1,
                 boxShadow: '0 4px 14px rgba(225, 29, 72, 0.3)',
                 display: 'flex',
                 alignItems: 'center',
@@ -809,7 +817,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                 gap: '8px'
               }}
             >
-              <i className="fa-solid fa-floppy-disk"></i> Registrar Atención Diaria
+              <i className={submittingSingle ? "fa-solid fa-spinner fa-spin" : "fa-solid fa-floppy-disk"}></i> {submittingSingle ? 'Registrando Atención...' : 'Registrar Atención Diaria'}
             </button>
           </form>
         </div>

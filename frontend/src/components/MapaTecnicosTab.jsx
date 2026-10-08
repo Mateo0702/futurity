@@ -52,6 +52,7 @@ function TechnicianAvatar({ fotoPerfil, nombre, isOnline, size = 44 }) {
 }
 
 function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
+  const [filterArea, setFilterArea] = useState(activeArea || 'TODOS');
   const [ubicaciones, setUbicaciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [emergencyAlerts, setEmergencyAlerts] = useState([]);
@@ -121,7 +122,7 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
   // 2. Fetch Live Locations & Polling
   const fetchUbicaciones = async () => {
     try {
-      const res = await fetch(`/api/admin/tecnicos/ubicaciones?area=${activeArea}`, {
+      const res = await fetch(`/api/admin/tecnicos/ubicaciones?area=${filterArea}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -142,7 +143,7 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
     fetchUbicaciones();
     const interval = setInterval(fetchUbicaciones, 10000); // 10s auto-refresh
     return () => clearInterval(interval);
-  }, [activeArea, token]);
+  }, [filterArea, token]);
 
   // Update KPI counters
   const updateKPIs = (list) => {
@@ -283,6 +284,23 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
         }
 
         // Popup HTML
+        const areaBadge = u.area_trabajo === 'INSTALACIONES' ? '⚡ Instalaciones' : '🛠️ Soporte';
+        const areaBadgeColor = u.area_trabajo === 'INSTALACIONES' ? '#0284c7' : '#059669';
+
+        let activaVisitaHtml = '';
+        if (u.visita_activa_id) {
+          const isInst = u.visita_activa_es_instalacion === 1;
+          activaVisitaHtml = `
+            <div style="margin-top: 8px; padding: 6px 8px; border-radius: 6px; font-size: 0.72rem; background: ${isInst ? 'rgba(2, 132, 199, 0.08)' : 'rgba(245, 158, 11, 0.08)'}; border-left: 3px solid ${isInst ? '#0284c7' : '#f59e0b'};">
+              <div style="font-weight: 800; color: ${isInst ? '#0284c7' : '#d97706'}; text-transform: uppercase;">
+                ${isInst ? '🔌 Instalación en Curso' : '🤝 Apoyo en Soporte'}
+              </div>
+              <div style="color: #0f172a; font-weight: bold; margin-top: 2px;">${u.visita_activa_cliente || ''}</div>
+              <div style="color: #475569;">Contrato #${u.visita_activa_contrato || 'S/N'} (${u.visita_activa_sector || ''})</div>
+            </div>
+          `;
+        }
+
         const popupHtml = `
           <div style="font-family: system-ui, sans-serif; padding: 4px; width: 220px;">
             ${u.alerta_panico ? `
@@ -294,11 +312,17 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
               <img src="${perfilUrl}" alt="${key}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1.5px solid #cbd5e1;">
               <div>
                 <h4 style="margin: 0; color: #0f172a; font-size: 0.95rem; font-weight: 800;">${key}</h4>
-                <span style="background-color: ${estadoClaseColor}; color: white; padding: 2px 6px; font-size: 0.65rem; font-weight: bold; border-radius: 4px; text-transform: uppercase;">
-                  ${estadoTexto}
-                </span>
+                <div style="display: flex; gap: 4px; margin-top: 3px; flex-wrap: wrap;">
+                  <span style="background-color: ${areaBadgeColor}; color: white; padding: 1px 6px; font-size: 0.62rem; font-weight: 800; border-radius: 4px;">
+                    ${areaBadge}
+                  </span>
+                  <span style="background-color: ${estadoClaseColor}; color: white; padding: 1px 6px; font-size: 0.62rem; font-weight: bold; border-radius: 4px; text-transform: uppercase;">
+                    ${estadoTexto}
+                  </span>
+                </div>
               </div>
             </div>
+            ${activaVisitaHtml}
             <div style="font-size: 0.8rem; color: #475569; display: flex; flex-direction: column; gap: 4px; margin-top: 8px;">
               <div>Placa Vehículo: <strong>${placa}</strong></div>
               <div style="text-align: center; margin: 4px 0;">
@@ -349,16 +373,80 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
             <i className="fa-solid fa-map-location-dot" style={{ color: '#0284c7' }}></i> Monitoreo en Vivo de Técnicos
           </h1>
           <p style={{ margin: '4px 0 0 0', color: 'var(--sidebar-text)', fontSize: '0.9rem', fontWeight: 500 }}>
-            Ubicación GPS y estado de las cuadrillas reportado en tiempo real desde la aplicación de campo ({activeArea}).
+            Ubicación satelital y órdenes en curso reportadas en tiempo real ({filterArea === 'INSTALACIONES' ? 'Cuadrillas de Instalación' : filterArea === 'SOPORTE' ? 'Técnicos de Soporte' : 'Todas las Cuadrillas'}).
           </p>
         </div>
-        <button
-          type="button"
-          onClick={fetchUbicaciones}
-          style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '12px', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)' }}
-        >
-          <i className="fa-solid fa-arrows-rotate"></i> Actualizar Ubicaciones
-        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Selector de Área / Cuadrilla */}
+          <div style={{ display: 'flex', background: 'var(--profile-bg)', padding: '4px', borderRadius: '14px', border: '1px solid var(--border-color)', gap: '4px' }}>
+            <button
+              type="button"
+              onClick={() => setFilterArea('INSTALACIONES')}
+              style={{
+                background: filterArea === 'INSTALACIONES' ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)' : 'transparent',
+                color: filterArea === 'INSTALACIONES' ? 'white' : 'var(--text-main)',
+                border: 'none',
+                padding: '8px 14px',
+                borderRadius: '10px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>⚡</span> Cuadrillas Instalación
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterArea('SOPORTE')}
+              style={{
+                background: filterArea === 'SOPORTE' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'transparent',
+                color: filterArea === 'SOPORTE' ? 'white' : 'var(--text-main)',
+                border: 'none',
+                padding: '8px 14px',
+                borderRadius: '10px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>🛠️</span> Soporte
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterArea('TODOS')}
+              style={{
+                background: filterArea === 'TODOS' ? 'var(--text-main)' : 'transparent',
+                color: filterArea === 'TODOS' ? 'var(--card-bg)' : 'var(--text-main)',
+                border: 'none',
+                padding: '8px 14px',
+                borderRadius: '10px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              🌐 Todos
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={fetchUbicaciones}
+            style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '10px 18px', borderRadius: '12px', fontWeight: 800, fontSize: '0.88rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)' }}
+          >
+            <i className="fa-solid fa-arrows-rotate"></i> Actualizar
+          </button>
+        </div>
       </div>
 
       {/* Emergency Alert Banner */}
@@ -445,13 +533,36 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
                     <TechnicianAvatar fotoPerfil={u.foto_perfil} nombre={u.tecnico} isOnline={isOnline} />
                     <div style={{ flexGrow: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
-                        <strong style={{ color: 'var(--text-main)', fontSize: '0.88rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
-                          {u.tecnico}
-                        </strong>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0, flex: 1 }}>
+                          <span style={{ fontSize: '0.7rem' }} title={u.area_trabajo === 'INSTALACIONES' ? 'Cuadrilla Instalaciones' : 'Técnico Soporte'}>
+                            {u.area_trabajo === 'INSTALACIONES' ? '⚡' : '🛠️'}
+                          </span>
+                          <strong style={{ color: 'var(--text-main)', fontSize: '0.88rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {u.tecnico}
+                          </strong>
+                        </div>
                         <span style={{ background: estadoColor, color: 'white', fontSize: '0.62rem', padding: '2px 7px', borderRadius: '6px', fontWeight: 900, textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>
                           {estadoBadge}
                         </span>
                       </div>
+
+                      {u.visita_activa_id && (
+                        <div style={{
+                          marginTop: '4px',
+                          padding: '4px 6px',
+                          borderRadius: '6px',
+                          fontSize: '0.7rem',
+                          background: u.visita_activa_es_instalacion === 1 ? 'rgba(2, 132, 199, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                          borderLeft: `3px solid ${u.visita_activa_es_instalacion === 1 ? '#0284c7' : '#f59e0b'}`
+                        }}>
+                          <div style={{ fontWeight: 800, color: u.visita_activa_es_instalacion === 1 ? '#0284c7' : '#d97706', fontSize: '0.68rem' }}>
+                            {u.visita_activa_es_instalacion === 1 ? '🔌 Instalación en Curso' : '🤝 Apoyo en Soporte'}
+                          </div>
+                          <div style={{ color: 'var(--text-main)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {u.visita_activa_cliente}
+                          </div>
+                        </div>
+                      )}
 
                       <div style={{ fontSize: '0.74rem', color: 'var(--sidebar-text)', display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px' }}>
                         {detalleTexto && (

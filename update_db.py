@@ -68,6 +68,24 @@ def update():
             conn.commit()
             print("Columna encuesta_explicacion añadida con éxito.")
 
+        # Columnas de Encuesta ARCOTEL (Momento de la Verdad)
+        arcotel_cols = [
+            ("arcotel_p1_trato", "INT DEFAULT NULL"),
+            ("arcotel_p2_paciencia", "INT DEFAULT NULL"),
+            ("arcotel_p3_disponibilidad", "INT DEFAULT NULL"),
+            ("arcotel_p4_agilidad", "INT DEFAULT NULL"),
+            ("arcotel_p5_tiempo_espera", "INT DEFAULT NULL"),
+            ("arcotel_sugerencia", "TEXT DEFAULT NULL")
+        ]
+        for col_name, col_type in arcotel_cols:
+            cursor.execute(f"SHOW COLUMNS FROM visitas_tecnicas LIKE '{col_name}'")
+            if cursor.fetchone():
+                print(f"La columna {col_name} ya existe en visitas_tecnicas.")
+            else:
+                cursor.execute(f"ALTER TABLE visitas_tecnicas ADD COLUMN {col_name} {col_type};")
+                conn.commit()
+                print(f"Columna {col_name} añadida con éxito.")
+
         # Columnas para Foto de Equipos y Firma de Cliente
         cursor.execute("SHOW COLUMNS FROM visitas_tecnicas LIKE 'foto_equipos'")
         if cursor.fetchone():

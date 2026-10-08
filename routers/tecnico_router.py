@@ -343,21 +343,24 @@ def en_camino_visita(id_visita):
             """, (tecnico_nombre, tecnico_nombre, id_visita, date.today().isoformat()))
             conexion.commit()
 
-        # Solo actualizar a EN_RUTA si la visita está PENDIENTE o REAGENDADA (evita regresiones por sincronización desfasada)
-        cursor.execute("SELECT estado FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        # Solo actualizar a EN_RUTA si la visita está PENDIENTE/REAGENDADA o si aún no tiene token
+        cursor.execute("SELECT estado, token_rastreo FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
         row_est = cursor.fetchone()
         estado_actual = row_est[0] if row_est else None
+        token_existente = row_est[1] if row_est else None
         
-        if estado_actual in ['PENDIENTE', 'REAGENDADA', None]:
+        if estado_actual in ['PENDIENTE', 'REAGENDADA', None] or not token_existente:
             query = """
                 UPDATE visitas_tecnicas 
                 SET estado = 'EN_RUTA', 
-                    hora_en_ruta = NOW(), 
+                    hora_en_ruta = COALESCE(hora_en_ruta, NOW()), 
                     token_rastreo = %s 
                 WHERE id_visita = %s
             """
             cursor.execute(query, (token_seguro, id_visita))
             conexion.commit()
+        else:
+            token_seguro = token_existente
 
         # Actualizar estado de actividad global del técnico
         cursor.execute("SELECT cliente FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
@@ -379,7 +382,7 @@ def en_camino_visita(id_visita):
             conexion.close()
             
     if request.is_json or request.headers.get('Accept') == 'application/json':
-        return jsonify({"status": "ok", "message": "Puesto en camino con éxito"})
+        return jsonify({"status": "ok", "message": "Puesto en camino con éxito", "token_rastreo": token_seguro})
     return redirect(request.referrer)
 
 
@@ -642,18 +645,54 @@ def finalizar_visita(id_visita):
             id_visita
         ))
         
-        # Obtener el contrato y técnico principal de esta visita
-        cursor.execute("SELECT contrato, tecnico_principal FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        # Obtener el contrato y técnicos de esta visita
+        cursor.execute("SELECT contrato, tecnico_principal, tecnico_apoyo FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
         tec_row = cursor.fetchone()
-        tecnico_nombre = tec_row['tecnico_principal'] if tec_row else None
+        tecnico_principal_visita = tec_row['tecnico_principal'] if tec_row else None
         contrato_visita = tec_row['contrato'] if tec_row else None
 
-        # Obtener la placa del vehículo asignado al técnico
+        # Opción 1: Determinar el técnico y la placa que efectivamente cierra la visita (usuario autenticado)
+        user_auth = obtener_usuario_autenticado()
+        tecnico_nombre = None
         placa_vehiculo = 'S/P'
-        if tecnico_nombre:
-            cursor.execute("SELECT COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa FROM tecnicos WHERE nombre = %s", (tecnico_nombre,))
-            placa_row = cursor.fetchone()
-            placa_vehiculo = placa_row['placa'] if (placa_row and placa_row['placa']) else 'S/P'
+
+        if user_auth and user_auth.get('username'):
+            auth_name = str(user_auth['username']).strip()
+            cursor.execute("""
+                SELECT nombre, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa 
+                FROM tecnicos 
+                WHERE UPPER(TRIM(nombre)) = UPPER(TRIM(%s))
+                LIMIT 1
+            """, (auth_name,))
+            t_auth = cursor.fetchone()
+            if t_auth and t_auth['nombre']:
+                tecnico_nombre = t_auth['nombre']
+                if t_auth['placa'] and t_auth['placa'] != 'S/P':
+                    placa_vehiculo = t_auth['placa']
+
+        # Si el usuario autenticado no es un técnico registrado con placa, fallback al técnico principal
+        if not tecnico_nombre or placa_vehiculo == 'S/P':
+            if tecnico_principal_visita:
+                tecnico_nombre = tecnico_nombre or tecnico_principal_visita
+                cursor.execute("""
+                    SELECT COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa 
+                    FROM tecnicos 
+                    WHERE UPPER(TRIM(nombre)) = UPPER(TRIM(%s))
+                    LIMIT 1
+                """, (tecnico_principal_visita,))
+                placa_row = cursor.fetchone()
+                if placa_row and placa_row['placa'] and placa_row['placa'] != 'S/P':
+                    placa_vehiculo = placa_row['placa']
+
+        tecnico_nombre = tecnico_nombre or tecnico_principal_visita or 'S/P'
+
+        # Registrar en la visita quién realizó el cierre técnico y desde qué placa se descontaron materiales
+        cursor.execute("""
+            UPDATE visitas_tecnicas 
+            SET tecnico_cierre = %s,
+                placa_cierre = %s
+            WHERE id_visita = %s
+        """, (tecnico_nombre, placa_vehiculo if placa_vehiculo != 'S/P' else None, id_visita))
 
         # Auto-actualizar el inventario de equipos del cliente en directorio_clientes
         if contrato_visita:
@@ -759,6 +798,33 @@ def finalizar_visita(id_visita):
                     (id_visita, tipo_equipo, numero_serie, modelo, motivo_retiro, observacion_retiro, tecnico, placa_vehiculo, estado_custodia, fecha_retiro)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'EN_VEHICULO', NOW())
                 """, (id_visita, tipo_eq, sn_ret, mod_ret, motivo_ret, obs_ret, tecnico_nombre, placa_vehiculo))
+
+        # 4. Actualizar trazabilidad de equipos nuevos instalados si corresponden a los seriales
+        seriales_instalados = [s for s in [sn_onu_normalizado, sn_router, sn_router_secundario] if s and str(s).strip() and str(s).strip() != 'SIN_SERIE']
+        if seriales_instalados:
+            cursor.execute("SELECT cliente, contrato FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+            v_data = cursor.fetchone()
+            nombre_cli = v_data['cliente'] if v_data else ''
+            contrato_cli = v_data['contrato'] if v_data else ''
+
+            for s_inst in seriales_instalados:
+                cursor.execute("""
+                    UPDATE trazabilidad_equipos
+                    SET estado = 'INSTALADO_CLIENTE',
+                        ubicacion_placa = NULL,
+                        id_visita_instalado = %s,
+                        contrato_cliente = %s,
+                        nombre_cliente = %s,
+                        fecha_instalacion = NOW(),
+                        observacion = CONCAT(COALESCE(observacion, ''), %s)
+                    WHERE numero_serie = %s AND estado = 'EN_VEHICULO'
+                """, (
+                    id_visita, 
+                    contrato_cli, 
+                    nombre_cli, 
+                    f" | Instalado en cliente {nombre_cli} (Contrato: {contrato_cli}) por {tecnico_nombre} en visita #{id_visita}", 
+                    s_inst
+                ))
 
         # Actualizar estado global del técnico
         usuario = obtener_usuario_autenticado()
@@ -1329,12 +1395,28 @@ def api_tecnico_mi_inventario():
         for eq in equipos_retirados:
             if eq.get('fecha_retiro'):
                 eq['fecha_retiro'] = eq['fecha_retiro'].strftime('%Y-%m-%d %H:%M:%S')
+
+        # 3. Equipos asignados para instalación (ONTs y Routers en trazabilidad_equipos)
+        equipos_asignados = []
+        if placa and placa != 'S/P':
+            cursor.execute("""
+                SELECT id_equipo, tipo_equipo, modelo, marca, numero_serie, estado, 
+                       fecha_entrega_vehiculo, observacion
+                FROM trazabilidad_equipos
+                WHERE ubicacion_placa = %s AND estado = 'EN_VEHICULO'
+                ORDER BY tipo_equipo ASC, modelo ASC, fecha_entrega_vehiculo DESC
+            """, (placa,))
+            equipos_asignados = cursor.fetchall()
+            for eq in equipos_asignados:
+                if eq.get('fecha_entrega_vehiculo'):
+                    eq['fecha_entrega_vehiculo'] = eq['fecha_entrega_vehiculo'].strftime('%Y-%m-%d %H:%M:%S')
                 
         return jsonify({
             "status": "ok",
             "tecnico": nombre_tecnico,
             "placa": placa,
             "materiales": materiales,
+            "equipos_asignados": equipos_asignados,
             "equipos_retirados": equipos_retirados
         })
     except Exception as e:
@@ -1442,7 +1524,11 @@ def api_tecnico_requisicion_firmar(id_requisicion):
         # Transferencia atómica
         for it in items:
             id_mat = it['id_material']
-            cant = int(it['cantidad_aprobada'] or it['cantidad_solicitada'] or 0)
+            if it.get('cantidad_aprobada') is not None:
+                cant = int(it['cantidad_aprobada'])
+            else:
+                cant = int(it.get('cantidad_solicitada') or 0)
+
             if cant <= 0:
                 continue
 

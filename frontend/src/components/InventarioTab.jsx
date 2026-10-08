@@ -4,7 +4,8 @@ import RequisicionesBodegaTab from './RequisicionesBodegaTab';
 import LiquidacionMensualTab from './LiquidacionMensualTab';
 import ConsumoVisitasTab from './ConsumoVisitasTab';
 
-function InventarioTab({ token }) {
+function InventarioTab({ token: tokenProp, user }) {
+  const token = tokenProp || localStorage.getItem('token') || localStorage.getItem('session_token') || '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
@@ -911,9 +912,33 @@ function InventarioTab({ token }) {
           <p style={{ margin: 0, color: 'var(--sidebar-text)', fontWeight: 600 }}>Cargando estado del inventario...</p>
         </div>
       ) : error ? (
-        <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '20px', padding: '24px', textAlign: 'center', color: '#ef4444', fontWeight: 700 }}>
-          <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: '2rem', marginBottom: '10px' }}></i>
-          <div>{error}</div>
+        <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '20px', padding: '30px', textAlign: 'center', color: '#ef4444' }}>
+          <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: '2.5rem', marginBottom: '12px' }}></i>
+          <div style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '8px' }}>{error}</div>
+          <p style={{ color: 'var(--sidebar-text)', fontSize: '0.9rem', marginBottom: '20px' }}>
+            {error.toLowerCase().includes('autorizado') || error.toLowerCase().includes('privilegio')
+              ? 'Parece que tu sesión ha caducado o requiere renovación de credenciales.'
+              : 'Ocurrió un problema al cargar los datos del inventario.'}
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+            <button
+              onClick={() => cargarInventario()}
+              style={{ padding: '10px 20px', borderRadius: '10px', background: '#2563eb', color: '#fff', border: 'none', fontWeight: 700, cursor: 'pointer' }}
+            >
+              <i className="fa-solid fa-rotate-right" style={{ marginRight: '6px' }}></i> Reintentar
+            </button>
+            <button
+              onClick={() => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('session_token');
+                localStorage.removeItem('user');
+                window.location.href = '/';
+              }}
+              style={{ padding: '10px 20px', borderRadius: '10px', background: '#dc2626', color: '#fff', border: 'none', fontWeight: 700, cursor: 'pointer' }}
+            >
+              <i className="fa-solid fa-right-from-bracket" style={{ marginRight: '6px' }}></i> Iniciar Sesión de Nuevo
+            </button>
+          </div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
@@ -948,7 +973,7 @@ function InventarioTab({ token }) {
 
           {/* VIEW 0: CONTROL DE EQUIPOS CON PISTOLA DE CÓDIGO DE BARRAS */}
           {invSubTab === 'equipos' && (
-            <EquiposBodegaTab />
+            <EquiposBodegaTab token={token} />
           )}
 
           {/* VIEW 1: MATRIZ DE STOCK Y CUSTODIAS */}

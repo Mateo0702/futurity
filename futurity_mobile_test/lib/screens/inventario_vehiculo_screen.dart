@@ -228,6 +228,7 @@ class _InventarioVehiculoScreenState extends State<InventarioVehiculoScreen> wit
                           return;
                         }
 
+                        final messenger = ScaffoldMessenger.of(context);
                         Navigator.pop(context);
                         setState(() => _isProcessing = true);
                         final res = await ApiService.traspasoMaterial(
@@ -239,10 +240,10 @@ class _InventarioVehiculoScreenState extends State<InventarioVehiculoScreen> wit
                         setState(() => _isProcessing = false);
 
                         if (res['success'] == true) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? 'Traspaso realizado con éxito'), backgroundColor: const Color(0xFF10B981)));
+                          messenger.showSnackBar(SnackBar(content: Text(res['message'] ?? 'Traspaso realizado con éxito'), backgroundColor: const Color(0xFF10B981)));
                           _loadInventario();
                         } else {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? 'Error en traspaso'), backgroundColor: const Color(0xFFF87171)));
+                          messenger.showSnackBar(SnackBar(content: Text(res['message'] ?? 'Error en traspaso'), backgroundColor: const Color(0xFFF87171)));
                         }
                       },
                     ),
@@ -270,7 +271,7 @@ class _InventarioVehiculoScreenState extends State<InventarioVehiculoScreen> wit
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Mi Vehículo', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
+                Text(_tecnicoNombre.isNotEmpty ? 'Vehículo ($_tecnicoNombre)' : 'Mi Vehículo', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
                 Text('Placa: $_placaVehiculo', style: GoogleFonts.robotoMono(fontSize: 11.5, color: const Color(0xFF38BDF8), fontWeight: FontWeight.bold)),
               ],
             ),
@@ -428,13 +429,69 @@ class _InventarioVehiculoScreenState extends State<InventarioVehiculoScreen> wit
                   value: isSelected,
                   activeColor: const Color(0xFF38BDF8),
                   checkColor: Colors.black,
-                  title: Text('${eq.tipoEquipo} - ${eq.serialNumber}', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          eq.modelo.isNotEmpty
+                              ? '${eq.tipoEquipo} • ${eq.modelo}'
+                              : eq.tipoEquipo,
+                          style: GoogleFonts.outfit(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 4),
-                      Text('Cliente: ${eq.clienteNombre}', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFCBD5E1))),
-                      Text('Retirado: ${eq.fechaRetiro}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8))),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          'S/N: ${eq.serialNumber}',
+                          style: GoogleFonts.robotoMono(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF38BDF8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        eq.contrato.isNotEmpty
+                            ? 'Cliente: ${eq.clienteNombre} (${eq.contrato})'
+                            : 'Cliente: ${eq.clienteNombre}',
+                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFCBD5E1)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (eq.motivoRetiro.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          'Motivo: ${eq.motivoRetiro}',
+                          style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFFFBBF24)),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      if (eq.fechaRetiro.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          'Retirado: ${eq.fechaRetiro}',
+                          style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+                        ),
+                      ],
                     ],
                   ),
                   onChanged: (val) {

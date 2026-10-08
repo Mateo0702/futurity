@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
-import '../services/location_service.dart';
-import 'login_screen.dart';
 
 class PerfilTecnicoScreen extends StatefulWidget {
   final String tecnicoNombre;
@@ -26,7 +24,6 @@ class PerfilTecnicoScreen extends StatefulWidget {
 }
 
 class _PerfilTecnicoScreenState extends State<PerfilTecnicoScreen> {
-  late String _estadoActividad;
   bool _alertaPanicoActiva = false;
   bool _isProcessing = false;
   final String _numeroGrua = "0958672088";
@@ -34,7 +31,6 @@ class _PerfilTecnicoScreenState extends State<PerfilTecnicoScreen> {
   @override
   void initState() {
     super.initState();
-    _estadoActividad = widget.estadoActividad;
   }
 
   Future<void> _handleLlamarGrua() async {
@@ -179,8 +175,6 @@ class _PerfilTecnicoScreenState extends State<PerfilTecnicoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    bool isTracking = LocationTrackingService.isTracking;
-
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
@@ -279,28 +273,41 @@ class _PerfilTecnicoScreenState extends State<PerfilTecnicoScreen> {
                     ),
                     child: Column(
                       children: [
-                        // GPS Tracking Status
+                        // GPS Tracking Status (Permanente y Obligatorio)
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: Container(
                             padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(color: (isTracking ? const Color(0xFF10B981) : const Color(0xFF64748B)).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                            child: Icon(Icons.gps_fixed_rounded, color: isTracking ? const Color(0xFF34D399) : const Color(0xFF94A3B8)),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.gps_fixed_rounded, color: Color(0xFF34D399)),
                           ),
-                          title: Text('Rastreo GPS en Segundo Plano', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
-                          subtitle: Text(isTracking ? 'Activo - Transmitiendo coordenadas' : 'Inactivo', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8))),
-                          trailing: Switch(
-                            value: isTracking,
-                            activeColor: const Color(0xFF34D399),
-                            onChanged: (val) {
-                              setState(() {
-                                if (val) {
-                                  LocationTrackingService.startTracking();
-                                } else {
-                                  LocationTrackingService.stopTracking();
-                                }
-                              });
-                            },
+                          title: Text(
+                            'Rastreo GPS Satelital',
+                            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
+                          subtitle: Text(
+                            'Activo continuamente durante la jornada',
+                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF34D399)),
+                          ),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                            ),
+                            child: Text(
+                              'OBLIGATORIO',
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF34D399),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
                           ),
                         ),
                         const Divider(color: Colors.white10),

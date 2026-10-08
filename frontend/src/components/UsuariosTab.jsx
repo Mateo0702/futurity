@@ -57,6 +57,22 @@ function UsuariosTab({ token, user }) {
     celular: ''
   });
 
+  const [copiedPhoneId, setCopiedPhoneId] = useState(null);
+
+  const handleCopyPhone = (id, phone) => {
+    if (!phone) return;
+    const clean = phone.replace(/[^0-9]/g, '');
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(clean || phone);
+      }
+    } catch (e) {
+      console.warn("Clipboard failed", e);
+    }
+    setCopiedPhoneId(id);
+    setTimeout(() => setCopiedPhoneId(null), 2000);
+  };
+
   const handleContratoBlur = async () => {
     if (!recForm.contrato || !recForm.contrato.trim()) return;
     try {
@@ -632,8 +648,67 @@ function UsuariosTab({ token, user }) {
                       {filteredRecordatorios.map((r) => (
                         <tr key={r.id_recordatorio} style={{ borderBottom: '1px solid var(--border-color)' }}>
                           <td style={{ padding: '16px 20px' }}>
-                            <strong style={{ display: 'block', color: 'var(--text-main)' }}>{r.titulo}</strong>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--sidebar-text)' }}>{r.descripcion || 'Sin descripción'}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <strong style={{ color: 'var(--text-main)' }}>{r.titulo}</strong>
+                              {r.celular && (() => {
+                                const digits = r.celular.replace(/[^0-9]/g, '');
+                                const isMobile = digits.startsWith('09') || (digits.length === 9 && digits.startsWith('9')) || digits.length === 10;
+                                const waNumber = digits.startsWith('0') ? '593' + digits.substring(1) : (digits.startsWith('593') ? digits : '593' + digits);
+                                const isCopied = copiedPhoneId === r.id_recordatorio;
+                                return (
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyPhone(r.id_recordatorio, r.celular)}
+                                      title="Haz clic para copiar el número al portapapeles"
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        background: isCopied ? '#dcfce7' : 'rgba(37, 99, 235, 0.1)',
+                                        color: isCopied ? '#16a34a' : '#2563eb',
+                                        border: `1px solid ${isCopied ? '#86efac' : 'rgba(37, 99, 235, 0.25)'}`,
+                                        padding: '2px 8px',
+                                        borderRadius: '6px',
+                                        fontWeight: 800,
+                                        fontSize: '0.78rem',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease'
+                                      }}
+                                    >
+                                      <i className={`fa-solid ${isCopied ? 'fa-check' : 'fa-copy'}`}></i>
+                                      <span>{isCopied ? '¡Copiado!' : r.celular}</span>
+                                    </button>
+
+                                    {isMobile && (
+                                      <a
+                                        href={`https://web.whatsapp.com/send?phone=${waNumber}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        title="Abrir chat en WhatsApp Web"
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          background: 'rgba(37, 211, 102, 0.15)',
+                                          color: '#16a34a',
+                                          border: '1px solid rgba(37, 211, 102, 0.3)',
+                                          padding: '2px 8px',
+                                          borderRadius: '6px',
+                                          fontWeight: 800,
+                                          fontSize: '0.78rem',
+                                          textDecoration: 'none'
+                                        }}
+                                      >
+                                        <i className="fa-brands fa-whatsapp"></i>
+                                        <span>WhatsApp</span>
+                                      </a>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--sidebar-text)', display: 'block', marginTop: '3px' }}>{r.descripcion || 'Sin descripción'}</span>
                           </td>
                           <td style={{ padding: '16px 20px' }}>
                             <span style={{ padding: '4px 10px', borderRadius: '8px', fontWeight: 800, fontSize: '0.75rem', background: r.tipo === 'BLOQUEO DE HORARIO' ? 'rgba(239, 68, 68, 0.12)' : r.tipo === 'REUNIÓN' ? 'rgba(99, 102, 241, 0.12)' : 'rgba(245, 158, 11, 0.12)', color: r.tipo === 'BLOQUEO DE HORARIO' ? '#ef4444' : r.tipo === 'REUNIÓN' ? '#4f46e5' : '#d97706' }}>

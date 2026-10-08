@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
+import '../services/location_service.dart';
 import 'main_navigation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -26,6 +27,8 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _checkAutoLogin() async {
     bool loggedIn = await ApiService.isLoggedIn();
     if (loggedIn && mounted) {
+      // Iniciar rastreo satelital automáticamente
+      LocationTrackingService.startTracking();
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
@@ -58,12 +61,13 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     if (result['success'] == true) {
+      // Iniciar rastreo satelital de forma obligatoria e ininterrumpida
+      LocationTrackingService.startTracking();
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
       );
     } else {
-
       setState(() {
         _errorMessage = result['message'] ?? 'Credenciales inválidas';
       });
@@ -82,57 +86,84 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Logo / Brand Icon
+                // Logo Oficial Circular de Atlas
                 Center(
                   child: Container(
-                    width: 90,
-                    height: 90,
+                    width: 100,
+                    height: 100,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF38BDF8), Color(0xFF2563EB)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(26),
+                      shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
                           color: const Color(0xFF38BDF8).withValues(alpha: 0.35),
-                          blurRadius: 24,
+                          blurRadius: 28,
                           offset: const Offset(0, 10),
                         )
                       ],
                     ),
-                    child: const Icon(
-                      Icons.satellite_alt_rounded,
-                      size: 48,
-                      color: Colors.white,
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/img/atlas_logo.png',
+                        width: 100,
+                        height: 100,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: const Color(0xFF1E293B),
+                            child: const Icon(Icons.shield_rounded, color: Color(0xFF38BDF8), size: 48),
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
                 // App Title
                 Text(
-                  'FUTURITY ATLAS',
+                  'FUTURITY',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.outfit(
-                    fontSize: 26,
+                    fontSize: 28,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
-                    letterSpacing: 1.5,
+                    letterSpacing: 2.0,
                   ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Potenciado por ',
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF94A3B8),
+                      ),
+                    ),
+                    Text(
+                      'ATLAS',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF38BDF8),
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'Plataforma Operativa de Campo',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: const Color(0xFF94A3B8),
+                    color: const Color(0xFF64748B),
                   ),
                 ),
-                const SizedBox(height: 36),
+                const SizedBox(height: 32),
 
                 // Error Banner
                 if (_errorMessage != null)

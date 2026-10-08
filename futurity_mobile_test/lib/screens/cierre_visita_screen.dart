@@ -355,9 +355,9 @@ class _CierreVisitaScreenState extends State<CierreVisitaScreen> {
       final result = await ApiService.finalizarVisita(widget.visita.idVisita, payload);
 
       if (result['success'] == true) {
-        // Detener rastreo GPS si estaba activo para esta visita
+        // Desvincular visita activa pero mantener rastreo general de jornada
         if (LocationTrackingService.activeVisitaId == widget.visita.idVisita) {
-          LocationTrackingService.stopTracking();
+          LocationTrackingService.setActiveVisita(null);
         }
 
         if (mounted) {

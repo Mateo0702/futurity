@@ -49,6 +49,7 @@ backups/
 # Flutter App en fase de prueba
 static/app/*.apk
 
-
-
-
+# Database
+*.db
+*.sqlite
+*.sqlite3

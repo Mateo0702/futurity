@@ -19,6 +19,7 @@ from routers.admin_router import admin_bp
 from routers.atenciones_router import atenciones_bp
 from routers.usuarios_router import usuarios_bp
 from routers.api_v2_router import api_v2_bp
+from routers.tracker_router import tracker_bp
 from flask_cors import CORS
 from utils_jwt import verify_token
 # Tus módulos internos
@@ -47,6 +48,7 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(atenciones_bp)
 app.register_blueprint(usuarios_bp)
 app.register_blueprint(api_v2_bp)
+app.register_blueprint(tracker_bp)
 
 @app.before_request
 def auto_login_from_jwt():

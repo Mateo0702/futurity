@@ -232,8 +232,10 @@ def api_v2_get_visitas():
 
     fecha_param = request.args.get('fecha') or date.today().isoformat()
     buscar_texto = request.args.get('buscar', '').strip()
-    active_area = request.args.get('area', 'SOPORTE')
-    es_instalacion_val = 1 if active_area == 'INSTALACIONES' else 0
+    raw_area = request.args.get('area', 'SOPORTE').strip().upper()
+    is_todas = raw_area in ['TODAS', 'TODOS', 'ALL']
+    es_instalacion_val = 1 if raw_area == 'INSTALACIONES' else 0
+    active_area = 'TODAS' if is_todas else raw_area
 
     conexion = get_db_connection()
     if not conexion:
@@ -241,38 +243,41 @@ def api_v2_get_visitas():
 
     cursor = conexion.cursor(dictionary=True)
     try:
+        area_clause = "" if is_todas else "AND v.es_instalacion = %s"
+        area_params = () if is_todas else (es_instalacion_val,)
+
         if buscar_texto:
             is_fibracom = buscar_texto.upper().endswith('F')
             if is_fibracom:
                 contrato_base = buscar_texto[:-1]
-                query = """
+                query = f"""
                     SELECT v.*, t.placa_vehiculo AS placa_vehiculo_principal 
                     FROM visitas_tecnicas v
                     LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
                     WHERE v.fecha_programada = %s 
-                    AND v.es_instalacion = %s
+                    {area_clause}
                     AND (v.cliente LIKE %s OR (v.contrato = %s AND v.empresa = 'FIBRACOM'))
                 """
             else:
                 contrato_base = buscar_texto
-                query = """
+                query = f"""
                     SELECT v.*, t.placa_vehiculo AS placa_vehiculo_principal 
                     FROM visitas_tecnicas v
                     LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
                     WHERE v.fecha_programada = %s 
-                    AND v.es_instalacion = %s
+                    {area_clause}
                     AND (v.cliente LIKE %s OR (v.contrato = %s AND (v.empresa != 'FIBRACOM' OR v.empresa IS NULL)))
                 """
-            params = (fecha_param, es_instalacion_val, f"%{buscar_texto}%", contrato_base)
+            params = (fecha_param,) + area_params + (f"%{buscar_texto}%", contrato_base)
         else:
-            query = """
+            query = f"""
                 SELECT v.*, t.placa_vehiculo AS placa_vehiculo_principal 
                 FROM visitas_tecnicas v
                 LEFT JOIN tecnicos t ON v.tecnico_principal = t.nombre
                 WHERE v.fecha_programada = %s 
-                AND v.es_instalacion = %s
+                {area_clause}
             """
-            params = (fecha_param, es_instalacion_val)
+            params = (fecha_param,) + area_params
 
         cursor.execute(query, params)
         visitas = cursor.fetchall()
@@ -292,13 +297,15 @@ def api_v2_get_visitas():
             if v.get('total_mensual'):
                 v['total_mensual'] = float(v['total_mensual'])
 
-        cursor.execute("""
+        stats_area_clause = "" if is_todas else "AND es_instalacion = %s"
+        stats_params = (fecha_param,) if is_todas else (fecha_param, es_instalacion_val)
+        cursor.execute(f"""
             SELECT estado, COUNT(*) as total 
             FROM visitas_tecnicas 
             WHERE fecha_programada = %s 
-              AND es_instalacion = %s
+              {stats_area_clause}
             GROUP BY estado
-        """, (fecha_param, es_instalacion_val))
+        """, stats_params)
         rows_stats = cursor.fetchall()
         stats = {"pendientes": 0, "finalizadas": 0, "reagendadas": 0, "canceladas": 0}
         for r in rows_stats:
@@ -312,19 +319,49 @@ def api_v2_get_visitas():
             elif est == 'CANCELADA':
                 stats['canceladas'] += r['total']
 
+        # Conteos globales de Soporte vs Instalaciones hoy (para badges informativos)
+        cursor.execute("""
+            SELECT 
+                COALESCE(SUM(CASE WHEN es_instalacion = 0 THEN 1 ELSE 0 END), 0) AS total_soporte,
+                COALESCE(SUM(CASE WHEN es_instalacion = 1 THEN 1 ELSE 0 END), 0) AS total_instalaciones
+            FROM visitas_tecnicas
+            WHERE fecha_programada = %s AND estado != 'CANCELADA'
+        """, (fecha_param,))
+        row_counts = cursor.fetchone() or {}
+        total_soporte_hoy = int(row_counts.get('total_soporte') or 0)
+        total_instalaciones_hoy = int(row_counts.get('total_instalaciones') or 0)
+
+        # Cuadrillas de instalaciones apoyando en soporte hoy
+        cursor.execute("""
+            SELECT v.id_visita, v.tecnico_principal, v.cliente, v.contrato, v.servicio, v.problema, v.sector, v.estado, v.hora_inicio_visita
+            FROM visitas_tecnicas v
+            JOIN tecnicos t ON t.nombre = v.tecnico_principal
+            WHERE v.fecha_programada = %s
+              AND v.es_instalacion = 0
+              AND t.area_trabajo = 'INSTALACIONES'
+              AND v.estado != 'CANCELADA'
+            ORDER BY v.id_visita DESC
+        """, (fecha_param,))
+        cuadrillas_en_soporte = cursor.fetchall()
+        for c in cuadrillas_en_soporte:
+            if c.get('hora_inicio_visita'):
+                c['hora_inicio_visita'] = str(c['hora_inicio_visita'])
+
         try:
             target_dt = datetime.strptime(fecha_param, '%Y-%m-%d').date()
             ayer_dt = str(target_dt - timedelta(days=1))
         except Exception:
             ayer_dt = str(date.today() - timedelta(days=1))
 
-        cursor.execute("""
+        ayer_area_clause = "" if is_todas else "AND es_instalacion = %s"
+        ayer_params = (ayer_dt,) if is_todas else (ayer_dt, es_instalacion_val)
+        cursor.execute(f"""
             SELECT COUNT(*) as total 
             FROM visitas_tecnicas 
             WHERE fecha_programada = %s 
-              AND es_instalacion = %s
+              {ayer_area_clause}
               AND estado IN ('PENDIENTE', 'EN_RUTA', 'EN_SITIO')
-        """, (ayer_dt, es_instalacion_val))
+        """, ayer_params)
         row_ayer = cursor.fetchone()
         cant_pendientes_atrasadas = row_ayer['total'] if row_ayer else 0
 
@@ -337,6 +374,24 @@ def api_v2_get_visitas():
         """, (fecha_param,))
         recordatorios = cursor.fetchall()
         for rec in recordatorios:
+            if rec.get('tipo') == 'LLAMAR A CLIENTE' and not rec.get('celular'):
+                contrato_val = rec.get('contrato')
+                if not contrato_val and rec.get('titulo'):
+                    import re
+                    m = re.search(r'Contrato\s*#?([0-9A-Za-z]+)', rec['titulo'], re.IGNORECASE)
+                    if m:
+                        contrato_val = m.group(1).strip()
+                if contrato_val:
+                    try:
+                        cursor.execute("SELECT nombre_cliente, telefono1, telefono2, telefono3 FROM directorio_clientes WHERE contrato = %s LIMIT 1", (contrato_val,))
+                        cli_row = cursor.fetchone()
+                        if cli_row:
+                            rec['celular'] = cli_row['telefono1'] or cli_row['telefono2'] or cli_row['telefono3'] or ''
+                            if not rec.get('cliente'):
+                                rec['cliente'] = cli_row['nombre_cliente']
+                    except:
+                        pass
+
             if rec.get('fecha'):
                 rec['fecha'] = str(rec['fecha'])
             if rec.get('fecha_creacion'):
@@ -369,6 +424,9 @@ def api_v2_get_visitas():
             "ayer_fecha": ayer_dt,
             "area": active_area,
             "stats": stats,
+            "total_soporte_hoy": total_soporte_hoy,
+            "total_instalaciones_hoy": total_instalaciones_hoy,
+            "cuadrillas_en_soporte": cuadrillas_en_soporte,
             "cant_pendientes_atrasadas": cant_pendientes_atrasadas,
             "recordatorios": recordatorios,
             "visitas": visitas

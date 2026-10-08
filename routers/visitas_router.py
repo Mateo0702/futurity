@@ -290,7 +290,7 @@ def reagendar_visita(id_visita):
     usuario = obtener_usuario_visitas()
     if not usuario:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes permiso para reagendar visitas."}), 403
 
     nueva_fecha = request.form.get('nueva_fecha', '').strip()
@@ -364,7 +364,7 @@ def cancelar_visita(id_visita):
     usuario = obtener_usuario_visitas()
     if not usuario:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes permiso para cancelar visitas."}), 403
     
     estado_cancelacion = request.form.get('estado_cancelacion')
@@ -398,7 +398,7 @@ def reasignar_tecnicos(id_visita):
     usuario = obtener_usuario_visitas()
     if not usuario:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes permiso para reasignar técnicos."}), 403
     
     nuevo_principal = request.form.get('tecnico_principal')

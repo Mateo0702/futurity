@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReporteArcotelSubTab from './ReporteArcotelSubTab';
 
 const LISTA_HORARIOS_TURNO = [
   "LIBRE",
+  "7 AM - 4 PM",
+  "2 PM - 9 PM",
+  "10 AM - 8 PM",
   "7AM - 2PM",
   "7 AM - 4PM",
   "7AM - 5PM",
+  "8 AM - 5 PM",
   "8AM - 6PM",
   "10 AM - 6PM",
   "10 AM - 8PM",
@@ -102,9 +107,13 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
 
   useEffect(() => {
     loadReportData();
-  }, [reportSubTab, fecha, tipoServicio, tecnicoFiltro, todasSoluciones, agenteA, agenteB, agenteC]);
+  }, [reportSubTab, fecha, tipoServicio, tecnicoFiltro, todasSoluciones]);
 
-  const loadReportData = async () => {
+  const loadReportData = async (overrideAgents = null) => {
+    if (reportSubTab === 'arcotel') {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       if (reportSubTab === 'calidad') {
@@ -147,9 +156,11 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
         }
       } else if (reportSubTab === 'cuadro-mando') {
         let query = `/api/admin/cuadro_mando/preview?fecha=${fecha}`;
-        if (agenteA) query += `&agente_a=${encodeURIComponent(agenteA)}`;
-        if (agenteB) query += `&agente_b=${encodeURIComponent(agenteB)}`;
-        if (agenteC) query += `&agente_c=${encodeURIComponent(agenteC)}`;
+        if (overrideAgents) {
+          if (overrideAgents.a) query += `&agente_a=${encodeURIComponent(overrideAgents.a)}`;
+          if (overrideAgents.b) query += `&agente_b=${encodeURIComponent(overrideAgents.b)}`;
+          if (overrideAgents.c) query += `&agente_c=${encodeURIComponent(overrideAgents.c)}`;
+        }
 
         const res = await fetch(query, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -159,9 +170,21 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
           setDataCuadroMando(data);
           setAgentesList(data.agentes_list || []);
 
-          if (!agenteA && data.agente_a) setAgenteA(data.agente_a);
-          if (!agenteB && data.agente_b) setAgenteB(data.agente_b);
-          if (!agenteC && data.agente_c) setAgenteC(data.agente_c);
+          if (overrideAgents) {
+            setAgenteA(overrideAgents.a);
+            setAgenteB(overrideAgents.b);
+            setAgenteC(overrideAgents.c);
+          } else {
+            setAgenteA(data.agente_a || '');
+            setAgenteB(data.agente_b || '');
+            setAgenteC(data.agente_c || '');
+            setHorarioA(data.horario_a || '7 AM - 4 PM');
+            setHorarioB(data.horario_b || '2 PM - 9 PM');
+            setHorarioC(data.horario_c || '10 AM - 8 PM');
+            setSoporteA(data.soporte_a !== undefined ? data.soporte_a : 0);
+            setSoporteB(data.soporte_b !== undefined ? data.soporte_b : 0);
+            setSoporteC(data.soporte_c !== undefined ? data.soporte_c : 0);
+          }
 
           setTotalKpi(data.kpis?.total_carga || 0);
         }
@@ -171,6 +194,68 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const saveCuadroMandoConfig = async (customParams = {}) => {
+    try {
+      const payload = {
+        fecha: fecha,
+        agente_a: customParams.agente_a ?? agenteA,
+        agente_b: customParams.agente_b ?? agenteB,
+        agente_c: customParams.agente_c ?? agenteC,
+        horario_a: customParams.horario_a ?? horarioA,
+        horario_b: customParams.horario_b ?? horarioB,
+        horario_c: customParams.horario_c ?? horarioC,
+        soporte_a: customParams.soporte_a ?? soporteA,
+        soporte_b: customParams.soporte_b ?? soporteB,
+        soporte_c: customParams.soporte_c ?? soporteC
+      };
+      await fetch('/api/admin/cuadro_mando/guardar_config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      console.error("Error al guardar configuración de turnos:", err);
+    }
+  };
+
+  const handleAgenteChange = (turno, val) => {
+    const newA = turno === 'A' ? val : agenteA;
+    const newB = turno === 'B' ? val : agenteB;
+    const newC = turno === 'C' ? val : agenteC;
+    if (turno === 'A') setAgenteA(val);
+    if (turno === 'B') setAgenteB(val);
+    if (turno === 'C') setAgenteC(val);
+    localStorage.setItem(`cm_saved_cm_agente_${turno.toLowerCase()}`, val);
+    saveCuadroMandoConfig({ agente_a: newA, agente_b: newB, agente_c: newC });
+    loadReportData({ a: newA, b: newB, c: newC });
+  };
+
+  const handleHorarioChange = (turno, val) => {
+    const newHA = turno === 'A' ? val : horarioA;
+    const newHB = turno === 'B' ? val : horarioB;
+    const newHC = turno === 'C' ? val : horarioC;
+    if (turno === 'A') setHorarioA(val);
+    if (turno === 'B') setHorarioB(val);
+    if (turno === 'C') setHorarioC(val);
+    localStorage.setItem(`cm_saved_cm_horario_${turno.toLowerCase()}`, val);
+    saveCuadroMandoConfig({ horario_a: newHA, horario_b: newHB, horario_c: newHC });
+  };
+
+  const handleSoporteChange = (turno, valRaw) => {
+    const val = parseInt(valRaw) || 0;
+    const newSA = turno === 'A' ? val : soporteA;
+    const newSB = turno === 'B' ? val : soporteB;
+    const newSC = turno === 'C' ? val : soporteC;
+    if (turno === 'A') setSoporteA(val);
+    if (turno === 'B') setSoporteB(val);
+    if (turno === 'C') setSoporteC(val);
+    localStorage.setItem(`cm_saved_cm_soporte_${turno.toLowerCase()}`, val);
+    saveCuadroMandoConfig({ soporte_a: newSA, soporte_b: newSB, soporte_c: newSC });
   };
 
   // Render Charts for Cuadro de Mando
@@ -272,11 +357,20 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
         endpoint = `/api/admin/reporte_dia_siguiente/excel?fecha=${fecha}`;
         filename = `Reporte_Dia_Siguiente_${fecha}.xlsx`;
       } else if (reportSubTab === 'cuadro-mando') {
-        let query = `fecha=${fecha}`;
-        if (agenteA) query += `&agente_a=${encodeURIComponent(agenteA)}`;
-        if (agenteB) query += `&agente_b=${encodeURIComponent(agenteB)}`;
-        if (agenteC) query += `&agente_c=${encodeURIComponent(agenteC)}`;
-        endpoint = `/api/admin/cuadro_mando/excel?${query}`;
+        await saveCuadroMandoConfig();
+        const queryParams = new URLSearchParams({
+          fecha: fecha,
+          agente_a: agenteA || '',
+          agente_b: agenteB || '',
+          agente_c: agenteC || '',
+          horario_a: horarioA || '7 AM - 4 PM',
+          horario_b: horarioB || '2 PM - 9 PM',
+          horario_c: horarioC || '10 AM - 8 PM',
+          soporte_a: soporteA || 0,
+          soporte_b: soporteB || 0,
+          soporte_c: soporteC || 0
+        });
+        endpoint = `/api/admin/cuadro_mando/excel?${queryParams.toString()}`;
         filename = `Reporte_Cuadro_Mando_${fecha}.xlsx`;
       }
 
@@ -307,6 +401,7 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
 
   const handleShareLink = async () => {
     try {
+      await saveCuadroMandoConfig();
       const res = await fetch(`/api/admin/cuadro_mando/share_link?fecha=${fecha}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -471,8 +566,25 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
             <i className="fa-solid fa-gauge-high"></i> Reporte General
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={() => setReportSubTab('arcotel')}
+          style={{
+            background: 'none', border: 'none', padding: '10px 18px', fontWeight: 800, fontSize: '0.95rem',
+            color: reportSubTab === 'arcotel' ? '#0284c7' : 'var(--sidebar-text)',
+            borderBottom: reportSubTab === 'arcotel' ? '3px solid #0284c7' : 'none',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'
+          }}
+        >
+          <i className="fa-solid fa-shield-halved"></i> Reportes ARCOTEL
+        </button>
       </div>
 
+      {reportSubTab === 'arcotel' ? (
+        <ReporteArcotelSubTab token={token} />
+      ) : (
+        <>
       {/* Filtros de Fecha y Acciones */}
       <div style={{ background: 'var(--card-bg)', padding: '20px 24px', borderRadius: '20px', border: '1px solid var(--border-color)', marginBottom: '25px', boxShadow: 'var(--shadow-sm)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '16px' }}>
@@ -585,7 +697,7 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
               <strong style={{ color: '#4f46e5', display: 'block', marginBottom: '10px', fontSize: '0.85rem' }}>TURNO A</strong>
               <div style={{ marginBottom: '10px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Asesor:</label>
-                <select value={agenteA} onChange={(e) => { setAgenteA(e.target.value); localStorage.setItem('cm_saved_cm_agente_a', e.target.value); }} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }}>
+                <select value={agenteA} onChange={(e) => handleAgenteChange('A', e.target.value)} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }}>
                   {agentesList.map((a, i) => <option key={i} value={a}>{a}</option>)}
                   <option value="Sin asignar">Sin asignar</option>
                 </select>
@@ -594,7 +706,7 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Horario:</label>
                 <select 
                   value={horarioA} 
-                  onChange={(e) => { setHorarioA(e.target.value); localStorage.setItem('cm_saved_cm_horario_a', e.target.value); }} 
+                  onChange={(e) => handleHorarioChange('A', e.target.value)} 
                   style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 600 }}
                 >
                   {LISTA_HORARIOS_TURNO.map((h, i) => <option key={i} value={h}>{h}</option>)}
@@ -603,7 +715,7 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
               </div>
               <div>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Soporte Técnicos VT (Manual):</label>
-                <input type="number" value={soporteA} onChange={(e) => { setSoporteA(parseInt(e.target.value) || 0); localStorage.setItem('cm_saved_cm_soporte_a', e.target.value); }} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }} />
+                <input type="number" min="0" value={soporteA} onChange={(e) => handleSoporteChange('A', e.target.value)} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }} />
               </div>
             </div>
 
@@ -612,7 +724,7 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
               <strong style={{ color: '#10b981', display: 'block', marginBottom: '10px', fontSize: '0.85rem' }}>TURNO B</strong>
               <div style={{ marginBottom: '10px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Asesor:</label>
-                <select value={agenteB} onChange={(e) => { setAgenteB(e.target.value); localStorage.setItem('cm_saved_cm_agente_b', e.target.value); }} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }}>
+                <select value={agenteB} onChange={(e) => handleAgenteChange('B', e.target.value)} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }}>
                   {agentesList.map((a, i) => <option key={i} value={a}>{a}</option>)}
                   <option value="Sin asignar">Sin asignar</option>
                 </select>
@@ -621,7 +733,7 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Horario:</label>
                 <select 
                   value={horarioB} 
-                  onChange={(e) => { setHorarioB(e.target.value); localStorage.setItem('cm_saved_cm_horario_b', e.target.value); }} 
+                  onChange={(e) => handleHorarioChange('B', e.target.value)} 
                   style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 600 }}
                 >
                   {LISTA_HORARIOS_TURNO.map((h, i) => <option key={i} value={h}>{h}</option>)}
@@ -630,7 +742,7 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
               </div>
               <div>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Soporte Técnicos VT (Manual):</label>
-                <input type="number" value={soporteB} onChange={(e) => { setSoporteB(parseInt(e.target.value) || 0); localStorage.setItem('cm_saved_cm_soporte_b', e.target.value); }} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }} />
+                <input type="number" min="0" value={soporteB} onChange={(e) => handleSoporteChange('B', e.target.value)} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }} />
               </div>
             </div>
 
@@ -639,7 +751,7 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
               <strong style={{ color: '#ea580c', display: 'block', marginBottom: '10px', fontSize: '0.85rem' }}>TURNO C</strong>
               <div style={{ marginBottom: '10px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Asesor:</label>
-                <select value={agenteC} onChange={(e) => { setAgenteC(e.target.value); localStorage.setItem('cm_saved_cm_agente_c', e.target.value); }} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }}>
+                <select value={agenteC} onChange={(e) => handleAgenteChange('C', e.target.value)} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }}>
                   {agentesList.map((a, i) => <option key={i} value={a}>{a}</option>)}
                   <option value="Sin asignar">Sin asignar</option>
                 </select>
@@ -648,7 +760,7 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Horario:</label>
                 <select 
                   value={horarioC} 
-                  onChange={(e) => { setHorarioC(e.target.value); localStorage.setItem('cm_saved_cm_horario_c', e.target.value); }} 
+                  onChange={(e) => handleHorarioChange('C', e.target.value)} 
                   style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 600 }}
                 >
                   {LISTA_HORARIOS_TURNO.map((h, i) => <option key={i} value={h}>{h}</option>)}
@@ -657,7 +769,7 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
               </div>
               <div>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', display: 'block', marginBottom: '4px' }}>Soporte Técnicos VT (Manual):</label>
-                <input type="number" value={soporteC} onChange={(e) => { setSoporteC(parseInt(e.target.value) || 0); localStorage.setItem('cm_saved_cm_soporte_c', e.target.value); }} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }} />
+                <input type="number" min="0" value={soporteC} onChange={(e) => handleSoporteChange('C', e.target.value)} style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)' }} />
               </div>
             </div>
           </div>
@@ -1155,6 +1267,8 @@ function ReportesTab({ token, user, initialSubTab, initialFecha }) {
           </>
         )}
       </div>
+      </>
+      )}
 
       {/* Photo Modal Zoom */}
       {previewPhoto && (

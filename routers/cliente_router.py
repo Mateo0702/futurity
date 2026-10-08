@@ -37,7 +37,12 @@ def api_encuesta_info(token):
     """Retorna los datos de la visita para alimentar el componente React de encuesta."""
     conexion = get_db_connection()
     cursor = conexion.cursor(dictionary=True)
-    cursor.execute("SELECT tecnico_principal, tecnico_apoyo, estado, cliente FROM visitas_tecnicas WHERE token_rastreo = %s", (token,))
+    cursor.execute("""
+        SELECT id_visita, tecnico_principal, tecnico_apoyo, estado, cliente, contrato, telefonos,
+               arcotel_p1_trato, calificacion_estrellas
+        FROM visitas_tecnicas 
+        WHERE token_rastreo = %s
+    """, (token,))
     visita = cursor.fetchone()
     cursor.close()
     conexion.close()
@@ -45,7 +50,9 @@ def api_encuesta_info(token):
     if not visita:
         return jsonify({"status": "error", "message": "Este enlace no es válido o ha expirado."}), 404
 
-    return jsonify({"status": "ok", "visita": visita})
+    ya_respondida = bool(visita.get('arcotel_p1_trato') is not None or visita.get('calificacion_estrellas') is not None)
+
+    return jsonify({"status": "ok", "visita": visita, "ya_respondida": ya_respondida})
 
 
 @cliente_bp.route('/api/rastreo_ubicacion/<token>')
@@ -100,24 +107,77 @@ def api_rastreo_ubicacion(token):
 
 @cliente_bp.route('/api/cliente/calificar/<token>', methods=['POST'])
 def calificar_visita(token):
-    """Permite al cliente calificar la visita una vez que ha finalizado."""
-    rapidez = request.form.get('rapidez')
-    atencion = request.form.get('atencion')
-    explicacion = request.form.get('explicacion')
-    comentario = request.form.get('comentario', '')
+    """Permite al cliente calificar la visita con las preguntas oficiales de ARCOTEL."""
+    data = request.get_json(silent=True) or request.form or {}
+
+    def parse_rating(val):
+        try:
+            if val is not None and str(val).strip() != '':
+                v = int(val)
+                return v if 1 <= v <= 5 else None
+        except:
+            pass
+        return None
+
+    # Parámetros oficiales ARCOTEL (escala 1 a 5)
+    p1 = parse_rating(data.get('arcotel_p1_trato') or data.get('p1'))
+    p2 = parse_rating(data.get('arcotel_p2_paciencia') or data.get('p2'))
+    p3 = parse_rating(data.get('arcotel_p3_disponibilidad') or data.get('p3'))
+    p4 = parse_rating(data.get('arcotel_p4_agilidad') or data.get('p4'))
+    p5 = parse_rating(data.get('arcotel_p5_tiempo_espera') or data.get('p5'))
+    sugerencia = (data.get('arcotel_sugerencia') or data.get('comentario') or data.get('sugerencia') or '').strip()
+
+    # Parámetros legados (escala 1 a 10)
+    rapidez_old = data.get('rapidez')
+    atencion_old = data.get('atencion')
+    explicacion_old = data.get('explicacion')
 
     conexion = get_db_connection()
     cursor = conexion.cursor()
     
     try:
-        if rapidez and atencion and explicacion:
-            # Calcular estrellas (1 a 5) en base al promedio de las puntuaciones 1 a 10
-            r_val = int(rapidez)
-            a_val = int(atencion)
-            e_val = int(explicacion)
+        if p1 and p2 and p3 and p4 and p5:
+            promedio_5 = (p1 + p2 + p3 + p4 + p5) / 5.0
+            estrellas = max(1, min(5, int(round(promedio_5))))
+
+            # Compatibilidad legado (escala 1 a 10)
+            r_old = p4 * 2
+            a_old = p1 * 2
+            e_old = p3 * 2
+
+            query = """
+                UPDATE visitas_tecnicas 
+                SET calificacion_estrellas = %s, 
+                    calificacion_comentario = %s,
+                    arcotel_p1_trato = %s,
+                    arcotel_p2_paciencia = %s,
+                    arcotel_p3_disponibilidad = %s,
+                    arcotel_p4_agilidad = %s,
+                    arcotel_p5_tiempo_espera = %s,
+                    arcotel_sugerencia = %s,
+                    encuesta_rapidez = %s,
+                    encuesta_atencion = %s,
+                    encuesta_explicacion = %s
+                WHERE token_rastreo = %s
+            """
+            cursor.execute(query, (
+                estrellas, sugerencia,
+                p1, p2, p3, p4, p5, sugerencia,
+                r_old, a_old, e_old,
+                token
+            ))
+        elif rapidez_old and atencion_old and explicacion_old:
+            r_val = int(rapidez_old)
+            a_val = int(atencion_old)
+            e_val = int(explicacion_old)
             promedio_10 = (r_val + a_val + e_val) / 3.0
-            estrellas = int(round(promedio_10 / 2.0))
-            estrellas = max(1, min(5, estrellas))
+            estrellas = max(1, min(5, int(round(promedio_10 / 2.0))))
+
+            p1_c = max(1, min(5, int(round(a_val / 2.0))))
+            p2_c = p1_c
+            p3_c = max(1, min(5, int(round(e_val / 2.0))))
+            p4_c = max(1, min(5, int(round(r_val / 2.0))))
+            p5_c = p4_c
 
             query = """
                 UPDATE visitas_tecnicas 
@@ -125,31 +185,29 @@ def calificar_visita(token):
                     calificacion_comentario = %s,
                     encuesta_rapidez = %s,
                     encuesta_atencion = %s,
-                    encuesta_explicacion = %s
-                WHERE token_rastreo = %s AND estado = 'FINALIZADA'
+                    encuesta_explicacion = %s,
+                    arcotel_p1_trato = %s,
+                    arcotel_p2_paciencia = %s,
+                    arcotel_p3_disponibilidad = %s,
+                    arcotel_p4_agilidad = %s,
+                    arcotel_p5_tiempo_espera = %s,
+                    arcotel_sugerencia = %s
+                WHERE token_rastreo = %s
             """
-            cursor.execute(query, (estrellas, comentario, r_val, a_val, e_val, token))
+            cursor.execute(query, (
+                estrellas, sugerencia,
+                r_val, a_val, e_val,
+                p1_c, p2_c, p3_c, p4_c, p5_c, sugerencia,
+                token
+            ))
         else:
-            # Fallback antiguo de estrellas
-            estrellas = request.form.get('estrellas')
-            if not estrellas:
-                return jsonify({"status": "error", "message": "Faltan datos de calificación"}), 400
-            
-            query = """
-                UPDATE visitas_tecnicas 
-                SET calificacion_estrellas = %s, 
-                    calificacion_comentario = %s 
-                WHERE token_rastreo = %s AND estado = 'FINALIZADA'
-            """
-            cursor.execute(query, (int(estrellas), comentario, token))
+            return jsonify({"status": "error", "message": "Por favor complete todas las preguntas de la encuesta."}), 400
 
         conexion.commit()
-        
-        # Validar si se afectó alguna fila (asegurarse de que existe y está finalizada)
         if cursor.rowcount == 0:
-            return jsonify({"status": "error", "message": "No se pudo guardar. La visita no existe o no está en estado FINALIZADA."}), 400
+            return jsonify({"status": "error", "message": "No se encontró el registro para esta encuesta."}), 404
             
-        return jsonify({"status": "ok", "message": "¡Gracias por tu calificación!"})
+        return jsonify({"status": "ok", "message": "¡Muchas gracias por su calificación!"})
         
     except Exception as e:
         conexion.rollback()
@@ -283,6 +341,14 @@ def publico_cuadro_mando(fecha, token):
         cursor.execute("SELECT nombre FROM callcenter WHERE activo = 1 ORDER BY nombre ASC")
         agentes_list = [row['nombre'] for row in cursor.fetchall()]
         
+        # 1.5. Consultar si existe configuración previamente guardada para esta fecha
+        cursor.execute("""
+            SELECT agente_a, agente_b, agente_c, horario_a, horario_b, horario_c, soporte_a, soporte_b, soporte_c
+            FROM cuadro_mando_config
+            WHERE fecha = %s
+        """, (fecha,))
+        saved = cursor.fetchone() or {}
+
         # 2. Intentar auto-detectar los 3 agentes más activos en esta fecha
         cursor.execute("""
             SELECT agente, COUNT(*) as c 
@@ -307,24 +373,31 @@ def publico_cuadro_mando(fecha, token):
         while len(detected_agentes) < 3:
             detected_agentes.append('Sin asignar')
             
-        # Leer agentes de los query parameters, cayendo en los detectados
-        agente_a = request.args.get('agente_a', detected_agentes[0])
-        agente_b = request.args.get('agente_b', detected_agentes[1])
-        agente_c = request.args.get('agente_c', detected_agentes[2])
+        # Leer agentes: prioridad query param -> config guardada -> detectados
+        agente_a = request.args.get('agente_a') or saved.get('agente_a') or detected_agentes[0]
+        agente_b = request.args.get('agente_b') or saved.get('agente_b') or detected_agentes[1]
+        agente_c = request.args.get('agente_c') or saved.get('agente_c') or detected_agentes[2]
         
-        # Leer soporte manual
-        try:
-            soporte_a = int(request.args.get('soporte_a', 0))
-        except:
-            soporte_a = 0
-        try:
-            soporte_b = int(request.args.get('soporte_b', 0))
-        except:
-            soporte_b = 0
-        try:
-            soporte_c = int(request.args.get('soporte_c', 0))
-        except:
-            soporte_c = 0
+        horario_a = request.args.get('horario_a') or saved.get('horario_a') or '7 AM - 4 PM'
+        horario_b = request.args.get('horario_b') or saved.get('horario_b') or '2 PM - 9 PM'
+        horario_c = request.args.get('horario_c') or saved.get('horario_c') or '10 AM - 8 PM'
+
+        def parse_soporte(val, fallback):
+            if val is not None and str(val).strip() != '':
+                try:
+                    return int(val)
+                except (ValueError, TypeError):
+                    pass
+            if fallback is not None:
+                try:
+                    return int(fallback)
+                except (ValueError, TypeError):
+                    pass
+            return 0
+
+        soporte_a = parse_soporte(request.args.get('soporte_a'), saved.get('soporte_a'))
+        soporte_b = parse_soporte(request.args.get('soporte_b'), saved.get('soporte_b'))
+        soporte_c = parse_soporte(request.args.get('soporte_c'), saved.get('soporte_c'))
             
         agentes = [agente_a, agente_b, agente_c]
         
@@ -378,16 +451,18 @@ def publico_cuadro_mando(fecha, token):
             """, (fecha, ag))
             atenciones_data['otros'][i] = cursor.fetchone()['total'] or 0
             
-        # 4. KPIs de Visitas Técnicas de Campo
+        # 4. KPIs de Visitas Técnicas de Campo (Solo Daños/Soporte)
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
             WHERE fecha_programada = %s AND DATE(fecha_registro) < %s AND (estado != 'CANCELADA' OR estado IS NULL)
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
         """, (fecha, fecha))
         kpi_pendientes_anteriores = cursor.fetchone()['total'] or 0
         
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
             WHERE COALESCE(DATE(hora_fin_visita), fecha_programada) = %s AND estado = 'FINALIZADA'
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
               AND tecnico_principal IS NOT NULL 
               AND tecnico_principal NOT IN ('', 'NO TECNICO', 'SIN ASIGNAR', 'NONE', 'NAN')
               AND solucion_tecnico IS NOT NULL 
@@ -403,17 +478,19 @@ def publico_cuadro_mando(fecha, token):
         cursor.execute("""
             SELECT COUNT(*) as total FROM visitas_tecnicas
             WHERE fecha_programada = %s AND (estado = 'PENDIENTE' OR estado IS NULL)
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
         """, (manana,))
         kpi_pendientes_manana = cursor.fetchone()['total'] or 0
         
         kpi_generadas_hoy = max(0, kpi_atendidas_hoy + kpi_pendientes_manana - kpi_pendientes_anteriores)
         kpi_total_carga = kpi_pendientes_anteriores + kpi_generadas_hoy
         
-        # 5. Listados de problemas / soluciones
+        # 5. Listados de problemas / soluciones (Solo Daños/Soporte)
         cursor.execute("""
             SELECT solucion_tecnico, COUNT(*) as cantidad
             FROM visitas_tecnicas
             WHERE COALESCE(DATE(hora_fin_visita), fecha_programada) = %s AND estado = 'FINALIZADA'
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
               AND tecnico_principal IS NOT NULL 
               AND tecnico_principal NOT IN ('', 'NO TECNICO', 'SIN ASIGNAR', 'NONE', 'NAN')
               AND solucion_tecnico IS NOT NULL 
@@ -453,6 +530,7 @@ def publico_cuadro_mando(fecha, token):
             SELECT problema, COUNT(*) as cantidad
             FROM visitas_tecnicas
             WHERE fecha_programada = %s AND estado NOT IN ('FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA')
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
               AND problema IS NOT NULL AND problema != ''
             GROUP BY problema
         """, (manana,))
@@ -514,7 +592,10 @@ def publico_cuadro_mando(fecha, token):
                 problema,
                 estado
             FROM visitas_tecnicas
-            WHERE fecha_programada = %s AND estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA', 'FINALIZADA')
+            WHERE fecha_programada = %s 
+              AND estado NOT IN ('CANCELADA', 'SOLVENTADA_REMOTA', 'FINALIZADA')
+              AND (es_instalacion = 0 OR es_instalacion IS NULL)
+              AND (problema NOT LIKE '%INSTALACION NUEVA%' AND problema NOT LIKE '%INSTALACIÓN NUEVA%' OR problema IS NULL)
         """, (target_date,))
         visitas_manana = cursor.fetchall()
         
@@ -550,6 +631,9 @@ def publico_cuadro_mando(fecha, token):
             "agente_a": agente_a,
             "agente_b": agente_b,
             "agente_c": agente_c,
+            "horario_a": horario_a,
+            "horario_b": horario_b,
+            "horario_c": horario_c,
             "soporte_a": soporte_a,
             "soporte_b": soporte_b,
             "soporte_c": soporte_c,

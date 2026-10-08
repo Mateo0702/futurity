@@ -246,7 +246,7 @@ function Login({ onLoginSuccess }) {
           </form>
 
           <div style={{ textAlign: 'center', marginTop: '24px', paddingTop: '15px', borderTop: '1px solid #334155', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
-            Futurity Portal • Seguridad Atlas
+            Futurity Portal • Potenciado por Atlas
           </div>
         </div>
       </div>
@@ -323,9 +323,9 @@ function Login({ onLoginSuccess }) {
         {/* Panel Derecho: Formulario de Login */}
         <div className="login-split-right">
           <div className="login-logo-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '20px' }}>
-            <img src="/img/logo_futurity.png" alt="Futurity Logo" style={{ height: '36px', objectFit: 'contain' }} />
-            <span style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-main)' }}>
-              Futurity <span style={{ background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 900 }}>Atlas</span>
+            <img src="/img/logo_futurity.png" alt="Futurity Logo" style={{ height: '38px', objectFit: 'contain' }} />
+            <span style={{ fontSize: '1.6rem', fontWeight: 900, color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
+              Futurity
             </span>
           </div>
 
@@ -425,12 +425,12 @@ function Login({ onLoginSuccess }) {
                 <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
                 <line x1="12" y1="18" x2="12.01" y2="18"></line>
               </svg>
-              Descargar App Futurity Atlas
+              Descargar App Futurity
             </a>
           </div>
 
           <div style={{ textAlign: 'center', marginTop: '35px', paddingTop: '15px', borderTop: '1px solid var(--border-color)', fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
-            <span><i className="fa-solid fa-bolt" style={{ color: '#2563eb', marginRight: '4px' }}></i> Powered by Atlas Enterprise</span>
+            <span><i className="fa-solid fa-bolt" style={{ color: '#2563eb', marginRight: '4px' }}></i> Potenciado por Atlas</span>
             <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>Futurity Portal • React SPA v2.0</span>
           </div>
         </div>

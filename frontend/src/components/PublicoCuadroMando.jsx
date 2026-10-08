@@ -308,9 +308,9 @@ function PublicoCuadroMando({ fecha, token }) {
                     <thead>
                       <tr style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '2px solid rgba(255, 255, 255, 0.1)', fontWeight: 800 }}>
                         <th style={{ padding: '12px 14px', textAlign: 'left', width: '38%', color: '#cbd5e1' }}>Horario / Agente</th>
-                        <th style={{ padding: '12px 14px', textAlign: 'center', background: 'rgba(96, 165, 250, 0.08)', color: '#93c5fd', fontSize: '0.75rem' }}>7 AM - 4 PM<br/><span style={{ fontWeight: 500 }}>A</span></th>
-                        <th style={{ padding: '12px 14px', textAlign: 'center', background: 'rgba(74, 222, 128, 0.08)', color: '#86efac', fontSize: '0.75rem' }}>2 PM - 9 PM<br/><span style={{ fontWeight: 500 }}>B</span></th>
-                        <th style={{ padding: '12px 14px', textAlign: 'center', background: 'rgba(251, 146, 60, 0.08)', color: '#ffedd5', fontSize: '0.75rem' }}>10 AM - 8 PM<br/><span style={{ fontWeight: 500 }}>C</span></th>
+                        <th style={{ padding: '12px 14px', textAlign: 'center', background: 'rgba(96, 165, 250, 0.08)', color: '#93c5fd', fontSize: '0.75rem' }}>{data?.horario_a || '7 AM - 4 PM'}<br/><span style={{ fontWeight: 500 }}>A</span></th>
+                        <th style={{ padding: '12px 14px', textAlign: 'center', background: 'rgba(74, 222, 128, 0.08)', color: '#86efac', fontSize: '0.75rem' }}>{data?.horario_b || '2 PM - 9 PM'}<br/><span style={{ fontWeight: 500 }}>B</span></th>
+                        <th style={{ padding: '12px 14px', textAlign: 'center', background: 'rgba(251, 146, 60, 0.08)', color: '#ffedd5', fontSize: '0.75rem' }}>{data?.horario_c || '10 AM - 8 PM'}<br/><span style={{ fontWeight: 500 }}>C</span></th>
                         <th style={{ padding: '12px 14px', textAlign: 'center', fontSize: '0.78rem', fontWeight: 700, background: 'rgba(255, 255, 255, 0.04)', color: 'white' }}>Total CC</th>
                       </tr>
                       <tr style={{ background: 'rgba(255, 255, 255, 0.04)', fontSize: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>

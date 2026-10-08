@@ -66,6 +66,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     tecnico: '',
     placa: '',
     materiales: [],
+    equipos_asignados: [],
     equipos_retirados: []
   });
   const [loadingInventarioVehiculo, setLoadingInventarioVehiculo] = useState(false);
@@ -84,6 +85,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
           tecnico: data.tecnico || '',
           placa: data.placa || 'S/P',
           materiales: data.materiales || [],
+          equipos_asignados: data.equipos_asignados || [],
           equipos_retirados: data.equipos_retirados || []
         });
       }
@@ -127,6 +129,39 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   const [tecnicosLista, setTecnicosLista] = useState([]);
   const [traspasoForm, setTraspasoForm] = useState({ tecnico_destino_nombre: '', id_material: '', cantidad: '' });
   const [traspasoLoading, setTraspasoLoading] = useState(false);
+
+  // Selector Modal: Equipos de mi buseta para instalar en visita
+  const [modalSelectorEquipo, setModalSelectorEquipo] = useState({
+    abierto: false,
+    tipo: '',
+    campoSn: '',
+    campoModelo: '',
+    id_visita: null
+  });
+
+  const handleSeleccionarEquipoDeBuseta = (eq) => {
+    if (!modalSelectorEquipo.id_visita || !modalSelectorEquipo.campoSn) return;
+    
+    const updateObj = {
+      [modalSelectorEquipo.campoSn]: eq.numero_serie
+    };
+
+    if (modalSelectorEquipo.campoModelo && eq.modelo) {
+      if (modalSelectorEquipo.tipo === 'ONT') {
+        const catMatch = catalogoOnt.find(c => c.nombre.toUpperCase() === eq.modelo.toUpperCase() || eq.modelo.toUpperCase().includes(c.nombre.toUpperCase()));
+        if (catMatch) updateObj[modalSelectorEquipo.campoModelo] = catMatch.nombre;
+        else updateObj[modalSelectorEquipo.campoModelo] = eq.modelo;
+      } else if (modalSelectorEquipo.tipo === 'ROUTER') {
+        const catMatch = catalogoRouter.find(c => c.nombre.toUpperCase() === eq.modelo.toUpperCase() || eq.modelo.toUpperCase().includes(c.nombre.toUpperCase()));
+        if (catMatch) updateObj[modalSelectorEquipo.campoModelo] = catMatch.nombre;
+        else updateObj[modalSelectorEquipo.campoModelo] = eq.modelo;
+      }
+    }
+
+    updateFormState(modalSelectorEquipo.id_visita, updateObj);
+    setModalSelectorEquipo({ abierto: false, tipo: '', campoSn: '', campoModelo: '', id_visita: null });
+    playBeep();
+  };
 
   // Solicitud a Bodega Modal State
   const [showSolicitudBodegaModal, setShowSolicitudBodegaModal] = useState(false);
@@ -1861,15 +1896,14 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     updateFormState(visitaId, { materiales: updated });
   };
 
-  // WhatsApp client arrival notification
+  // WhatsApp client arrival notification (Solo cuando ya está EN RUTA con token generado)
   const abrirWhatsApp = async (telefonos, tecnico, tokenRastreo, idVisita) => {
     if (!telefonos) return;
     let finalToken = tokenRastreo;
 
-    // Si aún no se ha generado el token de rastreo, iniciamos "voy en camino" primero
+    // Si por algún motivo de sincronización el token no estaba en el estado, consultar el más reciente del backend
     if (!finalToken && idVisita) {
       try {
-        await registrarVoyEnCamino(idVisita);
         const resV = await fetch(`/api/tecnico/panel/${tecnicoUrlName}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -1879,12 +1913,12 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
           if (fresh && fresh.token_rastreo) finalToken = fresh.token_rastreo;
         }
       } catch (e) {
-        console.warn("Error generando token para WhatsApp:", e);
+        console.warn("Error consultando token para WhatsApp:", e);
       }
     }
 
     const cleanTel = telefonos.split('/')[0].trim().replace(/[^\d+]/g, '');
-    let msg = `Estimado cliente, le saluda ${tecnico}. Le informo que ya voy en camino a su domicilio para realizar el trabajo.`;
+    let msg = `Estimado/a cliente, le saluda personal técnico de Futurity. Le informo que ya voy en camino a su domicilio para atender su orden técnica.`;
     if (finalToken && finalToken !== 'null' && finalToken !== 'undefined') {
       msg += ` Puede seguir mi trayecto en tiempo real ingresando aquí: ${getPublicDomain()}/seguimiento/${finalToken}`;
     }
@@ -2456,14 +2490,21 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                     {/* Lista de Insumos */}
                     <div style={{ background: 'rgba(15, 23, 42, 0.5)', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase' }}>Materiales:</span>
-                      {(req.items || []).map((it, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', color: 'var(--text-main)' }}>
-                          <span>• {it.nombre_material}</span>
-                          <strong style={{ color: req.estado === 'LISTO_ENTREGA' ? '#34d399' : '#38bdf8' }}>
-                            {it.cantidad_aprobada || it.cantidad_solicitada} {it.unidad_medida}
-                          </strong>
-                        </div>
-                      ))}
+                      {(req.items || []).map((it, idx) => {
+                        const cant = it.cantidad_aprobada !== undefined && it.cantidad_aprobada !== null
+                          ? Number(it.cantidad_aprobada)
+                          : Number(it.cantidad_solicitada || 0);
+                        return (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', color: 'var(--text-main)' }}>
+                            <span style={{ textDecoration: cant === 0 ? 'line-through' : 'none', opacity: cant === 0 ? 0.6 : 1 }}>
+                              • {it.nombre_material}
+                            </span>
+                            <strong style={{ color: cant === 0 ? '#f87171' : (req.estado === 'LISTO_ENTREGA' ? '#34d399' : '#38bdf8') }}>
+                              {cant > 0 ? `${cant} ${it.unidad_medida}` : `0 ${it.unidad_medida} (No entregado)`}
+                            </strong>
+                          </div>
+                        );
+                      })}
                     </div>
 
                     {/* Observaciones o Motivo de Rechazo */}
@@ -2544,6 +2585,73 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                   <i className="fa-solid fa-arrows-rotate"></i>
                 </button>
               </div>
+            </div>
+
+            {/* Listado de Equipos Asignados por Bodega (ONTs y Routers para Instalar) */}
+            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                <h4 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 800, color: '#34d399', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <i className="fa-solid fa-boxes-stacked"></i> Equipos Asignados para Instalar ({inventarioVehiculoData.equipos_asignados?.length || 0}):
+                </h4>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '3px 8px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                    ONTs: {inventarioVehiculoData.equipos_asignados?.filter(x => x.tipo_equipo === 'ONT').length || 0}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '3px 8px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                    Routers: {inventarioVehiculoData.equipos_asignados?.filter(x => x.tipo_equipo === 'ROUTER').length || 0}
+                  </span>
+                </div>
+              </div>
+
+              {(!inventarioVehiculoData.equipos_asignados || inventarioVehiculoData.equipos_asignados.length === 0) ? (
+                <div style={{ padding: '24px 20px', textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '14px', border: '1px dashed var(--border-color)' }}>
+                  <p style={{ margin: 0, color: 'var(--sidebar-text)', fontSize: '0.84rem', fontWeight: 600 }}>
+                    No tienes ONTs ni Routers asignados a tu buseta ({inventarioVehiculoData.placa || 'S/P'}). Bodega debe despachártelos.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {inventarioVehiculoData.equipos_asignados.map((eq, idx) => (
+                    <div key={idx} style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center', 
+                      padding: '12px 14px', 
+                      background: 'rgba(15, 23, 42, 0.7)', 
+                      border: '1px solid var(--border-color)', 
+                      borderRadius: '12px',
+                      flexWrap: 'wrap',
+                      gap: '8px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <span style={{ 
+                          padding: '3px 8px', 
+                          borderRadius: '6px', 
+                          fontSize: '0.7rem', 
+                          fontWeight: 900, 
+                          background: eq.tipo_equipo === 'ROUTER' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)', 
+                          color: eq.tipo_equipo === 'ROUTER' ? '#60a5fa' : '#34d399',
+                          border: eq.tipo_equipo === 'ROUTER' ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(16, 185, 129, 0.4)'
+                        }}>
+                          {eq.tipo_equipo || 'EQUIPO'}
+                        </span>
+                        <div>
+                          <strong style={{ color: '#f8fafc', fontSize: '0.92rem', fontFamily: 'monospace', letterSpacing: '0.03em', display: 'block' }}>
+                            {eq.numero_serie}
+                          </strong>
+                          <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>
+                            {eq.marca ? `${eq.marca} • ` : ''}{eq.modelo || 'Estándar'} 
+                            {eq.fecha_entrega_vehiculo ? ` • Entregado: ${eq.fecha_entrega_vehiculo.slice(0, 16)}` : ''}
+                          </span>
+                        </div>
+                      </div>
+                      <span style={{ padding: '3px 8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', fontSize: '0.72rem', fontWeight: 800 }}>
+                        Disponible
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Listado de Materiales en Camioneta */}
@@ -3130,16 +3238,6 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                     >
                       <i className="fa-solid fa-route"></i> Voy en Camino
                     </button>
-                    
-                    {activeVisita.telefonos && (
-                      <button 
-                        type="button" 
-                        onClick={() => abrirWhatsApp(activeVisita.telefonos, tecnicoRealName, activeVisita.token_rastreo, activeVisita.id_visita)} 
-                        style={{ width: '100%', padding: '11px', borderRadius: '10px', border: 'none', background: '#22c55e', color: 'white', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 10px rgba(34, 197, 94, 0.2)' }}
-                      >
-                        <i className="fa-brands fa-whatsapp" style={{ fontSize: '1.1rem' }}></i> Avisar "Voy en Camino" por WhatsApp
-                      </button>
-                    )}
 
                     <button 
                       type="button" 
@@ -3161,15 +3259,38 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
                       <span style={{ color: '#38bdf8', fontWeight: 800, fontSize: '0.85rem' }}>🚗 En Ruta al Domicilio</span>
-                      <small style={{ display: 'block', color: '#94a3b8', fontSize: '0.75rem', marginTop: '4px' }}>El GPS está activo y el cliente puede seguir tu llegada.</small>
+                      <small style={{ display: 'block', color: '#94a3b8', fontSize: '0.75rem', marginTop: '4px' }}>El GPS está activo y el cliente puede seguir tu llegada en tiempo real.</small>
                     </div>
+
+                    {activeVisita.telefonos && (
+                      <button 
+                        type="button" 
+                        onClick={() => abrirWhatsApp(activeVisita.telefonos, tecnicoRealName, activeVisita.token_rastreo, activeVisita.id_visita)} 
+                        style={{ width: '100%', padding: '13px', borderRadius: '10px', border: 'none', background: '#22c55e', color: 'white', fontWeight: 850, fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(34, 197, 94, 0.25)' }}
+                      >
+                        <i className="fa-brands fa-whatsapp" style={{ fontSize: '1.2rem' }}></i> Avisar al Cliente por WhatsApp (con Mapa de Rastreo)
+                      </button>
+                    )}
 
                     <button 
                       type="button" 
                       onClick={() => registrarLlegueTrabajo(activeVisita.id_visita)} 
-                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 10px rgba(59, 130, 246, 0.2)' }}
+                      style={{ width: '100%', padding: '13px', borderRadius: '10px', border: 'none', background: '#3b82f6', color: 'white', fontWeight: 850, fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 10px rgba(59, 130, 246, 0.2)' }}
                     >
                       <i className="fa-solid fa-play"></i> Llegué / Iniciar Trabajo
+                    </button>
+
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setPosponerVisitaId(activeVisita.id_visita);
+                        setMotivoPosponer('Cliente ausente');
+                        setMotivoPosponerOtro('');
+                        setShowPosponerModal(true);
+                      }} 
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', marginTop: '4px' }}
+                    >
+                      <i className="fa-solid fa-clock"></i> Posponer visita
                     </button>
                   </div>
                 )}
@@ -3253,6 +3374,21 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                             Serie GPON (SN) {activeVisita.numero_serie ? `[Actual: ${activeVisita.numero_serie}]` : ''}:
                           </label>
                           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            {inventarioVehiculoData.equipos_asignados?.some(e => e.tipo_equipo === 'ONT') && (
+                              <button
+                                type="button"
+                                onClick={() => setModalSelectorEquipo({
+                                  abierto: true,
+                                  tipo: 'ONT',
+                                  campoSn: 'numero_serie_onu',
+                                  campoModelo: 'modelo_onu',
+                                  id_visita: activeVisita.id_visita
+                                })}
+                                style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                              >
+                                <i className="fa-solid fa-van-shuttle"></i> De mi Buseta ({inventarioVehiculoData.equipos_asignados.filter(e => e.tipo_equipo === 'ONT').length})
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => abrirEscanerEnVivo(activeVisita.id_visita, 'numero_serie_onu', true, 'Escanear Serie GPON (ONU)')}
@@ -3284,7 +3420,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                               updateFormState(activeVisita.id_visita, { numero_serie_onu: normalizarGponSn(e.target.value) });
                             }
                           }}
-                          placeholder="Ej. CDKT2A187B7D o escanea con cámara"
+                          placeholder="Ej. CDKT2A187B7D o selecciona de tu buseta"
                           style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#fbbf24', fontSize: '0.85rem', fontWeight: 800, boxSizing: 'border-box' }}
                         />
                       </div>
@@ -3307,6 +3443,21 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                             Serie Router Principal {activeVisita.numero_serie_router ? `[Actual: ${activeVisita.numero_serie_router}]` : ''}:
                           </label>
                           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            {inventarioVehiculoData.equipos_asignados?.some(e => e.tipo_equipo === 'ROUTER') && (
+                              <button
+                                type="button"
+                                onClick={() => setModalSelectorEquipo({
+                                  abierto: true,
+                                  tipo: 'ROUTER',
+                                  campoSn: 'numero_serie_router',
+                                  campoModelo: 'modelo_router',
+                                  id_visita: activeVisita.id_visita
+                                })}
+                                style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                              >
+                                <i className="fa-solid fa-van-shuttle"></i> De mi Buseta ({inventarioVehiculoData.equipos_asignados.filter(e => e.tipo_equipo === 'ROUTER').length})
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => abrirEscanerEnVivo(activeVisita.id_visita, 'numero_serie_router', false, 'Escanear Router Principal')}
@@ -3375,6 +3526,21 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                               Serie Router Secundario:
                             </label>
                             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              {inventarioVehiculoData.equipos_asignados?.some(e => e.tipo_equipo === 'ROUTER') && (
+                                <button
+                                  type="button"
+                                  onClick={() => setModalSelectorEquipo({
+                                    abierto: true,
+                                    tipo: 'ROUTER',
+                                    campoSn: 'numero_serie_router_secundario',
+                                    campoModelo: 'router_secundario',
+                                    id_visita: activeVisita.id_visita
+                                  })}
+                                  style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                                >
+                                  <i className="fa-solid fa-van-shuttle"></i> De mi Buseta
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => abrirEscanerEnVivo(activeVisita.id_visita, 'numero_serie_router_secundario', false, 'Escanear Router Secundario')}
@@ -4623,6 +4789,122 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* MODAL: SELECCIONAR EQUIPO DESDE MI BUSETA */}
+      {modalSelectorEquipo.abierto && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: 300000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px', boxSizing: 'border-box' }}>
+          <div style={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '24px', width: '100%', maxWidth: '440px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px rgba(0,0,0,0.7)', overflow: 'hidden' }}>
+            <div style={{ padding: '18px 20px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div>
+                <h4 style={{ margin: 0, color: '#38bdf8', fontSize: '1.05rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <i className="fa-solid fa-van-shuttle"></i> Mis {modalSelectorEquipo.tipo === 'ONT' ? 'ONTs' : 'Routers'} en Buseta
+                </h4>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.74rem', color: '#94a3b8', fontWeight: 600 }}>
+                  Toca un equipo para cargarlo automáticamente en la visita
+                </p>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setModalSelectorEquipo({ abierto: false, tipo: '', campoSn: '', campoModelo: '', id_visita: null })} 
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.6rem', cursor: 'pointer', padding: '4px 8px', lineHeight: 1 }}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', flex: 1 }}>
+              {(() => {
+                const disponibles = (inventarioVehiculoData.equipos_asignados || []).filter(
+                  eq => eq.tipo_equipo === modalSelectorEquipo.tipo
+                );
+
+                if (disponibles.length === 0) {
+                  return (
+                    <div style={{ padding: '30px 20px', textAlign: 'center', background: 'rgba(0,0,0,0.3)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                      <i className="fa-solid fa-box-open" style={{ fontSize: '2rem', color: '#64748b', marginBottom: '10px', display: 'block' }}></i>
+                      <p style={{ margin: 0, color: '#cbd5e1', fontSize: '0.88rem', fontWeight: 700 }}>
+                        No tienes {modalSelectorEquipo.tipo === 'ONT' ? 'ONTs' : 'Routers'} disponibles en tu buseta.
+                      </p>
+                      <span style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '6px', display: 'block' }}>
+                        Puedes escanear con la cámara o escribir el serial a mano.
+                      </span>
+                    </div>
+                  );
+                }
+
+                return disponibles.map((eq, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => handleSeleccionarEquipoDeBuseta(eq)}
+                    style={{
+                      background: 'rgba(15, 23, 42, 0.8)',
+                      border: '1px solid rgba(56, 189, 248, 0.25)',
+                      borderRadius: '14px',
+                      padding: '12px 14px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <span style={{
+                          padding: '2px 7px',
+                          borderRadius: '6px',
+                          fontSize: '0.68rem',
+                          fontWeight: 900,
+                          background: eq.tipo_equipo === 'ROUTER' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                          color: eq.tipo_equipo === 'ROUTER' ? '#60a5fa' : '#34d399'
+                        }}>
+                          {eq.tipo_equipo}
+                        </span>
+                        <strong style={{ color: '#fbbf24', fontSize: '0.94rem', fontFamily: 'monospace', letterSpacing: '0.03em' }}>
+                          {eq.numero_serie}
+                        </strong>
+                      </div>
+                      <span style={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: 600 }}>
+                        {eq.marca ? `${eq.marca} • ` : ''}{eq.modelo || 'Modelo Estándar'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      style={{
+                        padding: '6px 12px',
+                        background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        color: 'white',
+                        fontSize: '0.74rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                    >
+                      <i className="fa-solid fa-check"></i> Elegir
+                    </button>
+                  </div>
+                ));
+              })()}
+            </div>
+
+            <div style={{ padding: '12px 18px', borderTop: '1px solid rgba(255,255,255,0.08)', background: '#0f172a', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setModalSelectorEquipo({ abierto: false, tipo: '', campoSn: '', campoModelo: '', id_visita: null })}
+                style={{ padding: '8px 16px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#cbd5e1', borderRadius: '10px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

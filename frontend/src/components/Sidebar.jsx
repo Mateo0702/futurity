@@ -31,26 +31,26 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
     if (tab === 'visitas') {
       return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'ATC_AUDITOR', 'AUDITOR'].includes(role);
     }
-    if (tab === 'mapa-tecnicos' || tab === 'registro') {
-      return ['ADMIN', 'ASESOR', 'CALIDAD'].includes(role);
+    if (tab === 'mapa-tecnicos' || tab === 'registro' || tab === 'tracker-pmt') {
+      return ['ADMIN', 'ASESOR', 'CALIDAD', 'BODEGA'].includes(role);
     }
     if (tab === 'registro-atencion') {
       return ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR'].includes(role);
     }
     if (tab === 'buscar-cliente') {
-      return ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR', 'AUDITOR'].includes(role);
+      return ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR', 'AUDITOR', 'CALIDAD'].includes(role);
     }
     if (tab === 'metricas') {
       return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'ATC_AUDITOR', 'AUDITOR'].includes(role);
     }
     if (tab === 'reportes') {
-      return ['ADMIN', 'ASESOR', 'CALIDAD', 'AUDITOR'].includes(role);
+      return ['ADMIN', 'ASESOR', 'CALIDAD', 'AUDITOR', 'ATC_AUDITOR'].includes(role);
     }
     if (tab === 'control-calidad') {
-      return ['ADMIN', 'ASESOR', 'CALIDAD'].includes(role);
+      return ['ADMIN', 'ASESOR', 'CALIDAD', 'AUDITOR', 'ATC_AUDITOR'].includes(role);
     }
     if (tab === 'auditoria-atc') {
-      return ['ADMIN', 'ATC_AUDITOR'].includes(role);
+      return ['ADMIN', 'ATC_AUDITOR', 'AUDITOR'].includes(role);
     }
     if (tab === 'inventario') {
       return ['ADMIN', 'BODEGA'].includes(role);
@@ -117,17 +117,14 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
       <div className="sidebar-header">
         <div className="logo-container" style={{ opacity: collapsed ? 0 : 1, maxWidth: collapsed ? 0 : '200px', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s ease' }}>
           <img src="/img/logo_futurity.png" alt="Logo" style={{ width: '20px', height: '20px', objectFit: 'contain', flexShrink: 0 }} />
-          <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-main)' }}>
-            Futurity{' '}
-            <span style={{
-              background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              fontWeight: 900
-            }}>
-              Atlas
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <span style={{ fontWeight: 900, fontSize: '1.12rem', color: 'var(--text-main)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+              Futurity
             </span>
-          </span>
+            <span style={{ fontSize: '0.62rem', color: '#60a5fa', letterSpacing: '0.04em', fontWeight: 700, textTransform: 'uppercase' }}>
+              Potenciado por Atlas
+            </span>
+          </div>
         </div>
         <button
           onClick={() => setCollapsed(!collapsed)}
@@ -138,46 +135,48 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
         </button>
       </div>
 
-      {/* Conmutador de Área Operativa */}
-      <div className="sidebar-area-selector" style={{ padding: '10px 20px', borderBottom: '1px solid var(--border-color)', marginBottom: '10px' }}>
-        {!collapsed && (
-          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--sidebar-text)', marginBottom: '6px', fontWeight: 700 }}>
-            <i className="fa-solid fa-network-wired"></i> Área Operativa
-          </div>
-        )}
-
-        {['ADMIN', 'ASESOR', 'ATC', 'AUDITOR', 'CALIDAD'].includes(role) ? (
-          <div className="segmented-control" id="area-switcher" style={{ height: collapsed ? '0px' : 'auto', overflow: 'hidden', opacity: collapsed ? 0 : 1, transition: 'all 0.2s ease' }}>
-            <div
-              className="segmented-slider"
-              style={{
-                transform: activeArea === 'INSTALACIONES' ? 'translateX(100%)' : 'translateX(0%)',
-                transition: 'transform 0.2s ease'
-              }}
-            ></div>
-            <button
-              type="button"
-              className={`segmented-btn ${activeArea === 'SOPORTE' ? 'active' : ''}`}
-              onClick={() => onAreaChange('SOPORTE')}
-            >
-              🛠️ Soporte
-            </button>
-            <button
-              type="button"
-              className={`segmented-btn ${activeArea === 'INSTALACIONES' ? 'active' : ''}`}
-              onClick={() => onAreaChange('INSTALACIONES')}
-            >
-              🔌 Calidad
-            </button>
-          </div>
-        ) : (
-          !collapsed && (
-            <div className="static-area-badge">
-              {activeArea === 'INSTALACIONES' ? '🔌 Calidad' : '🛠️ Soporte'}
+      {/* Conmutador de Área Operativa (Oculto para CALIDAD) */}
+      {role !== 'CALIDAD' && (
+        <div className="sidebar-area-selector" style={{ padding: '10px 20px', borderBottom: '1px solid var(--border-color)', marginBottom: '10px' }}>
+          {!collapsed && (
+            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--sidebar-text)', marginBottom: '6px', fontWeight: 700 }}>
+              <i className="fa-solid fa-network-wired"></i> Área Operativa
             </div>
-          )
-        )}
-      </div>
+          )}
+
+          {['ADMIN', 'ASESOR', 'ATC', 'AUDITOR'].includes(role) ? (
+            <div className="segmented-control" id="area-switcher" style={{ height: collapsed ? '0px' : 'auto', overflow: 'hidden', opacity: collapsed ? 0 : 1, transition: 'all 0.2s ease' }}>
+              <div
+                className="segmented-slider"
+                style={{
+                  transform: activeArea === 'INSTALACIONES' ? 'translateX(100%)' : 'translateX(0%)',
+                  transition: 'transform 0.2s ease'
+                }}
+              ></div>
+              <button
+                type="button"
+                className={`segmented-btn ${activeArea === 'SOPORTE' ? 'active' : ''}`}
+                onClick={() => onAreaChange('SOPORTE')}
+              >
+                🛠️ Soporte
+              </button>
+              <button
+                type="button"
+                className={`segmented-btn ${activeArea === 'INSTALACIONES' ? 'active' : ''}`}
+                onClick={() => onAreaChange('INSTALACIONES')}
+              >
+                🔌 Calidad
+              </button>
+            </div>
+          ) : (
+            !collapsed && (
+              <div className="static-area-badge">
+                {activeArea === 'INSTALACIONES' ? '🔌 Calidad' : '🛠️ Soporte'}
+              </div>
+            )
+          )}
+        </div>
+      )}
 
       {/* Buscador Rápido de SN (Sólo ADMIN y BODEGA) */}
       {['ADMIN', 'BODEGA'].includes(role) && (
@@ -249,7 +248,7 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
           >
             <i className="fa-solid fa-calendar-days" style={{ fontSize: '1.1rem', width: '20px' }}></i>
             <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>
-              {activeArea === 'INSTALACIONES' ? 'Instalaciones del Día' : 'Visitas del Día'}
+              {activeArea === 'INSTALACIONES' || role === 'CALIDAD' ? 'Instalaciones del Día' : 'Visitas del Día'}
             </span>
           </div>
         )}
@@ -260,7 +259,19 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
             onClick={() => onTabChange('mapa-tecnicos')}
           >
             <i className="fa-solid fa-map-location-dot" style={{ fontSize: '1.1rem', width: '20px' }}></i>
-            <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>Mapa en Vivo</span>
+            <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>
+              {role === 'CALIDAD' ? 'Rastreo de Técnicos' : 'Mapa en Vivo'}
+            </span>
+          </div>
+        )}
+
+        {isVisible('tracker-pmt') && (
+          <div
+            className={`nav-item ${activeTab === 'tracker-pmt' ? 'active' : ''}`}
+            onClick={() => onTabChange('tracker-pmt')}
+          >
+            <i className="fa-solid fa-satellite-dish" style={{ fontSize: '1.1rem', width: '20px' }}></i>
+            <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>Rastreo PMT</span>
           </div>
         )}
 
@@ -271,7 +282,7 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
           >
             <i className="fa-solid fa-pen-to-square" style={{ fontSize: '1.1rem', width: '20px' }}></i>
             <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>
-              {activeArea === 'INSTALACIONES' ? 'Registrar Instalación' : 'Registrar Visita'}
+              {activeArea === 'INSTALACIONES' || role === 'CALIDAD' ? 'Registrar Instalación' : 'Registrar Visita'}
             </span>
           </div>
         )}
@@ -301,8 +312,10 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
             className={`nav-item ${activeTab === 'metricas' ? 'active' : ''}`}
             onClick={() => onTabChange('metricas')}
           >
-            <i className="fa-solid fa-chart-line" style={{ fontSize: '1.1rem', width: '20px' }}></i>
-            <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>Auditoría Clientes</span>
+            <i className={`fa-solid ${role === 'CALIDAD' ? 'fa-clock' : 'fa-chart-line'}`} style={{ fontSize: '1.1rem', width: '20px' }}></i>
+            <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>
+              {role === 'CALIDAD' ? 'Tiempos y Rendimiento' : 'Métricas y Tiempos'}
+            </span>
           </div>
         )}
 

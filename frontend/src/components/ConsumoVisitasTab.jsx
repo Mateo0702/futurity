@@ -563,7 +563,12 @@ export default function ConsumoVisitasTab({ token, tecnicosVehiculosProp = [] })
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '10px', background: 'var(--card-bg)', padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
                     <div>
                       <span style={{ color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', fontSize: '0.68rem', display: 'block' }}>Técnico & Placa:</span>
-                      <strong style={{ color: '#38bdf8' }}>🧑‍🔧 {v.tecnico_principal || 'No asignado'}</strong>
+                      <strong style={{ color: '#38bdf8' }}>🧑‍🔧 {v.tecnico_cierre || v.tecnico_principal || 'No asignado'}</strong>
+                      {v.tecnico_cierre && v.tecnico_principal && v.tecnico_cierre !== v.tecnico_principal && (
+                        <span style={{ fontSize: '0.72rem', color: '#a78bfa', marginLeft: '6px', fontWeight: 600 }}>
+                          (Asignado: {v.tecnico_principal})
+                        </span>
+                      )}
                       <span style={{ marginLeft: '6px', color: 'var(--sidebar-text)', fontWeight: 700 }}>🚗 {v.placa_vehiculo || 'S/P'}</span>
                     </div>
 

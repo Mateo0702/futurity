@@ -41,6 +41,7 @@ export default function AuditoriaVisitasTab({ token }) {
   const [modalVisita, setModalVisita] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [tipoServicioAuditoria, setTipoServicioAuditoria] = useState('INTERNET');
 
   // Form states del modal
   const [formData, setFormData] = useState({
@@ -143,46 +144,133 @@ export default function AuditoriaVisitasTab({ token }) {
   const abrirAuditoriaModal = (v) => {
     setModalVisita(v);
     setSaveSuccess(false);
-    setFormData({
-      id_visita: v.id_visita,
-      estado_contacto: v.estado_contacto === 'PENDIENTE' ? 'CONTESTO' : v.estado_contacto,
-      intentos_llamada: v.intentos_llamada ? v.intentos_llamada + 1 : 1,
-      visita_efectiva: v.visita_efectiva || 'SI',
-      solicito_nueva_visita: v.solicito_nueva_visita || 'NO',
-      volver_a_llamar: v.volver_a_llamar || 'NO',
-      p1_servicio: v.p1_servicio !== null && v.p1_servicio !== undefined ? v.p1_servicio : 10,
-      p2_velocidad: v.p2_velocidad !== null && v.p2_velocidad !== undefined ? v.p2_velocidad : 10,
-      p3_cobertura: v.p3_cobertura !== null && v.p3_cobertura !== undefined ? v.p3_cobertura : 10,
-      p4_explicacion_router: v.p4_explicacion_router !== null && v.p4_explicacion_router !== undefined ? v.p4_explicacion_router : 10,
-      p6_profesionalismo: v.p6_profesionalismo !== null && v.p6_profesionalismo !== undefined ? v.p6_profesionalismo : 10,
-      p6_motivo_profesionalismo: v.p6_motivo_profesionalismo || '',
-      p7_cordialidad: v.p7_cordialidad !== null && v.p7_cordialidad !== undefined ? v.p7_cordialidad : 10,
-      p8_orden_limpieza: v.p8_orden_limpieza !== null && v.p8_orden_limpieza !== undefined ? v.p8_orden_limpieza : 10,
-      app_administrar_router: v.app_administrar_router && v.app_administrar_router !== 'NA' ? v.app_administrar_router : 'SI',
-      app_cambio_wifi: v.app_cambio_wifi && v.app_cambio_wifi !== 'NA' ? v.app_cambio_wifi : 'SI',
-      app_red_invitados: v.app_red_invitados && v.app_red_invitados !== 'NA' ? v.app_red_invitados : 'SI',
-      app_control_parental: v.app_control_parental && v.app_control_parental !== 'NA' ? v.app_control_parental : 'SI',
-      instalo_grilla_canales: v.instalo_grilla_canales && v.instalo_grilla_canales !== 'NA' ? v.instalo_grilla_canales : 'SI',
-      sugerencia_cliente: v.sugerencia_cliente || '',
-      observaciones: v.observaciones || ''
-    });
+
+    const servProd = `${v.servicio || ''} ${v.producto || ''}`.toUpperCase();
+    const esCable = (servProd.includes('CABLE') || servProd.includes('TV')) &&
+                    !servProd.includes('INTERNET') &&
+                    !servProd.includes('COMBO') &&
+                    !servProd.includes('GPON') &&
+                    !servProd.includes('MEGA') &&
+                    !servProd.includes('FIBRA');
+
+    const yaAuditada = v.id_auditoria !== null && v.id_auditoria !== undefined;
+    const modoInicial = yaAuditada
+      ? ((v.p2_velocidad === null && v.p3_cobertura === null && v.p4_explicacion_router === null) || esCable ? 'CABLE' : 'INTERNET')
+      : (esCable ? 'CABLE' : 'INTERNET');
+
+    setTipoServicioAuditoria(modoInicial);
+
+    if (yaAuditada) {
+      setFormData({
+        id_visita: v.id_visita,
+        estado_contacto: v.estado_contacto || 'CONTESTO',
+        intentos_llamada: v.intentos_llamada || 1,
+        visita_efectiva: v.visita_efectiva || 'SI',
+        solicito_nueva_visita: v.solicito_nueva_visita || 'NO',
+        volver_a_llamar: v.volver_a_llamar || 'NO',
+        p1_servicio: v.p1_servicio !== null && v.p1_servicio !== undefined ? Number(v.p1_servicio) : null,
+        p2_velocidad: v.p2_velocidad !== null && v.p2_velocidad !== undefined ? Number(v.p2_velocidad) : null,
+        p3_cobertura: v.p3_cobertura !== null && v.p3_cobertura !== undefined ? Number(v.p3_cobertura) : null,
+        p4_explicacion_router: v.p4_explicacion_router !== null && v.p4_explicacion_router !== undefined ? Number(v.p4_explicacion_router) : null,
+        p6_profesionalismo: v.p6_profesionalismo !== null && v.p6_profesionalismo !== undefined ? Number(v.p6_profesionalismo) : null,
+        p6_motivo_profesionalismo: v.p6_motivo_profesionalismo || '',
+        p7_cordialidad: v.p7_cordialidad !== null && v.p7_cordialidad !== undefined ? Number(v.p7_cordialidad) : null,
+        p8_orden_limpieza: v.p8_orden_limpieza !== null && v.p8_orden_limpieza !== undefined ? Number(v.p8_orden_limpieza) : null,
+        app_administrar_router: v.app_administrar_router || 'NA',
+        app_cambio_wifi: v.app_cambio_wifi || 'NA',
+        app_red_invitados: v.app_red_invitados || 'NA',
+        app_control_parental: v.app_control_parental || 'NA',
+        instalo_grilla_canales: v.instalo_grilla_canales || 'SI',
+        sugerencia_cliente: v.sugerencia_cliente || '',
+        observaciones: v.observaciones || ''
+      });
+    } else {
+      setFormData({
+        id_visita: v.id_visita,
+        estado_contacto: v.estado_contacto === 'PENDIENTE' ? 'CONTESTO' : (v.estado_contacto || 'CONTESTO'),
+        intentos_llamada: v.intentos_llamada ? v.intentos_llamada + 1 : 1,
+        visita_efectiva: v.visita_efectiva || 'SI',
+        solicito_nueva_visita: v.solicito_nueva_visita || 'NO',
+        volver_a_llamar: v.volver_a_llamar || 'NO',
+        p1_servicio: 10,
+        p2_velocidad: modoInicial === 'CABLE' ? null : 10,
+        p3_cobertura: modoInicial === 'CABLE' ? null : 10,
+        p4_explicacion_router: modoInicial === 'CABLE' ? null : 10,
+        p6_profesionalismo: 10,
+        p6_motivo_profesionalismo: '',
+        p7_cordialidad: 10,
+        p8_orden_limpieza: 10,
+        app_administrar_router: modoInicial === 'CABLE' ? 'NA' : 'SI',
+        app_cambio_wifi: modoInicial === 'CABLE' ? 'NA' : 'SI',
+        app_red_invitados: modoInicial === 'CABLE' ? 'NA' : 'SI',
+        app_control_parental: modoInicial === 'CABLE' ? 'NA' : 'SI',
+        instalo_grilla_canales: 'SI',
+        sugerencia_cliente: '',
+        observaciones: ''
+      });
+    }
   };
 
-  // Calcular promedio en vivo
-  const calcularPromedioEnVivo = () => {
-    const notas = [
-      formData.p1_servicio,
-      formData.p2_velocidad,
-      formData.p3_cobertura,
-      formData.p4_explicacion_router,
-      formData.p6_profesionalismo,
-      formData.p7_cordialidad,
-      formData.p8_orden_limpieza
-    ].filter(n => n !== null && n !== undefined && !isNaN(n));
+  // Cambiar modalidad de servicio (Internet vs Solo Cable)
+  const cambiarModoServicio = (nuevoModo) => {
+    setTipoServicioAuditoria(nuevoModo);
+    if (nuevoModo === 'CABLE') {
+      setFormData(prev => ({
+        ...prev,
+        p2_velocidad: null,
+        p3_cobertura: null,
+        p4_explicacion_router: null,
+        app_administrar_router: 'NA',
+        app_cambio_wifi: 'NA',
+        app_red_invitados: 'NA',
+        app_control_parental: 'NA'
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        p2_velocidad: prev.p2_velocidad !== null && prev.p2_velocidad !== undefined ? prev.p2_velocidad : 10,
+        p3_cobertura: prev.p3_cobertura !== null && prev.p3_cobertura !== undefined ? prev.p3_cobertura : 10,
+        p4_explicacion_router: prev.p4_explicacion_router !== null && prev.p4_explicacion_router !== undefined ? prev.p4_explicacion_router : 10,
+        app_administrar_router: prev.app_administrar_router === 'NA' ? 'SI' : prev.app_administrar_router,
+        app_cambio_wifi: prev.app_cambio_wifi === 'NA' ? 'SI' : prev.app_cambio_wifi,
+        app_red_invitados: prev.app_red_invitados === 'NA' ? 'SI' : prev.app_red_invitados,
+        app_control_parental: prev.app_control_parental === 'NA' ? 'SI' : prev.app_control_parental
+      }));
+    }
+  };
 
-    if (notas.length === 0) return 0.0;
+  // Calcular promedio en vivo (solo preguntas respondidas en escala 1-10)
+  const calcularPromedioEnVivo = () => {
+    const campos = tipoServicioAuditoria === 'CABLE'
+      ? [
+          formData.p1_servicio,
+          formData.p6_profesionalismo,
+          formData.p7_cordialidad,
+          formData.p8_orden_limpieza
+        ]
+      : [
+          formData.p1_servicio,
+          formData.p2_velocidad,
+          formData.p3_cobertura,
+          formData.p4_explicacion_router,
+          formData.p6_profesionalismo,
+          formData.p7_cordialidad,
+          formData.p8_orden_limpieza
+        ];
+
+    const notas = campos.filter(n => n !== null && n !== undefined && n !== '' && !isNaN(Number(n)));
+
+    if (notas.length === 0) {
+      return { promedio: '0.00', respondidas: 0, total: campos.length, valorNum: 0.0 };
+    }
     const sum = notas.reduce((acc, curr) => acc + Number(curr), 0);
-    return (sum / notas.length).toFixed(2);
+    const prom = sum / notas.length;
+    return {
+      promedio: prom.toFixed(2),
+      respondidas: notas.length,
+      total: campos.length,
+      valorNum: prom
+    };
   };
 
   const handleGuardarAuditoria = async (e) => {
@@ -216,34 +304,57 @@ export default function AuditoriaVisitasTab({ token }) {
     }
   };
 
-  // Selector visual de botones del 1 al 10
+  // Selector visual de botones del 1 al 10 con soporte para N/A / Omitir
   const renderScaleSelector = (field, label, sublabel) => {
     const valActual = formData[field];
+    const isNA = valActual === null || valActual === undefined || valActual === '';
+
     return (
       <div style={{
-        background: 'var(--card-bg)',
-        border: '1px solid var(--border-color)',
+        background: isNA ? 'rgba(255, 255, 255, 0.02)' : 'var(--card-bg)',
+        border: isNA ? '1px dashed var(--border-color)' : '1px solid var(--border-color)',
         borderRadius: '12px',
         padding: '12px 14px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '8px'
+        gap: '8px',
+        transition: 'all 0.15s ease'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <strong style={{ fontSize: '0.85rem', color: 'var(--text-main)' }}>{label}</strong>
+            <strong style={{ fontSize: '0.85rem', color: isNA ? 'var(--sidebar-text)' : 'var(--text-main)' }}>{label}</strong>
             {sublabel && <small style={{ display: 'block', color: 'var(--sidebar-text)', fontSize: '0.74rem' }}>{sublabel}</small>}
           </div>
-          <span style={{
-            fontSize: '1rem',
-            fontWeight: 900,
-            color: valActual >= 8 ? '#10b981' : valActual >= 6 ? '#f59e0b' : '#ef4444',
-            padding: '2px 8px',
-            borderRadius: '6px',
-            background: valActual >= 8 ? 'rgba(16, 185, 129, 0.15)' : valActual >= 6 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)'
-          }}>
-            {valActual} / 10
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{
+              fontSize: '0.92rem',
+              fontWeight: 900,
+              color: isNA ? '#94a3b8' : valActual >= 8 ? '#10b981' : valActual >= 6 ? '#f59e0b' : '#ef4444',
+              padding: '2px 8px',
+              borderRadius: '6px',
+              background: isNA ? 'rgba(148, 163, 184, 0.1)' : valActual >= 8 ? 'rgba(16, 185, 129, 0.15)' : valActual >= 6 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)'
+            }}>
+              {isNA ? '— / N/A' : `${valActual} / 10`}
+            </span>
+            <button
+              type="button"
+              title="Marcar como No Aplica / No respondió el cliente"
+              onClick={() => setFormData({ ...formData, [field]: null })}
+              style={{
+                border: isNA ? '1px solid #38bdf8' : '1px solid var(--border-color)',
+                background: isNA ? 'rgba(56, 189, 248, 0.2)' : 'var(--profile-bg)',
+                color: isNA ? '#38bdf8' : 'var(--sidebar-text)',
+                borderRadius: '6px',
+                padding: '3px 8px',
+                fontSize: '0.72rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              {isNA ? '✓ Omitida' : '🚫 N/A'}
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
@@ -253,7 +364,13 @@ export default function AuditoriaVisitasTab({ token }) {
               <button
                 key={num}
                 type="button"
-                onClick={() => setFormData({ ...formData, [field]: num })}
+                onClick={() => {
+                  if (isSelected) {
+                    setFormData({ ...formData, [field]: null });
+                  } else {
+                    setFormData({ ...formData, [field]: num });
+                  }
+                }}
                 style={{
                   flex: '1 1 0',
                   minWidth: '28px',
@@ -277,8 +394,8 @@ export default function AuditoriaVisitasTab({ token }) {
     );
   };
 
-  // Selector SI / NO
-  const renderYesNo = (field, label) => {
+  // Selector SI / NO (con soporte opcional para NA)
+  const renderYesNo = (field, label, allowNA = false) => {
     const val = formData[field];
     return (
       <div style={{
@@ -288,7 +405,8 @@ export default function AuditoriaVisitasTab({ token }) {
         background: 'var(--profile-bg)',
         padding: '10px 14px',
         borderRadius: '10px',
-        border: '1px solid var(--border-color)'
+        border: '1px solid var(--border-color)',
+        gap: '8px'
       }}>
         <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-main)', flex: 1 }}>{label}</span>
         <div style={{ display: 'flex', gap: '6px' }}>
@@ -296,7 +414,7 @@ export default function AuditoriaVisitasTab({ token }) {
             type="button"
             onClick={() => setFormData({ ...formData, [field]: 'SI' })}
             style={{
-              padding: '4px 14px',
+              padding: '4px 12px',
               borderRadius: '6px',
               border: val === 'SI' ? '1px solid #10b981' : '1px solid var(--border-color)',
               background: val === 'SI' ? 'rgba(16, 185, 129, 0.2)' : 'var(--card-bg)',
@@ -312,7 +430,7 @@ export default function AuditoriaVisitasTab({ token }) {
             type="button"
             onClick={() => setFormData({ ...formData, [field]: 'NO' })}
             style={{
-              padding: '4px 14px',
+              padding: '4px 12px',
               borderRadius: '6px',
               border: val === 'NO' ? '1px solid #ef4444' : '1px solid var(--border-color)',
               background: val === 'NO' ? 'rgba(239, 68, 68, 0.2)' : 'var(--card-bg)',
@@ -324,6 +442,24 @@ export default function AuditoriaVisitasTab({ token }) {
           >
             NO
           </button>
+          {allowNA && (
+            <button
+              type="button"
+              onClick={() => setFormData({ ...formData, [field]: 'NA' })}
+              style={{
+                padding: '4px 10px',
+                borderRadius: '6px',
+                border: val === 'NA' ? '1px solid #38bdf8' : '1px solid var(--border-color)',
+                background: val === 'NA' ? 'rgba(56, 189, 248, 0.2)' : 'var(--card-bg)',
+                color: val === 'NA' ? '#38bdf8' : 'var(--sidebar-text)',
+                fontWeight: 800,
+                fontSize: '0.74rem',
+                cursor: 'pointer'
+              }}
+            >
+              N/A
+            </button>
+          )}
         </div>
       </div>
     );
@@ -715,7 +851,22 @@ export default function AuditoriaVisitasTab({ token }) {
                     </td>
                     <td style={{ padding: '12px 14px' }}>
                       <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>{v.cliente}</div>
-                      <small style={{ color: 'var(--sidebar-text)', fontWeight: 700 }}>Contrato #{v.contrato || 'S/C'}</small>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
+                        <small style={{ color: 'var(--sidebar-text)', fontWeight: 700 }}>Contrato #{v.contrato || 'S/C'}</small>
+                        {(v.servicio || v.producto) && (
+                          <span style={{
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            background: `${v.servicio || v.producto}`.toUpperCase().includes('CABLE') && !`${v.servicio || v.producto}`.toUpperCase().includes('INTERNET') ? 'rgba(2, 132, 199, 0.15)' : 'rgba(59, 130, 246, 0.12)',
+                            color: `${v.servicio || v.producto}`.toUpperCase().includes('CABLE') && !`${v.servicio || v.producto}`.toUpperCase().includes('INTERNET') ? '#0284c7' : '#3b82f6',
+                            border: '1px solid rgba(59, 130, 246, 0.2)'
+                          }}>
+                            {v.servicio || v.producto}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td style={{ padding: '12px 14px', fontWeight: 800, color: '#38bdf8' }}>
                       {v.telefonos || '—'}
@@ -941,39 +1092,125 @@ export default function AuditoriaVisitasTab({ token }) {
                 {/* SI CONTESTÓ -> DESPLEGAR CUESTIONARIO COMPLETO */}
                 {formData.estado_contacto === 'CONTESTO' && (
                   <>
-                    {/* SECCIÓN PREGUNTAS DEL 1 AL 10 */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <div style={{ fontSize: '0.86rem', fontWeight: 900, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <i className="fa-solid fa-star-half-stroke"></i> Evaluación del Servicio y Atención (Escala 1 al 10)
+                    {/* SELECTOR ADAPTATIVO DE MODALIDAD DE SERVICIO */}
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: 'rgba(56, 189, 248, 0.08)',
+                      border: '1px solid rgba(56, 189, 248, 0.25)',
+                      padding: '12px 16px',
+                      borderRadius: '14px',
+                      gap: '12px'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '0.84rem', fontWeight: 900, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <i className="fa-solid fa-sliders" style={{ color: '#38bdf8' }}></i>
+                          Cuestionario según Tipo de Servicio:
+                        </div>
+                        <small style={{ color: 'var(--sidebar-text)', fontSize: '0.74rem' }}>
+                          Detectado de la visita: <strong style={{ color: 'var(--text-main)' }}>{modalVisita.servicio || modalVisita.producto || 'INTERNET'}</strong>
+                        </small>
                       </div>
 
-                      {renderScaleSelector(
-                        'p1_servicio',
-                        '1. Funcionamiento del Servicio',
-                        '¿Cómo está funcionando el servicio (Internet, cable o Smart Home) después de la visita técnica o instalación?'
+                      <div style={{ display: 'flex', background: 'var(--profile-bg)', padding: '3px', borderRadius: '10px', border: '1px solid var(--border-color)', gap: '4px' }}>
+                        <button
+                          type="button"
+                          onClick={() => cambiarModoServicio('INTERNET')}
+                          style={{
+                            padding: '6px 14px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            background: tipoServicioAuditoria === 'INTERNET' ? '#1f497d' : 'transparent',
+                            color: tipoServicioAuditoria === 'INTERNET' ? '#ffffff' : 'var(--sidebar-text)',
+                            fontWeight: 800,
+                            fontSize: '0.78rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <i className="fa-solid fa-globe"></i> Internet / Combo (7 Pts)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => cambiarModoServicio('CABLE')}
+                          style={{
+                            padding: '6px 14px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            background: tipoServicioAuditoria === 'CABLE' ? '#0284c7' : 'transparent',
+                            color: tipoServicioAuditoria === 'CABLE' ? '#ffffff' : 'var(--sidebar-text)',
+                            fontWeight: 800,
+                            fontSize: '0.78rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <i className="fa-solid fa-tv"></i> Solo Cable / TV (4 Pts)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* SECCIÓN PREGUNTAS DEL 1 AL 10 */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ fontSize: '0.86rem', fontWeight: 900, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <i className="fa-solid fa-star-half-stroke"></i> Evaluación del Servicio y Atención (Escala 1 al 10)
+                        </span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
+                          💡 Usa <strong>N/A</strong> si el cliente no contestó alguna pregunta
+                        </span>
+                      </div>
+
+                      {/* PREGUNTA 1: ADAPTADA */}
+                      {tipoServicioAuditoria === 'CABLE' ? (
+                        renderScaleSelector(
+                          'p1_servicio',
+                          '1. Señal y Canales de Cable / TV',
+                          '¿Cómo está funcionando la señal de cable y sintonía de canales después de la visita o soporte técnico?'
+                        )
+                      ) : (
+                        renderScaleSelector(
+                          'p1_servicio',
+                          '1. Funcionamiento del Servicio',
+                          '¿Cómo está funcionando el servicio (Internet, cable o Smart Home) después de la visita técnica o instalación?'
+                        )
                       )}
 
-                      {renderScaleSelector(
-                        'p2_velocidad',
-                        '2. Pruebas de Velocidad',
-                        '¿Qué tan conforme quedó con las pruebas de velocidad realizadas por el técnico durante la visita?'
+                      {/* PREGUNTAS 2, 3, 4: SÓLO EN MODALIDAD INTERNET / COMBO */}
+                      {tipoServicioAuditoria === 'INTERNET' && (
+                        <>
+                          {renderScaleSelector(
+                            'p2_velocidad',
+                            '2. Pruebas de Velocidad',
+                            '¿Qué tan conforme quedó con las pruebas de velocidad realizadas por el técnico durante la visita?'
+                          )}
+
+                          {renderScaleSelector(
+                            'p3_cobertura',
+                            '3. Pruebas de Cobertura WiFi',
+                            '¿Qué tan conforme quedó con las pruebas de cobertura realizadas por el técnico durante la visita?'
+                          )}
+
+                          {renderScaleSelector(
+                            'p4_explicacion_router',
+                            '4. Explicación del Router',
+                            '¿Qué tan clara fue la explicación del técnico sobre el funcionamiento del router instalado en su domicilio?'
+                          )}
+                        </>
                       )}
 
-                      {renderScaleSelector(
-                        'p3_cobertura',
-                        '3. Pruebas de Cobertura',
-                        '¿Qué tan conforme quedó con las pruebas de cobertura realizadas por el técnico durante la visita?'
-                      )}
-
-                      {renderScaleSelector(
-                        'p4_explicacion_router',
-                        '4. Explicación del Router',
-                        '¿Qué tan clara fue la explicación del técnico sobre el funcionamiento del router instalado en su domicilio?'
-                      )}
-
+                      {/* PREGUNTAS TÉCNICO (PROFESIONALISMO, CORDIALIDAD, LIMPIEZA) */}
                       {renderScaleSelector(
                         'p6_profesionalismo',
-                        '5. Profesionalismo del Técnico',
+                        tipoServicioAuditoria === 'CABLE' ? '2. Profesionalismo del Técnico' : '5. Profesionalismo del Técnico',
                         '¿Qué tan profesional le pareció el técnico que realizó la instalación o revisión?'
                       )}
 
@@ -997,33 +1234,50 @@ export default function AuditoriaVisitasTab({ token }) {
 
                       {renderScaleSelector(
                         'p7_cordialidad',
-                        '6. Cordialidad y Respeto',
+                        tipoServicioAuditoria === 'CABLE' ? '3. Cordialidad y Respeto' : '6. Cordialidad y Respeto',
                         '¿Qué tan cordial y respetuoso fue el técnico durante su visita?'
                       )}
 
                       {renderScaleSelector(
                         'p8_orden_limpieza',
-                        '7. Orden y Limpieza',
+                        tipoServicioAuditoria === 'CABLE' ? '4. Orden y Limpieza' : '7. Orden y Limpieza',
                         '¿Qué tan ordenado y limpio fue el trabajo del técnico durante la instalación o soporte?'
                       )}
                     </div>
 
-                    {/* SECCIÓN APP ROUTER (SI / NO) */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div style={{ fontSize: '0.86rem', fontWeight: 900, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <i className="fa-solid fa-mobile-screen-button"></i> Funcionalidades de la App del Router
-                      </div>
-                      <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--sidebar-text)' }}>
-                        ¿El técnico le informó sobre las siguientes funcionalidades de la app que controla el router?
-                      </p>
+                    {/* SECCIÓN APP ROUTER (SOLO APLICA A INTERNET / COMBO) */}
+                    {tipoServicioAuditoria === 'INTERNET' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ fontSize: '0.86rem', fontWeight: 900, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <i className="fa-solid fa-mobile-screen-button"></i> Funcionalidades de la App del Router
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--sidebar-text)' }}>
+                          ¿El técnico le informó sobre las siguientes funcionalidades de la app que controla el router?
+                        </p>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '10px' }}>
-                        {renderYesNo('app_administrar_router', 'Cómo administrar el Router')}
-                        {renderYesNo('app_cambio_wifi', 'Cambio de contraseña y nombre de red')}
-                        {renderYesNo('app_red_invitados', 'Cómo crear una red de invitados')}
-                        {renderYesNo('app_control_parental', 'Sobre el control parental')}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '10px' }}>
+                          {renderYesNo('app_administrar_router', 'Cómo administrar el Router', true)}
+                          {renderYesNo('app_cambio_wifi', 'Cambio de contraseña y nombre de red', true)}
+                          {renderYesNo('app_red_invitados', 'Cómo crear una red de invitados', true)}
+                          {renderYesNo('app_control_parental', 'Sobre el control parental', true)}
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div style={{
+                        padding: '10px 14px',
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: '1px dashed var(--border-color)',
+                        borderRadius: '10px',
+                        fontSize: '0.76rem',
+                        color: 'var(--sidebar-text)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <i className="fa-solid fa-circle-info" style={{ color: '#0284c7' }}></i>
+                        <span>Sección App Router omitida automáticamente: no aplica para clientes de modalidad Solo Cable / TV.</span>
+                      </div>
+                    )}
 
                     {/* SECCIÓN GRILLA DE CANALES */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -1032,32 +1286,61 @@ export default function AuditoriaVisitasTab({ token }) {
                       </div>
                       {renderYesNo(
                         'instalo_grilla_canales',
-                        '¿El técnico le instaló en su teléfono el enlace para acceder a la grilla de canales, indicando su funcionamiento?'
+                        tipoServicioAuditoria === 'CABLE'
+                          ? '¿El técnico le sintonizó y explicó la grilla de canales o entregó la programación completa?'
+                          : '¿El técnico le instaló en su teléfono el enlace para acceder a la grilla de canales, indicando su funcionamiento?',
+                        true
                       )}
                     </div>
 
-                    {/* BANNER PROMEDIO CALCULADO */}
-                    <div style={{
-                      background: 'linear-gradient(135deg, rgba(31, 73, 125, 0.2) 0%, rgba(56, 189, 248, 0.2) 100%)',
-                      border: '1px solid #38bdf8',
-                      borderRadius: '16px',
-                      padding: '16px 20px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <div>
-                        <strong style={{ fontSize: '0.95rem', color: 'var(--text-main)', display: 'block' }}>PROMEDIO TOTAL DE CALIDAD</strong>
-                        <small style={{ color: 'var(--sidebar-text)' }}>Calculado automáticamente según las 7 preguntas escala 1-10</small>
-                      </div>
-                      <div style={{
-                        fontSize: '1.8rem',
-                        fontWeight: 900,
-                        color: Number(calcularPromedioEnVivo()) >= 8 ? '#10b981' : Number(calcularPromedioEnVivo()) >= 6 ? '#f59e0b' : '#ef4444'
-                      }}>
-                        ⭐ {calcularPromedioEnVivo()} <span style={{ fontSize: '0.9rem', color: 'var(--sidebar-text)' }}>/ 10</span>
-                      </div>
-                    </div>
+                    {/* BANNER PROMEDIO CALCULADO DINÁMICO */}
+                    {(() => {
+                      const statProm = calcularPromedioEnVivo();
+                      return (
+                        <div style={{
+                          background: 'linear-gradient(135deg, rgba(31, 73, 125, 0.25) 0%, rgba(56, 189, 248, 0.2) 100%)',
+                          border: '1px solid #38bdf8',
+                          borderRadius: '16px',
+                          padding: '16px 20px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '12px'
+                        }}>
+                          <div>
+                            <strong style={{ fontSize: '0.95rem', color: 'var(--text-main)', display: 'block' }}>
+                              PROMEDIO TOTAL DE CALIDAD
+                            </strong>
+                            <small style={{ color: 'var(--sidebar-text)', display: 'block', marginTop: '2px' }}>
+                              {statProm.respondidas > 0 ? (
+                                <>
+                                  Calculado sobre <strong>{statProm.respondidas} de {statProm.total}</strong> preguntas respondidas ({tipoServicioAuditoria === 'CABLE' ? 'Modalidad Solo Cable / TV' : 'Modalidad Internet / Combo'}).
+                                  {statProm.respondidas < statProm.total && (
+                                    <span style={{ color: '#38bdf8', display: 'block', marginTop: '2px', fontWeight: 700 }}>
+                                      ℹ️ {statProm.total - statProm.respondidas} pregunta(s) con N/A no penalizan el promedio ni al técnico.
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                'Aún no se ha respondido ninguna pregunta con calificación.'
+                              )}
+                            </small>
+                          </div>
+                          <div style={{
+                            fontSize: '1.8rem',
+                            fontWeight: 900,
+                            color: statProm.valorNum >= 8 ? '#10b981' : statProm.valorNum >= 6 ? '#f59e0b' : '#ef4444',
+                            display: 'flex',
+                            alignItems: 'baseline',
+                            gap: '4px'
+                          }}>
+                            ⭐ {statProm.respondidas > 0 ? statProm.promedio : '—'}
+                            <span style={{ fontSize: '0.9rem', color: 'var(--sidebar-text)' }}>/ 10</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* SUGERENCIA DEL CLIENTE */}
                     <div>
