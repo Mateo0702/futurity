@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 function VisitasTab({ token, user, activeAreaProp }) {
   const isCalidadUser = (user?.rol === 'CALIDAD' || user?.role === 'CALIDAD');
+  const isBodegaUser = (user?.rol === 'BODEGA' || user?.role === 'BODEGA' || user?.user_role === 'BODEGA');
 
   const getTodayLocal = (d = new Date()) => {
     const year = d.getFullYear();
@@ -469,12 +470,32 @@ function VisitasTab({ token, user, activeAreaProp }) {
       {/* Hero Header de Centro de Comando */}
       <div style={{ background: 'var(--card-bg)', padding: '24px 30px', borderRadius: '20px', marginBottom: '25px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px', boxShadow: 'var(--shadow-sm)' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.75rem', color: 'var(--text-main)', fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <i className="fa-solid fa-[#6366f1] fa-route" style={{ color: 'var(--primary)' }}></i>
-            Centro de Comando ({activeArea === 'INSTALACIONES' ? 'Calidad & Instalaciones' : 'Soporte Técnico'})
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <h1 style={{ margin: 0, fontSize: '1.75rem', color: 'var(--text-main)', fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <i className="fa-solid fa-[#6366f1] fa-route" style={{ color: 'var(--primary)' }}></i>
+              Centro de Comando ({activeArea === 'INSTALACIONES' ? 'Calidad & Instalaciones' : activeArea === 'TODAS' ? 'Todas las Visitas' : 'Soporte Técnico'})
+            </h1>
+            {isBodegaUser && (
+              <span style={{
+                padding: '4px 10px',
+                borderRadius: '8px',
+                background: 'rgba(2, 132, 199, 0.12)',
+                color: '#0284c7',
+                fontSize: '0.78rem',
+                fontWeight: 800,
+                border: '1px solid rgba(2, 132, 199, 0.25)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <i className="fa-solid fa-eye"></i> Bodega (Solo Consulta)
+              </span>
+            )}
+          </div>
           <p style={{ marginTop: '4px', color: 'var(--sidebar-text)', fontSize: '0.9rem', fontWeight: 500 }}>
-            Monitoreo operativo de visitas, cuadrillas, rutas geográficas y estados en tiempo real.
+            {isBodegaUser 
+              ? 'Monitoreo de visitas e instalaciones del día para control de materiales y equipos despachados.' 
+              : 'Monitoreo operativo de visitas, cuadrillas, rutas geográficas y estados en tiempo real.'}
           </p>
         </div>
 
@@ -757,13 +778,15 @@ function VisitasTab({ token, user, activeAreaProp }) {
                   <span className="pro-badge-amber">
                     <i className="fa-regular fa-clock"></i> {rec.hora_inicio_str || 'Todo el día'} {rec.hora_fin_str ? `- ${rec.hora_fin_str}` : ''}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => marcarRecordatorioAtendido(rec.id_recordatorio)}
-                    style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '8px', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <i className="fa-solid fa-check"></i> Atendido
-                  </button>
+                  {!isBodegaUser && (
+                    <button
+                      type="button"
+                      onClick={() => marcarRecordatorioAtendido(rec.id_recordatorio)}
+                      style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '8px', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <i className="fa-solid fa-check"></i> Atendido
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -1095,13 +1118,15 @@ function VisitasTab({ token, user, activeAreaProp }) {
                                 <div><strong>📄 Contrato:</strong> <span className="pro-contract-pill">#{v.contrato}</span> ({v.empresa || 'Futurity'})</div>
                                 <div>
                                   <strong>📞 Contacto:</strong> {v.telefonos || 'Sin teléfono'}
-                                  <button
-                                    type="button"
-                                    onClick={() => enviarNotificacionWhatsApp(v)}
-                                    style={{ background: '#25d366', color: 'white', border: 'none', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', marginLeft: '10px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                                  >
-                                    <i className="fa-brands fa-whatsapp"></i> Avisar Agenda WhatsApp
-                                  </button>
+                                  {!isBodegaUser && (
+                                    <button
+                                      type="button"
+                                      onClick={() => enviarNotificacionWhatsApp(v)}
+                                      style={{ background: '#25d366', color: 'white', border: 'none', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', marginLeft: '10px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                    >
+                                      <i className="fa-brands fa-whatsapp"></i> Avisar Agenda WhatsApp
+                                    </button>
+                                  )}
                                 </div>
                                 <div><strong>📍 Dirección:</strong> {v.direccion || '-'}</div>
                                 <div><strong>⏰ Horario Cliente:</strong> {v.preferencia_horaria || 'Flexible'}</div>
@@ -1198,26 +1223,28 @@ function VisitasTab({ token, user, activeAreaProp }) {
                                     <div style={{ fontSize: '0.82rem', color: '#c2410c', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                       <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: '0.95rem' }}></i> Requiere Cambio de Acometida / FO
                                     </div>
-                                    <button 
-                                      type="button" 
-                                      onClick={() => abrirModalCambioFO(v)}
-                                      style={{ 
-                                        backgroundColor: '#ea580c', 
-                                        color: 'white', 
-                                        padding: '6px 14px', 
-                                        fontSize: '0.78rem', 
-                                        fontWeight: 'bold', 
-                                        borderRadius: '6px', 
-                                        cursor: 'pointer', 
-                                        border: 'none', 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        gap: '6px', 
-                                        boxShadow: '0 2px 4px rgba(234, 88, 12, 0.2)' 
-                                      }}
-                                    >
-                                      🧡 Programar Cambio de FO
-                                    </button>
+                                    {!isBodegaUser && (
+                                      <button 
+                                        type="button" 
+                                        onClick={() => abrirModalCambioFO(v)}
+                                        style={{ 
+                                          backgroundColor: '#ea580c', 
+                                          color: 'white', 
+                                          padding: '6px 14px', 
+                                          fontSize: '0.78rem', 
+                                          fontWeight: 'bold', 
+                                          borderRadius: '6px', 
+                                          cursor: 'pointer', 
+                                          border: 'none', 
+                                          display: 'flex', 
+                                          alignItems: 'center', 
+                                          gap: '6px', 
+                                          boxShadow: '0 2px 4px rgba(234, 88, 12, 0.2)' 
+                                        }}
+                                      >
+                                        🧡 Programar Cambio de FO
+                                      </button>
+                                    )}
                                   </div>
                                 )}
 
@@ -1316,8 +1343,8 @@ function VisitasTab({ token, user, activeAreaProp }) {
                                   </div>
                                 )}
 
-                                {/* Botones de Acción (Editar, Reagendar, Reasignar, Cancelar) */}
-                                {(v.estado === 'PENDIENTE' || v.estado === 'REAGENDADA' || v.estado === 'EN_RUTA') && (
+                                {/* Botones de Acción (Editar, Reagendar, Reasignar, Cancelar) - Oculto para Bodega */}
+                                {!isBodegaUser && (v.estado === 'PENDIENTE' || v.estado === 'REAGENDADA' || v.estado === 'EN_RUTA') && (
                                   <div style={{ marginTop: '20px', borderTop: '1px solid var(--border-color)', paddingTop: '15px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                     
                                     {/* Botones de Selección */}

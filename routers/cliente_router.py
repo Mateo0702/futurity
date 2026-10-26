@@ -332,7 +332,7 @@ def publico_cuadro_mando(fecha, token):
         
     conexion = get_db_connection()
     if not conexion:
-        return "Error de conexión a la base de datos", 500
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
         
     try:
         cursor = conexion.cursor(dictionary=True)
@@ -349,12 +349,13 @@ def publico_cuadro_mando(fecha, token):
         """, (fecha,))
         saved = cursor.fetchone() or {}
 
-        # 2. Intentar auto-detectar los 3 agentes más activos en esta fecha
+        # 2. Intentar auto-detectar los 3 agentes más activos en esta fecha (exclusivamente Call Center)
         cursor.execute("""
-            SELECT agente, COUNT(*) as c 
-            FROM atenciones 
-            WHERE fecha = %s AND agente IS NOT NULL AND agente != '' AND agente != 'Importado'
-            GROUP BY agente 
+            SELECT a.agente, COUNT(*) as c 
+            FROM atenciones a
+            INNER JOIN callcenter cc ON a.agente = cc.nombre COLLATE utf8mb4_0900_ai_ci
+            WHERE a.fecha = %s AND cc.activo = 1
+            GROUP BY a.agente 
             ORDER BY c DESC 
             LIMIT 3
         """, (fecha,))
@@ -653,7 +654,403 @@ def publico_cuadro_mando(fecha, token):
             "actividades_tecnicos": actividades_tecnicos
         })
     except Exception as e:
-        return f"Error al procesar el reporte: {str(e)}", 500
+        return jsonify({"status": "error", "message": f"Error al procesar el reporte: {str(e)}"}), 500
     finally:
         cursor.close()
         conexion.close()
+
+
+# ==========================================
+# RUTAS DE INTEGRACIÓN CON BASE CENTRAL (192.168.232.5:85)
+# ==========================================
+import urllib.request
+import urllib.error
+import json
+import re
+from utils import MAPEO_NODOS
+
+def _normalizar_telefono_ec(tel):
+    if not tel:
+        return ""
+    t = str(tel).strip()
+    if t.endswith('.0') or t.endswith(',0'):
+        t = t[:-2]
+    t = re.sub(r'[^\d]', '', t)
+    if t.startswith('593') and len(t) == 12:
+        t = '0' + t[3:]
+    return t
+
+def _extraer_velocidad_mbps(servicios_str):
+    if not servicios_str:
+        return None
+    m_act = re.search(r'VELOCIDAD\s+ACTUAL\s+(\d+)', servicios_str, re.IGNORECASE)
+    if m_act:
+        try:
+            return int(m_act.group(1))
+        except:
+            pass
+    m = re.search(r'(\d+)\s*(?:MEGAS|MB)', servicios_str, re.IGNORECASE)
+    if m:
+        try:
+            return int(m.group(1))
+        except:
+            pass
+    return None
+
+def _consultar_api_central(cedula):
+    cedula_clean = re.sub(r'[^a-zA-Z0-9]', '', str(cedula or '').strip())
+    if not cedula_clean or len(cedula_clean) < 3:
+        return {"status": "error", "message": "Identificación o código inválido (mínimo 3 caracteres)"}
+
+    url = f"http://192.168.232.5:85/api/contratosclientes?codigo={cedula_clean}"
+    req = urllib.request.Request(url, headers={'User-Agent': 'Futurity-Atlas/1.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=6) as response:
+            raw_data = response.read().decode('utf-8')
+            data = json.loads(raw_data)
+            return {"status": "ok", "data": data}
+    except urllib.error.HTTPError as e:
+        return {"status": "not_found", "message": "Cliente no encontrado en la Base Central."}
+    except urllib.error.URLError as e:
+        return {"status": "connection_error", "message": f"No se pudo conectar a la Base Central (192.168.232.5:85): {e.reason}"}
+    except Exception as e:
+        return {"status": "error", "message": f"Error al consultar la Base Central: {str(e)}"}
+
+def _es_contrato_fibracom(num_contrato, ip_maestro='', nombre_zona='', conn=None, cedula=''):
+    """
+    Determina de manera confiable si un contrato pertenece a FIBRACOM o SERVICABLE.
+    """
+    if num_contrato and str(num_contrato).strip().upper().endswith('F'):
+        return True
+        
+    num_clean = re.sub(r'[^0-9a-zA-Z]', '', str(num_contrato).strip())
+    num_plain = num_clean[:-1] if num_clean.upper().endswith('F') else num_clean
+    num_with_f = num_plain + 'F'
+
+    # 1. Si ya existe en la base local este contrato específico para esta cédula o este número exacto
+    if conn:
+        try:
+            cur = conn.cursor(dictionary=True)
+            # Primero: ¿Existe este contrato registrado para esta cédula en específico?
+            if cedula:
+                cur.execute("""
+                    SELECT contrato, empresa FROM directorio_clientes 
+                    WHERE cedula = %s AND (contrato = %s OR contrato = %s)
+                    LIMIT 1
+                """, (cedula, num_plain, num_with_f))
+                row_cli = cur.fetchone()
+                if row_cli:
+                    emp = (row_cli.get('empresa') or '').upper()
+                    cur.close()
+                    if emp == 'SERVICABLE':
+                        return False
+                    if emp == 'FIBRACOM' or row_cli['contrato'].upper().endswith('F'):
+                        return True
+
+            # Segundo: ¿Existe el contrato plano exacto en la base local (ej: '458')?
+            cur.execute("""
+                SELECT contrato, empresa, cedula FROM directorio_clientes 
+                WHERE contrato = %s
+                LIMIT 1
+            """, (num_plain,))
+            row_exact = cur.fetchone()
+            if row_exact:
+                emp = (row_exact.get('empresa') or '').upper()
+                # Si coincide con la cédula o no hay cédula en BD, respetar la empresa local
+                if not cedula or not row_exact.get('cedula') or str(row_exact.get('cedula')).strip() == str(cedula).strip():
+                    cur.close()
+                    if emp == 'SERVICABLE':
+                        return False
+                    elif emp == 'FIBRACOM':
+                        return True
+
+            # Tercero: ¿Existe con sufijo 'F' (ej: '458F') pero EXCLUSIVAMENTE para esta misma cédula?
+            if cedula:
+                cur.execute("""
+                    SELECT contrato, empresa FROM directorio_clientes 
+                    WHERE contrato = %s AND cedula = %s
+                    LIMIT 1
+                """, (num_with_f, cedula))
+                row_f = cur.fetchone()
+                if row_f and ((row_f.get('empresa') or '').upper() == 'FIBRACOM' or row_f['contrato'].upper().endswith('F')):
+                    cur.close()
+                    return True
+
+            cur.close()
+        except Exception:
+            pass
+
+    # 2. Detección por IP del Nodo / OLT Maestro de Fibracom
+    ip = str(ip_maestro or '').strip()
+    if ip in ('100.64.21.2', '10.64.20.2', '100.64.20.2') or ip.startswith('100.64.') or ip.startswith('10.64.'):
+        return True
+
+    # 3. Detección por Zona geográfica de Fibracom
+    zona = str(nombre_zona or '').upper()
+    if any(z in zona for z in ['SANTA ANA', 'VALLE', 'EL VALLE']):
+        return True
+
+    return False
+
+def _mapear_contrato_central(contrato_item, cliente_nombres, cliente_cedula, conn=None, contrato_buscado=''):
+    raw_num = str(contrato_item.get('numerocontrato') or '').strip()
+    ip_nodo = contrato_item.get('ipmaestro') or ''
+    nombre_zona = contrato_item.get('nombrezona') or ''
+    
+    # Determinar si es Fibracom usando el número REAL de contrato de este ítem
+    is_fib = _es_contrato_fibracom(
+        num_contrato=raw_num,
+        ip_maestro=ip_nodo,
+        nombre_zona=nombre_zona,
+        conn=conn,
+        cedula=cliente_cedula
+    )
+    
+    raw_num_plain = raw_num[:-1] if raw_num.upper().endswith('F') else raw_num
+    num_contrato = (raw_num_plain + 'F') if is_fib else raw_num_plain
+    empresa_default = "FIBRACOM" if is_fib else "SERVICABLE"
+    
+    tel_raw = contrato_item.get('telefonolocal') or ''
+    tel_clean = _normalizar_telefono_ec(tel_raw)
+    
+    detalles = contrato_item.get('detalles') or []
+    servicios = detalles[0].get('servicios') if detalles else ''
+    vel_mbps = _extraer_velocidad_mbps(servicios)
+    
+    local_info = None
+    if conn and num_contrato:
+        try:
+            c_check = conn.cursor(dictionary=True)
+            # Buscar en directorio local dando prioridad a la coincidencia con este cliente y contrato
+            c_check.execute("""
+                SELECT * FROM directorio_clientes 
+                WHERE (contrato = %s OR contrato = %s)
+                  AND (cedula = %s OR cedula IS NULL OR cedula = '')
+                ORDER BY (contrato = %s) DESC, (cedula = %s) DESC
+                LIMIT 1
+            """, (num_contrato, raw_num_plain, cliente_cedula, num_contrato, cliente_cedula))
+            local_info = c_check.fetchone()
+            c_check.close()
+        except Exception:
+            pass
+
+    nodo_nom = MAPEO_NODOS.get(ip_nodo, ip_nodo)
+    empresa_final = local_info.get('empresa') if local_info and local_info.get('empresa') else empresa_default
+    if is_fib:
+        empresa_final = 'FIBRACOM'
+    elif empresa_default == 'SERVICABLE':
+        empresa_final = 'SERVICABLE'
+    
+    return {
+        "contrato": num_contrato,
+        "cliente": cliente_nombres,
+        "cedula": cliente_cedula,
+        "empresa": empresa_final,
+        "direccion": contrato_item.get('direccionlocal') or (local_info.get('direccion') if local_info else ""),
+        "sector": contrato_item.get('nombrezona') or (local_info.get('zona') if local_info else ""),
+        "zona_excel": contrato_item.get('nombrezona') or (local_info.get('zona') if local_info else ""),
+        "telefono1": tel_clean or (local_info.get('telefono1') if local_info else ""),
+        "telefono2": local_info.get('telefono2') if local_info else "",
+        "telefono3": local_info.get('telefono3') if local_info else "",
+        "telefonos": tel_clean or (local_info.get('telefono1') if local_info else ""),
+        "total_mensual": float(contrato_item.get('valormensual')) if contrato_item.get('valormensual') is not None else (float(local_info.get('total_mensual')) if local_info and local_info.get('total_mensual') is not None else None),
+        "estado": contrato_item.get('estadoContrato') or (local_info.get('estado') if local_info else "ACTIVO"),
+        "producto": servicios or (local_info.get('producto') if local_info else ""),
+        "velocidad_mbps": vel_mbps if vel_mbps is not None else (local_info.get('velocidad_mbps') if local_info else None),
+        "ip_cliente": contrato_item.get('ipcliente') or (local_info.get('ip_cliente') if local_info else ""),
+        "ip_nodo": ip_nodo or (local_info.get('ip_nodo') if local_info else ""),
+        "nodo_nombre": nodo_nom,
+        "deudatotal": float(contrato_item.get('deudatotal')) if contrato_item.get('deudatotal') is not None else 0.0,
+        "cantidadDeuda": float(contrato_item.get('cantidadDeuda')) if contrato_item.get('cantidadDeuda') is not None else 0.0,
+        "deudaspendiente": contrato_item.get('deudaspendiente') or [],
+        "ordenesServiciosTecnico": contrato_item.get('ordenesServiciosTecnico') or [],
+        "numero_serie": (local_info.get('numero_serie') if local_info and local_info.get('numero_serie') else "") or "S/N",
+        "modelo_ont": local_info.get('modelo_ont') if local_info else "",
+        "router_principal": local_info.get('router_principal') if local_info else "",
+        "numero_serie_router": local_info.get('numero_serie_router') if local_info else "",
+        "router_secundario": local_info.get('router_secundario') if local_info else "",
+        "numero_serie_router_secundario": local_info.get('numero_serie_router_secundario') if local_info else "",
+        "tipo_mesh": local_info.get('tipo_mesh') if local_info else "",
+        "cantidad_routers": local_info.get('cantidad_routers') if local_info and local_info.get('cantidad_routers') else 1,
+        "modo_acceso": local_info.get('modo_acceso') if local_info else "",
+        "fecha_instalacion": str(local_info.get('fecha_instalacion'))[:10] if local_info and local_info.get('fecha_instalacion') else "",
+        "existe_local": bool(local_info)
+    }
+
+@cliente_bp.route('/api/cliente/consultar_base_central', methods=['GET'])
+def api_consultar_base_central():
+    cedula = (request.args.get('cedula') or request.args.get('codigo') or '').strip()
+    contrato = request.args.get('contrato', '').strip()
+    
+    if not cedula:
+        return jsonify({"status": "error", "message": "Por favor ingrese una identificación, cédula, RUC o código para consultar."}), 400
+
+    res_central = _consultar_api_central(cedula)
+    if res_central.get('status') != 'ok':
+        code = 404 if res_central.get('status') == 'not_found' else 500
+        return jsonify(res_central), code
+
+    data = res_central.get('data') or {}
+    cliente_nombres = data.get('nombres', '').strip()
+    cliente_cedula = data.get('cedula', '').strip() or cedula
+    
+    conn = get_db_connection()
+    contratos_parsed = []
+    try:
+        for c_item in data.get('infocontratos', []):
+            mapped = _mapear_contrato_central(
+                c_item, cliente_nombres, cliente_cedula, conn=conn, contrato_buscado=contrato
+            )
+            contratos_parsed.append(mapped)
+    finally:
+        if conn and conn.is_connected():
+            conn.close()
+
+    # Si se especificó un contrato, marcarlo o priorizarlo (ignorando mayúsculas y sufijo F si aplica)
+    if contrato:
+        contrato_plain = contrato[:-1].upper() if contrato.upper().endswith('F') else contrato.upper()
+        for c in contratos_parsed:
+            c_plain = c['contrato'][:-1].upper() if c['contrato'].upper().endswith('F') else c['contrato'].upper()
+            if c['contrato'].upper() == contrato.upper() or c_plain == contrato_plain:
+                c['seleccionado'] = True
+
+    return jsonify({
+        "status": "success",
+        "cliente": {
+            "nombres": cliente_nombres,
+            "cedula": cliente_cedula,
+            "id_central": data.get('id', '')
+        },
+        "contratos": contratos_parsed
+    })
+
+@cliente_bp.route('/api/cliente/importar_base_central', methods=['POST'])
+def api_importar_base_central():
+    req_data = request.get_json(silent=True) or request.form or {}
+    cedula = str(req_data.get('cedula') or req_data.get('codigo') or '').strip()
+    contrato_req = str(req_data.get('contrato') or '').strip()
+
+    if not cedula or not contrato_req:
+        return jsonify({"status": "error", "message": "Identificación/cédula y número de contrato son requeridos para importar."}), 400
+
+    res_central = _consultar_api_central(cedula)
+    if res_central.get('status') != 'ok':
+        code = 404 if res_central.get('status') == 'not_found' else 500
+        return jsonify(res_central), code
+
+    data = res_central.get('data') or {}
+    cliente_nombres = data.get('nombres', '').strip()
+    cliente_cedula = data.get('cedula', '').strip() or cedula
+    
+    # Buscar el contrato en la respuesta central ignorando sufijo F
+    req_plain = contrato_req[:-1] if contrato_req.upper().endswith('F') else contrato_req
+    target_item = None
+    for c_item in data.get('infocontratos', []):
+        c_num = str(c_item.get('numerocontrato', '')).strip()
+        c_num_plain = c_num[:-1] if c_num.upper().endswith('F') else c_num
+        if c_num == contrato_req or c_num_plain == req_plain:
+            target_item = c_item
+            break
+            
+    if not target_item:
+        if len(data.get('infocontratos', [])) == 1:
+            target_item = data['infocontratos'][0]
+        else:
+            return jsonify({"status": "error", "message": f"El contrato #{contrato_req} no se encontró dentro de los contratos de la cédula {cedula}."}), 404
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos local."}), 500
+
+    raw_central_num = str(target_item.get('numerocontrato', '')).strip()
+    raw_plain = raw_central_num[:-1] if raw_central_num.upper().endswith('F') else raw_central_num
+    
+    # Evaluar si es FIBRACOM
+    is_fib = _es_contrato_fibracom(
+        num_contrato=contrato_req or raw_central_num,
+        ip_maestro=target_item.get('ipmaestro', ''),
+        nombre_zona=target_item.get('nombrezona', ''),
+        conn=conn,
+        cedula=cliente_cedula
+    )
+    
+    contrato_atlas = (raw_plain + 'F') if is_fib else raw_plain
+    empresa_atlas = 'FIBRACOM' if is_fib else 'SERVICABLE'
+
+    tel_raw = target_item.get('telefonolocal') or ''
+    tel_clean = _normalizar_telefono_ec(tel_raw)
+    detalles = target_item.get('detalles') or []
+    servicios = detalles[0].get('servicios') if detalles else ''
+    vel_mbps = _extraer_velocidad_mbps(servicios)
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        
+        # Si es Fibracom y existía un duplicado sin 'F' para esta cédula (ej: '451'), eliminar el duplicado huérfano
+        if is_fib:
+            cursor.execute("""
+                DELETE FROM directorio_clientes 
+                WHERE contrato = %s AND cedula = %s AND empresa != 'FIBRACOM'
+            """, (raw_plain, cliente_cedula))
+
+        query = """
+            INSERT INTO directorio_clientes (
+                contrato, empresa, producto, estado, forma_pago,
+                nombre_cliente, direccion, zona, telefono1, total_mensual,
+                cedula, velocidad_mbps, ip_cliente, ip_nodo
+            ) VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s
+            )
+            ON DUPLICATE KEY UPDATE
+                empresa = VALUES(empresa),
+                nombre_cliente = VALUES(nombre_cliente),
+                cedula = VALUES(cedula),
+                direccion = COALESCE(NULLIF(VALUES(direccion), ''), direccion),
+                zona = COALESCE(NULLIF(VALUES(zona), ''), zona),
+                telefono1 = COALESCE(NULLIF(VALUES(telefono1), ''), telefono1),
+                total_mensual = VALUES(total_mensual),
+                estado = VALUES(estado),
+                producto = VALUES(producto),
+                ip_cliente = VALUES(ip_cliente),
+                ip_nodo = VALUES(ip_nodo),
+                velocidad_mbps = COALESCE(VALUES(velocidad_mbps), velocidad_mbps)
+        """
+        cursor.execute(query, (
+            contrato_atlas,
+            empresa_atlas,
+            servicios,
+            target_item.get('estadoContrato', 'ACTIVO'),
+            'N/D',
+            cliente_nombres,
+            target_item.get('direccionlocal', ''),
+            target_item.get('nombrezona', ''),
+            tel_clean,
+            target_item.get('valormensual'),
+            cliente_cedula,
+            vel_mbps,
+            target_item.get('ipcliente', ''),
+            target_item.get('ipmaestro', '')
+        ))
+        conn.commit()
+
+        mapped_client = _mapear_contrato_central(
+            target_item, cliente_nombres, cliente_cedula, conn=conn, contrato_buscado=contrato_atlas
+        )
+
+        return jsonify({
+            "status": "success",
+            "message": f"Contrato #{contrato_atlas} ({empresa_atlas}) sincronizado exitosamente en la base local.",
+            "cliente": mapped_client
+        })
+
+    except Exception as e:
+        if conn and conn.is_connected():
+            conn.rollback()
+        return jsonify({"status": "error", "message": f"Error al guardar en base local: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+

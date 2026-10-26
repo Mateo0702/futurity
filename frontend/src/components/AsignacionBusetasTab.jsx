@@ -6,6 +6,7 @@ function AsignacionBusetasTab({ token }) {
 
   // Data
   const [tecnicosVehiculos, setTecnicosVehiculos] = useState([]);
+  const [equiposPorPlaca, setEquiposPorPlaca] = useState({});
   const [traspasosHistorial, setTraspasosHistorial] = useState([]);
   const [listaVehiculos, setListaVehiculos] = useState([]);
 
@@ -16,7 +17,7 @@ function AsignacionBusetasTab({ token }) {
   const [showReasignarModal, setShowReasignarModal] = useState(false);
   const [selectedTecnico, setSelectedTecnico] = useState(null);
   const [nuevaPlacaInput, setNuevaPlacaInput] = useState('');
-  const [transferirInventario, setTransferirInventario] = useState(true);
+  const [transferirInventario, setTransferirInventario] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // New Vehicle Modal / Form State
@@ -39,6 +40,7 @@ function AsignacionBusetasTab({ token }) {
       const dataInv = await resInv.json();
       if (resInv.ok && dataInv.status === 'ok') {
         setTecnicosVehiculos(dataInv.tecnicos_vehiculos || []);
+        setEquiposPorPlaca(dataInv.equipos_por_placa || {});
       } else {
         setError(dataInv.message || 'Error al obtener lista de vehículos.');
       }
@@ -123,6 +125,10 @@ function AsignacionBusetasTab({ token }) {
     if (e) e.preventDefault();
     if (!selectedTecnico) return;
 
+    // Si está asignando la misma placa titular, nos aseguramos que transferir_inventario sea false
+    const esTitular = nuevaPlacaInput === selectedTecnico.placa_vehiculo;
+    const transferir = esTitular ? false : transferirInventario;
+
     setSubmitting(true);
     try {
       const res = await fetch('/api/admin/tecnicos/reasignar_vehiculo', {
@@ -134,7 +140,7 @@ function AsignacionBusetasTab({ token }) {
         body: JSON.stringify({
           id_tecnico: selectedTecnico.id_tecnico,
           placa_asignada_hoy: nuevaPlacaInput,
-          transferir_inventario: transferirInventario
+          transferir_inventario: transferir
         })
       });
       const data = await res.json();
@@ -143,6 +149,7 @@ function AsignacionBusetasTab({ token }) {
         setShowReasignarModal(false);
         setSelectedTecnico(null);
         setNuevaPlacaInput('');
+        setTransferirInventario(false);
         await cargarDatos();
       } else {
         alert(data.message || "Error al actualizar asignación.");
@@ -157,7 +164,9 @@ function AsignacionBusetasTab({ token }) {
 
   const handleResetTitular = async (tec) => {
     if (!tec) return;
-    const transferir = window.confirm("¿Deseas devolver la custodia física de los insumos a la buseta titular?");
+    if (!window.confirm(`¿Restablecer a ${tec.nombre} a su furgoneta titular (${tec.placa_vehiculo || 'S/P'})? El inventario y equipos de cada vehículo permanecerán intactos.`)) {
+      return;
+    }
     try {
       const res = await fetch('/api/admin/tecnicos/reasignar_vehiculo', {
         method: 'POST',
@@ -168,14 +177,19 @@ function AsignacionBusetasTab({ token }) {
         body: JSON.stringify({
           id_tecnico: tec.id_tecnico,
           placa_asignada_hoy: 'RESET',
-          transferir_inventario: transferir
+          transferir_inventario: false
         })
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        alert(data.message || "Furgoneta titular restablecida.");
         await cargarDatos();
+      } else {
+        alert(data.message || "Error al restablecer titular.");
       }
     } catch (err) {
       console.error(err);
+      alert("Error de conexión al restablecer titular.");
     }
   };
 
@@ -300,6 +314,7 @@ function AsignacionBusetasTab({ token }) {
                       <th style={{ padding: '12px 15px' }}>Técnico</th>
                       <th style={{ padding: '12px 15px', textAlign: 'center' }}>Placa Titular</th>
                       <th style={{ padding: '12px 15px', textAlign: 'center' }}>Placa Asignada Hoy</th>
+                      <th style={{ padding: '12px 15px', textAlign: 'center' }}>Equipos en Buseta</th>
                       <th style={{ padding: '12px 15px', textAlign: 'center' }}>Estado Buseta</th>
                       <th style={{ padding: '12px 15px', textAlign: 'center' }}>Acciones (Call Center / Admin)</th>
                     </tr>
@@ -308,6 +323,8 @@ function AsignacionBusetasTab({ token }) {
                     {tecnicosVehiculos.map((tec, i) => {
                       const tieneReasignacion = tec.placa_asignada_hoy && tec.placa_asignada_hoy !== tec.placa_vehiculo;
                       const placaActiva = tec.placa_asignada_hoy || tec.placa_vehiculo || 'S/P';
+                      const eqInfo = equiposPorPlaca[placaActiva] || { total_ont: tec.total_ont || 0, total_router: tec.total_router || 0, total_equipos: tec.total_equipos || 0 };
+                      const totalEq = eqInfo.total_equipos || 0;
                       return (
                         <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
                           <td style={{ padding: '12px 15px', fontWeight: 800, color: 'var(--text-main)' }}>
@@ -321,6 +338,27 @@ function AsignacionBusetasTab({ token }) {
                             <span style={{ padding: '4px 10px', borderRadius: '8px', background: tieneReasignacion ? '#fef3c7' : '#e0e7ff', color: tieneReasignacion ? '#b45309' : '#3730a3', fontSize: '0.82rem' }}>
                               <i className="fa-solid fa-car-side" style={{ marginRight: '4px' }}></i>
                               {placaActiva}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 15px', textAlign: 'center' }}>
+                            <span style={{
+                              padding: '4px 10px',
+                              borderRadius: '8px',
+                              background: totalEq > 0 ? '#eff6ff' : '#f8fafc',
+                              color: totalEq > 0 ? '#1d4ed8' : '#94a3b8',
+                              fontSize: '0.8rem',
+                              fontWeight: 800,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              border: totalEq > 0 ? '1px solid #bfdbfe' : '1px solid #e2e8f0'
+                            }}>
+                              <i className="fa-solid fa-boxes-stacked"></i>
+                              {totalEq > 0 ? (
+                                <span><strong>{eqInfo.total_ont || 0}</strong> ONTs • <strong>{eqInfo.total_router || 0}</strong> Routers</span>
+                              ) : (
+                                <span>0 equipos</span>
+                              )}
                             </span>
                           </td>
                           <td style={{ padding: '12px 15px', textAlign: 'center' }}>
@@ -341,6 +379,7 @@ function AsignacionBusetasTab({ token }) {
                                 onClick={() => {
                                   setSelectedTecnico(tec);
                                   setNuevaPlacaInput(tec.placa_asignada_hoy || tec.placa_vehiculo || '');
+                                  setTransferirInventario(false);
                                   setShowReasignarModal(true);
                                 }}
                                 style={{ padding: '6px 12px', background: '#1f497d', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 800, fontSize: '0.75rem', cursor: 'pointer' }}
@@ -538,7 +577,16 @@ function AsignacionBusetasTab({ token }) {
               <h5 style={{ margin: 0, color: '#1f497d', fontSize: '1.05rem', fontWeight: 850 }}>
                 <i className="fa-solid fa-truck-front"></i> Cambiar Buseta: {selectedTecnico.nombre}
               </h5>
-              <button type="button" onClick={() => setShowReasignarModal(false)} style={{ background: 'none', border: 'none', color: 'var(--sidebar-text)', fontSize: '1.6rem', cursor: 'pointer', padding: 0, lineHeight: 1 }}>&times;</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReasignarModal(false);
+                  setSelectedTecnico(null);
+                  setNuevaPlacaInput('');
+                  setTransferirInventario(false);
+                }}
+                style={{ background: 'none', border: 'none', color: 'var(--sidebar-text)', fontSize: '1.6rem', cursor: 'pointer', padding: 0, lineHeight: 1 }}
+              >&times;</button>
             </div>
             <div style={{ padding: '20px' }}>
               <form onSubmit={handleReasignarSubmit}>
@@ -567,40 +615,97 @@ function AsignacionBusetasTab({ token }) {
                   {/* ComboBox Dropdown de Placas Registradas */}
                   <select
                     value={nuevaPlacaInput}
-                    onChange={(e) => setNuevaPlacaInput(e.target.value)}
+                    onChange={(e) => {
+                      setNuevaPlacaInput(e.target.value);
+                      if (e.target.value === selectedTecnico.placa_vehiculo) {
+                        setTransferirInventario(false);
+                      }
+                    }}
                     style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 800, outline: 'none' }}
                     required
                   >
                     <option value="">-- Seleccione Placa de la Flota --</option>
-                    {listaVehiculos.filter(v => v.activo === 1).map((v, idx) => (
-                      <option key={idx} value={v.placa}>
-                        🚘 {v.placa} ({v.descripcion || 'Buseta de flota'})
-                      </option>
-                    ))}
+                    {listaVehiculos.filter(v => v.activo === 1).map((v, idx) => {
+                      const eqP = equiposPorPlaca[v.placa];
+                      const infoEq = eqP && eqP.total_equipos > 0 ? ` [${eqP.total_ont || 0} ONTs, ${eqP.total_router || 0} Routers]` : '';
+                      return (
+                        <option key={idx} value={v.placa}>
+                          🚘 {v.placa} ({v.descripcion || 'Buseta de flota'}){infoEq}
+                        </option>
+                      );
+                    })}
                   </select>
 
+                  {/* Resumen de Equipos de la placa seleccionada */}
+                  {nuevaPlacaInput && (
+                    <div style={{ marginTop: '10px', padding: '10px 14px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <i className="fa-solid fa-boxes-stacked" style={{ color: '#0284c7', fontSize: '1.2rem' }}></i>
+                      <div style={{ fontSize: '0.8rem' }}>
+                        <div style={{ fontWeight: 800, color: '#0369a1' }}>Equipos en buseta {nuevaPlacaInput}:</div>
+                        <div style={{ color: '#0c4a6e', fontWeight: 600 }}>
+                          {(equiposPorPlaca[nuevaPlacaInput]?.total_equipos || 0) > 0 ? (
+                            <span>Contiene <strong>{equiposPorPlaca[nuevaPlacaInput]?.total_ont || 0} ONTs</strong> y <strong>{equiposPorPlaca[nuevaPlacaInput]?.total_router || 0} Routers</strong> asignados físicamente.</span>
+                          ) : (
+                            <span>No registra equipos cargados en esta placa (vacía).</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <span style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)', marginTop: '4px', display: 'block' }}>
-                    * El consumo de insumos de las visitas de hoy se descontará de esta placa.
+                    * El técnico que conduzca esta placa consumirá de los insumos y equipos de dicho vehículo.
                   </span>
                 </div>
 
-                <div style={{ marginBottom: '20px', background: 'var(--profile-bg)', padding: '12px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-main)' }}>
-                    <input
-                      type="checkbox"
-                      checked={transferirInventario}
-                      onChange={(e) => setTransferirInventario(e.target.checked)}
-                      style={{ width: '18px', height: '18px', accentColor: 'var(--primary)', cursor: 'pointer' }}
-                    />
-                    <span>🚚 Trasladar insumos de la buseta anterior a esta buseta</span>
-                  </label>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', display: 'block', marginTop: '4px', marginLeft: '26px' }}>
-                    Si el técnico sacó sus materiales de la buseta averiada y los pasó a la buseta libre, marca esta opción para sincronizar el stock.
-                  </span>
-                </div>
+                {/* Si selecciona su propia furgoneta titular, el inventario nunca se traslada */}
+                {selectedTecnico && nuevaPlacaInput === selectedTecnico.placa_vehiculo ? (
+                  <div style={{ marginBottom: '20px', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '12px 14px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <i className="fa-solid fa-circle-check" style={{ color: '#16a34a', fontSize: '1.2rem', flexShrink: 0 }}></i>
+                    <div style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 700 }}>
+                      Retornando a furgoneta titular ({selectedTecnico.placa_vehiculo}). Cada furgoneta conservará su propio inventario y equipos intactos.
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: '20px', background: 'var(--profile-bg)', padding: '12px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-main)' }}>
+                      <input
+                        type="checkbox"
+                        checked={transferirInventario}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            const conf = window.confirm(
+                              "⚠️ ADVERTENCIA CRÍTICA:\n\n" +
+                              "¿Estás completamente seguro de vaciar el inventario de la buseta anterior y pasarlo a esta buseta?\n\n" +
+                              "Normalmente NO se debe hacer esto, ya que cada furgoneta tiene su propio stock de herramientas y cables."
+                            );
+                            if (!conf) return;
+                          }
+                          setTransferirInventario(e.target.checked);
+                        }}
+                        style={{ width: '18px', height: '18px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                      />
+                      <span>🚚 Trasladar inventario físico de la buseta anterior a esta (Excepcional)</span>
+                    </label>
+                    <span style={{ fontSize: '0.72rem', color: '#b45309', display: 'block', marginTop: '4px', marginLeft: '26px', fontWeight: 600 }}>
+                      ⚠️ Mantener SIEMPRE desmarcado. Cada buseta conserva su propio stock físico.
+                    </span>
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                  <button type="button" onClick={() => setShowReasignarModal(false)} style={{ padding: '10px 18px', background: 'var(--profile-bg)', color: 'var(--text-main)', border: '1px solid var(--border-color)', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}>Cancelar</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowReasignarModal(false);
+                      setSelectedTecnico(null);
+                      setNuevaPlacaInput('');
+                      setTransferirInventario(false);
+                    }}
+                    style={{ padding: '10px 18px', background: 'var(--profile-bg)', color: 'var(--text-main)', border: '1px solid var(--border-color)', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}
+                  >
+                    Cancelar
+                  </button>
                   <button type="submit" disabled={submitting} style={{ padding: '10px 20px', background: '#1f497d', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}>
                     {submitting ? 'Guardando...' : 'Guardar Cambio'}
                   </button>

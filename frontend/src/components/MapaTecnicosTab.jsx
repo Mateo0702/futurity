@@ -51,6 +51,16 @@ function TechnicianAvatar({ fotoPerfil, nombre, isOnline, size = 44 }) {
   );
 }
 
+function calcularTiempoTranscurrido(fechaStr) {
+  if (!fechaStr) return 'Desconectado';
+  const fechaAct = new Date(fechaStr);
+  const difSegs = Math.floor((new Date() - fechaAct) / 1000);
+  if (isNaN(difSegs) || difSegs < 0) return 'Ahora';
+  if (difSegs > 3600) return `Hace ${Math.floor(difSegs / 3600)}h`;
+  if (difSegs > 60) return `Hace ${Math.floor(difSegs / 60)}m`;
+  return `Hace ${difSegs}s`;
+}
+
 function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
   const [filterArea, setFilterArea] = useState(activeArea || 'TODOS');
   const [ubicaciones, setUbicaciones] = useState([]);
@@ -59,6 +69,11 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
 
   // KPIs
   const [kpis, setKpis] = useState({ activos: 0, inactivos: 0, libres: 0, ocupados: 0 });
+
+  // Route History State
+  const [selectedHistory, setSelectedHistory] = useState(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const historyPolylineRef = useRef(null);
 
   // Map and Markers Refs
   const mapRef = useRef(null);
@@ -139,6 +154,71 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
     }
   };
 
+  // Route History Fetcher
+  const verRecorridoTecnico = async (idTecnico, nombreTecnico) => {
+    setLoadingHistory(true);
+    try {
+      const res = await fetch(`/api/admin/tecnicos/${idTecnico}/historial_ruta`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        const puntos = data.puntos || [];
+        setSelectedHistory({
+          tecnico: nombreTecnico,
+          id_tecnico: idTecnico,
+          total_puntos: puntos.length,
+          puntos: puntos
+        });
+
+        // Limpiar trazado anterior si existe
+        if (historyPolylineRef.current && mapInstanceRef.current) {
+          mapInstanceRef.current.removeLayer(historyPolylineRef.current);
+          historyPolylineRef.current = null;
+        }
+
+        if (puntos.length > 0 && mapInstanceRef.current) {
+          const latLngs = puntos.map(p => [parseFloat(p.lat), parseFloat(p.lon)]);
+          const polyline = L.polyline(latLngs, {
+            color: '#0284c7',
+            weight: 5,
+            opacity: 0.85,
+            lineJoin: 'round'
+          }).addTo(mapInstanceRef.current);
+
+          historyPolylineRef.current = polyline;
+          mapInstanceRef.current.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+        } else {
+          alert(`No hay registros de ruta hoy para ${nombreTecnico}.`);
+        }
+      } else {
+        alert(data.message || 'Error al obtener la ruta.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error de conexión al cargar la ruta.');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const limpiarRecorrido = () => {
+    if (historyPolylineRef.current && mapInstanceRef.current) {
+      mapInstanceRef.current.removeLayer(historyPolylineRef.current);
+      historyPolylineRef.current = null;
+    }
+    setSelectedHistory(null);
+  };
+
+  useEffect(() => {
+    window.verRecorridoTecnico = (idTecnico, nombreTecnico) => {
+      verRecorridoTecnico(idTecnico, nombreTecnico);
+    };
+    return () => {
+      delete window.verRecorridoTecnico;
+    };
+  }, [token]);
+
   useEffect(() => {
     fetchUbicaciones();
     const interval = setInterval(fetchUbicaciones, 10000); // 10s auto-refresh
@@ -153,7 +233,7 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
     let ocupados = 0;
 
     list.forEach(u => {
-      if (u.conectado === 1) {
+      if (u.conectado === 1 || u.conectado === 2) {
         activos++;
         if (u.estado?.includes('Trabajando') || u.estado?.includes('En camino')) {
           ocupados++;
@@ -212,20 +292,12 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
 
       let estadoClaseColor = '#94a3b8';
       let estadoTexto = u.estado || 'DESCONECTADO';
-      let tiempoTexto = 'Desconectado';
+      const tiempoTexto = calcularTiempoTranscurrido(u.ultima_actualizacion);
 
-      if (u.ultima_actualizacion) {
-        const fechaAct = new Date(u.ultima_actualizacion);
-        const difSegs = Math.floor((new Date() - fechaAct) / 1000);
-        if (difSegs > 3600) tiempoTexto = `Hace ${Math.floor(difSegs / 3600)}h`;
-        else if (difSegs > 60) tiempoTexto = `Hace ${Math.floor(difSegs / 60)}m`;
-        else if (difSegs > 0) tiempoTexto = `Hace ${difSegs}s`;
-      }
-
-      if (u.conectado === 1) {
+      if (u.conectado === 1 || u.conectado === 2) {
         currentActiveKeys.push(key);
         let icono = iconoOffline;
-        let opacityVal = 1.0;
+        let opacityVal = u.conectado === 2 ? 0.78 : 1.0;
 
         if (u.alerta_panico) {
           icono = iconoPanico;
@@ -237,17 +309,21 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
             panicSetRef.current.add(key);
             playEmergencySound();
           }
-        } else if (u.conectado === 2) {
-          estadoClaseColor = '#64748b';
-          estadoTexto = '⚠️ SIN SEÑAL / BAJA COB.';
         } else if (u.estado?.includes('En camino')) {
           icono = iconoEnRuta;
-          estadoClaseColor = '#f59e0b';
+          estadoClaseColor = u.conectado === 2 ? '#64748b' : '#f59e0b';
+          estadoTexto = u.conectado === 2 ? `🚚 EN CAMINO (${tiempoTexto})` : (u.estado || 'EN CAMINO');
         } else if (u.estado?.includes('Trabajando')) {
           icono = iconoEnProgreso;
-          estadoClaseColor = '#ef4444';
+          estadoClaseColor = u.conectado === 2 ? '#64748b' : '#ef4444';
+          estadoTexto = u.conectado === 2 ? `🔧 TRABAJANDO (${tiempoTexto})` : (u.estado || 'TRABAJANDO');
+        } else if (u.conectado === 2) {
+          icono = iconoOffline;
+          estadoClaseColor = '#64748b';
+          estadoTexto = `⚠️ SIN SEÑAL (${tiempoTexto})`;
         } else {
           estadoClaseColor = '#10b981';
+          estadoTexto = u.estado || 'DISPONIBLE';
         }
 
         // Emergency Radius Circle
@@ -268,14 +344,19 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
           delete circlesRef.current[key];
         }
 
+        const tooltipText = `${key}${u.conectado === 2 ? ' (⚠️ Sin señal)' : ''}`;
+
         // Create or Move Marker
         if (markersRef.current[key]) {
           markersRef.current[key].setLatLng(latLng);
           markersRef.current[key].setIcon(icono);
           markersRef.current[key].setOpacity(opacityVal);
+          if (markersRef.current[key].getTooltip()) {
+            markersRef.current[key].setTooltipContent(tooltipText);
+          }
         } else {
           const marker = L.marker(latLng, { icon: icono, opacity: opacityVal }).addTo(map);
-          marker.bindTooltip(key, {
+          marker.bindTooltip(tooltipText, {
             permanent: true,
             direction: 'top',
             className: 'tooltip-tecnico-react'
@@ -303,6 +384,11 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
 
         const popupHtml = `
           <div style="font-family: system-ui, sans-serif; padding: 4px; width: 220px;">
+            ${u.conectado === 2 ? `
+              <div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px 8px; border-radius: 6px; margin-bottom: 8px; color: #475569; font-weight: 700; text-align: center; font-size: 0.72rem;">
+                ⚠️ Última posición conocida (Sin señal: ${tiempoTexto})
+              </div>
+            ` : ''}
             ${u.alerta_panico ? `
               <div style="background-color: #fee2e2; border: 1px solid #fca5a5; padding: 8px; border-radius: 8px; margin-bottom: 8px; color: #b91c1c; font-weight: bold; text-align: center; font-size: 0.8rem;">
                 🚨 EMERGENCIA EN RUTA:<br>"${u.mensaje_panico || 'Auxilio'}"
@@ -323,6 +409,22 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
               </div>
             </div>
             ${activaVisitaHtml}
+            ${(() => {
+              const batVal = u.bateria !== null && u.bateria !== undefined ? u.bateria : null;
+              const isChg = u.cargando === 1 || u.cargando === true;
+              const batColor = batVal !== null ? (batVal > 50 ? '#10b981' : batVal > 20 ? '#f59e0b' : '#ef4444') : '#94a3b8';
+              return `
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px; padding: 4px 8px; border-radius: 6px; background: rgba(0,0,0,0.05); font-size: 0.76rem;">
+                  <span style="color: #64748b; font-weight: 600;">Batería PDA:</span>
+                  <span style="color: ${batColor}; font-weight: 800; display: flex; align-items: center; gap: 4px;">
+                    ${isChg ? '⚡' : '🔋'} ${batVal !== null ? batVal + '%' : 'N/D'}
+                  </span>
+                </div>
+              `;
+            })()}
+            <button onclick="window.verRecorridoTecnico(${u.id_tecnico}, '${key}')" style="width: 100%; margin-top: 8px; padding: 7px 10px; border-radius: 8px; border: none; background: #0284c7; color: white; font-weight: 800; font-size: 0.74rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              📍 Ver Recorrido del Día
+            </button>
             <div style="font-size: 0.8rem; color: #475569; display: flex; flex-direction: column; gap: 4px; margin-top: 8px;">
               <div>Placa Vehículo: <strong>${placa}</strong></div>
               <div style="text-align: center; margin: 4px 0;">
@@ -478,9 +580,12 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
             {ubicaciones.length > 0 ? (
               ubicaciones.map((u, idx) => {
                 const isOnline = u.conectado === 1;
+                const isStandby = u.conectado === 2;
+                const hasPosition = isOnline || isStandby;
                 const perfilUrl = `/static/uploads/${u.foto_perfil || 'default_avatar.png'}`;
                 const isPanic = u.alerta_panico === 1;
 
+                const tiempoTexto = calcularTiempoTranscurrido(u.ultima_actualizacion);
                 let estadoBadge = 'OFFLINE';
                 let estadoColor = '#94a3b8';
                 let detalleTexto = '';
@@ -489,20 +594,22 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
                   estadoBadge = '🚨 AUXILIO';
                   estadoColor = '#ef4444';
                   detalleTexto = u.mensaje_panico || 'Alerta de emergencia activa';
-                } else if (!isOnline) {
+                } else if (u.conectado === 0) {
                   estadoBadge = 'OFFLINE';
                   estadoColor = '#94a3b8';
-                  detalleTexto = 'Sin conexión de red';
+                  detalleTexto = 'Sesión cerrada';
                 } else if (u.estado?.includes('En camino') || u.estado?.includes('EN_RUTA')) {
-                  estadoBadge = 'EN CAMINO';
-                  estadoColor = '#f59e0b';
-                  detalleTexto = u.estado.replace(/^En camino a /i, '').replace(/^EN_RUTA /i, '');
-                  if (!detalleTexto || detalleTexto === 'EN_RUTA') detalleTexto = 'En traslado a cliente';
+                  estadoBadge = isStandby ? '🚚 EN CAMINO' : 'EN CAMINO';
+                  estadoColor = isStandby ? '#64748b' : '#f59e0b';
+                  detalleTexto = isStandby ? `Última pos. (${tiempoTexto})` : (u.estado.replace(/^En camino a /i, '').replace(/^EN_RUTA /i, '') || 'En traslado a cliente');
                 } else if (u.estado?.includes('Trabajando') || u.estado?.includes('EN_PROGRESO')) {
-                  estadoBadge = 'TRABAJANDO';
-                  estadoColor = '#ef4444';
-                  detalleTexto = u.estado.replace(/^Trabajando en /i, '').replace(/^EN_PROGRESO /i, '');
-                  if (!detalleTexto || detalleTexto === 'EN_PROGRESO') detalleTexto = 'Atendiendo visita';
+                  estadoBadge = isStandby ? '🔧 TRABAJANDO' : 'TRABAJANDO';
+                  estadoColor = isStandby ? '#64748b' : '#ef4444';
+                  detalleTexto = isStandby ? `Última pos. (${tiempoTexto})` : (u.estado.replace(/^Trabajando en /i, '').replace(/^EN_PROGRESO /i, '') || 'Atendiendo visita');
+                } else if (isStandby) {
+                  estadoBadge = '⚠️ SIN SEÑAL';
+                  estadoColor = '#64748b';
+                  detalleTexto = `Último ping: ${tiempoTexto}`;
                 } else if (u.estado?.includes('Descanso')) {
                   estadoBadge = 'EN DESCANSO';
                   estadoColor = '#f59e0b';
@@ -516,21 +623,21 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
                 return (
                   <div
                     key={idx}
-                    onClick={() => isOnline && handleFocusTechnician(u)}
+                    onClick={() => hasPosition && handleFocusTechnician(u)}
                     style={{
                       background: isPanic ? 'rgba(239, 68, 68, 0.12)' : 'var(--profile-bg)',
-                      border: `1px solid ${isPanic ? '#ef4444' : 'var(--border-color)'}`,
+                      border: `1px solid ${isPanic ? '#ef4444' : isStandby ? '#cbd5e1' : 'var(--border-color)'}`,
                       borderRadius: '14px',
                       padding: '12px 14px',
-                      cursor: isOnline ? 'pointer' : 'not-allowed',
-                      opacity: isOnline ? 1 : 0.65,
+                      cursor: hasPosition ? 'pointer' : 'not-allowed',
+                      opacity: isOnline ? 1 : isStandby ? 0.88 : 0.6,
                       transition: 'all 0.2s ease',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '12px'
                     }}
                   >
-                    <TechnicianAvatar fotoPerfil={u.foto_perfil} nombre={u.tecnico} isOnline={isOnline} />
+                    <TechnicianAvatar fotoPerfil={u.foto_perfil} nombre={u.tecnico} isOnline={hasPosition} />
                     <div style={{ flexGrow: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0, flex: 1 }}>
@@ -541,9 +648,29 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
                             {u.tecnico}
                           </strong>
                         </div>
-                        <span style={{ background: estadoColor, color: 'white', fontSize: '0.62rem', padding: '2px 7px', borderRadius: '6px', fontWeight: 900, textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                          {estadoBadge}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ background: estadoColor, color: 'white', fontSize: '0.62rem', padding: '2px 7px', borderRadius: '6px', fontWeight: 900, textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                            {estadoBadge}
+                          </span>
+                          {u.bateria !== null && u.bateria !== undefined && (
+                            <span
+                              style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 800,
+                                color: u.bateria > 50 ? '#10b981' : u.bateria > 20 ? '#f59e0b' : '#ef4444',
+                                background: 'rgba(0,0,0,0.06)',
+                                padding: '2px 5px',
+                                borderRadius: '5px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '2px'
+                              }}
+                              title={`Batería del PDA: ${u.bateria}% ${u.cargando ? '(Cargando)' : ''}`}
+                            >
+                              {u.cargando ? '⚡' : '🔋'} {u.bateria}%
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {u.visita_activa_id && (
@@ -596,6 +723,47 @@ function MapaTecnicosTab({ token, activeArea = 'SOPORTE' }) {
 
         {/* Right Map Canvas Container */}
         <div style={{ background: 'var(--card-bg)', borderRadius: '20px', border: '1px solid var(--border-color)', position: 'relative', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
+          
+          {/* Active History Path Pill */}
+          {selectedHistory && (
+            <div style={{
+              position: 'absolute',
+              top: '15px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 1000,
+              background: 'rgba(15, 23, 42, 0.94)',
+              backdropFilter: 'blur(8px)',
+              color: '#ffffff',
+              padding: '8px 18px',
+              borderRadius: '30px',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              fontSize: '0.84rem',
+              fontWeight: 700,
+              border: '1px solid rgba(255, 255, 255, 0.15)'
+            }}>
+              <span>📍 Recorrido de <strong>{selectedHistory.tecnico}</strong> ({selectedHistory.total_puntos} puntos GPS hoy)</span>
+              <button
+                type="button"
+                onClick={limpiarRecorrido}
+                style={{
+                  background: '#ef4444',
+                  border: 'none',
+                  color: '#ffffff',
+                  borderRadius: '20px',
+                  padding: '4px 12px',
+                  fontSize: '0.74rem',
+                  cursor: 'pointer',
+                  fontWeight: 800
+                }}
+              >
+                Cerrar Ruta
+              </button>
+            </div>
+          )}
           
           {/* Floating Map KPI Cards */}
           <div style={{ position: 'absolute', top: '15px', left: '15px', zIndex: 1000, display: 'flex', gap: '10px', flexWrap: 'wrap', pointerEvents: 'none' }}>

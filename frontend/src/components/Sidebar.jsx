@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLogout }) {
+function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLogout, onSwitchToTecnico }) {
   const [collapsed, setCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar_collapsed');
     return saved === null ? true : saved === 'true';
@@ -27,30 +27,68 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
   const role = user.rol || 'ASESOR';
   const name = user.nombre || 'Asesor';
 
+  // Detectar si el usuario tiene rol mixto (Admin/Supervisor + Técnico de campo activo)
+  const [tecnicoAsociado, setTecnicoAsociado] = useState(() => {
+    if (user?.es_tecnico_mixto && user?.tecnico_nombre_asociado) {
+      return user.tecnico_nombre_asociado;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (tecnicoAsociado) return;
+    const userRole = (user?.rol || user?.role || '').toUpperCase();
+    if (!userRole.includes('ADMIN') && !userRole.includes('SUPERVISOR')) return;
+
+    const token = localStorage.getItem('token') || localStorage.getItem('session_token');
+    if (!token) return;
+
+    fetch('/api/v2/tecnicos', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success' && data.tecnicos) {
+          const uNameNorm = (user?.nombre || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+          const match = data.tecnicos.find(t => {
+            const tNameNorm = (t.nombre || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+            return t.activo === 1 && (uNameNorm === tNameNorm || tNameNorm.includes(uNameNorm) || uNameNorm.includes(tNameNorm));
+          });
+          if (match) {
+            setTecnicoAsociado(match.nombre);
+          }
+        }
+      })
+      .catch(err => console.error("Error al verificar técnico mixto:", err));
+  }, [user]);
+
   const isVisible = (tab) => {
     if (tab === 'visitas') {
-      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'ATC_AUDITOR', 'AUDITOR'].includes(role);
+      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'ATC_AUDITOR', 'SUPERVISOR_ATC', 'AUDITOR', 'BODEGA'].includes(role);
     }
-    if (tab === 'mapa-tecnicos' || tab === 'registro' || tab === 'tracker-pmt') {
+    if (tab === 'mapa-tecnicos' || tab === 'tracker-pmt') {
       return ['ADMIN', 'ASESOR', 'CALIDAD', 'BODEGA'].includes(role);
+    }
+    if (tab === 'registro') {
+      return ['ADMIN', 'ASESOR', 'CALIDAD'].includes(role);
     }
     if (tab === 'registro-atencion') {
       return ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR'].includes(role);
     }
     if (tab === 'buscar-cliente') {
-      return ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR', 'AUDITOR', 'CALIDAD'].includes(role);
+      return ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR', 'SUPERVISOR_ATC', 'AUDITOR', 'CALIDAD', 'BODEGA'].includes(role);
     }
     if (tab === 'metricas') {
-      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'ATC_AUDITOR', 'AUDITOR'].includes(role);
+      return ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'ATC_AUDITOR', 'SUPERVISOR_ATC', 'AUDITOR'].includes(role);
     }
     if (tab === 'reportes') {
-      return ['ADMIN', 'ASESOR', 'CALIDAD', 'AUDITOR', 'ATC_AUDITOR'].includes(role);
+      return ['ADMIN', 'ASESOR', 'AUDITOR'].includes(role);
     }
     if (tab === 'control-calidad') {
-      return ['ADMIN', 'ASESOR', 'CALIDAD', 'AUDITOR', 'ATC_AUDITOR'].includes(role);
+      return ['ADMIN', 'CALIDAD', 'AUDITOR'].includes(role);
     }
     if (tab === 'auditoria-atc') {
-      return ['ADMIN', 'ATC_AUDITOR', 'AUDITOR'].includes(role);
+      return ['ADMIN', 'ATC_AUDITOR', 'SUPERVISOR_ATC', 'AUDITOR'].includes(role);
     }
     if (tab === 'inventario') {
       return ['ADMIN', 'BODEGA'].includes(role);
@@ -144,7 +182,7 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
             </div>
           )}
 
-          {['ADMIN', 'ASESOR', 'ATC', 'AUDITOR'].includes(role) ? (
+          {['ADMIN', 'ASESOR', 'ATC', 'AUDITOR', 'BODEGA'].includes(role) ? (
             <div className="segmented-control" id="area-switcher" style={{ height: collapsed ? '0px' : 'auto', overflow: 'hidden', opacity: collapsed ? 0 : 1, transition: 'all 0.2s ease' }}>
               <div
                 className="segmented-slider"
@@ -265,16 +303,6 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
           </div>
         )}
 
-        {isVisible('tracker-pmt') && (
-          <div
-            className={`nav-item ${activeTab === 'tracker-pmt' ? 'active' : ''}`}
-            onClick={() => onTabChange('tracker-pmt')}
-          >
-            <i className="fa-solid fa-satellite-dish" style={{ fontSize: '1.1rem', width: '20px' }}></i>
-            <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>Rastreo PMT</span>
-          </div>
-        )}
-
         {isVisible('registro') && (
           <div
             className={`nav-item ${activeTab === 'registro' ? 'active' : ''}`}
@@ -384,6 +412,45 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
 
       {/* Footer del Sidebar con perfil y controles */}
       <div className="sidebar-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '15px' }}>
+        
+        {/* Botón exclusivo para Usuario Mixto (Admin/Supervisor + Técnico de Campo) */}
+        {tecnicoAsociado && (
+          <div style={{ padding: collapsed ? '0 10px 14px 10px' : '0 18px 14px 18px' }}>
+            <button
+              type="button"
+              onClick={() => onSwitchToTecnico ? onSwitchToTecnico(tecnicoAsociado) : onTabChange('tecnico-panel')}
+              title={`Cambiar a Mi Panel Técnico (${tecnicoAsociado})`}
+              style={{
+                width: '100%',
+                padding: collapsed ? '12px 0' : '10px 14px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: 'white',
+                border: 'none',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: collapsed ? 'center' : 'space-between',
+                gap: '8px',
+                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="fa-solid fa-helmet-safety" style={{ fontSize: '1.05rem' }}></i>
+                {!collapsed && <span>Panel Técnico</span>}
+              </div>
+              {!collapsed && (
+                <span style={{ fontSize: '0.62rem', background: 'rgba(255,255,255,0.22)', padding: '2px 6px', borderRadius: '6px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Modo Campo
+                </span>
+              )}
+            </button>
+          </div>
+        )}
+
         <div className="profile-card" style={{ padding: '0 20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div className="profile-avatar">
             {name.charAt(0).toUpperCase()}
@@ -434,7 +501,7 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
       {showSnModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px', boxSizing: 'border-box' }}>
           <div style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '24px', width: '100%', maxWidth: '780px', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
-            
+
             {/* Modal Header */}
             <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, rgba(31, 73, 125, 0.08) 0%, rgba(31, 73, 125, 0.18) 100%)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -450,9 +517,9 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
                   </span>
                 </div>
               </div>
-              <button 
-                type="button" 
-                onClick={() => setShowSnModal(false)} 
+              <button
+                type="button"
+                onClick={() => setShowSnModal(false)}
                 style={{ background: 'none', border: 'none', color: 'var(--sidebar-text)', fontSize: '1.6rem', cursor: 'pointer', padding: '4px', lineHeight: 1 }}
               >
                 &times;
@@ -508,7 +575,7 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
 
             {/* Modal Content Body */}
             <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
+
               {buscandoSn ? (
                 <div style={{ padding: '60px 0', textAlign: 'center', color: 'var(--sidebar-text)' }}>
                   <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '2.5rem', color: '#1f497d', marginBottom: '14px' }}></i>

@@ -68,8 +68,9 @@ def api_panel_tecnico(nombre_tecnico):
     
     try:
         # 1. Obtener foto_perfil, estado de actividad, área de trabajo, coordenadas y pánico del técnico
-        cursor.execute("SELECT foto_perfil, estado_actividad, area_trabajo, alerta_panico, mensaje_panico, latitud_actual, longitud_actual FROM tecnicos WHERE nombre = %s OR UPPER(nombre) = %s", (nombre_real, nombre_real.upper()))
+        cursor.execute("SELECT foto_perfil, estado_actividad, area_trabajo, alerta_panico, mensaje_panico, latitud_actual, longitud_actual, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') as placa FROM tecnicos WHERE nombre = %s OR UPPER(nombre) = %s", (nombre_real, nombre_real.upper()))
         tec_estado_row = cursor.fetchone()
+        placa_tec = tec_estado_row['placa'] if tec_estado_row and 'placa' in tec_estado_row else 'S/P'
         foto_perfil = tec_estado_row['foto_perfil'] if (tec_estado_row and tec_estado_row['foto_perfil']) else 'default_avatar.png'
         estado_actividad = tec_estado_row['estado_actividad'] if tec_estado_row else 'Disponible'
         if not estado_actividad or estado_actividad in ['Desconectado', 'Sesión Iniciada', 'DESCONECTADO']:
@@ -116,31 +117,93 @@ def api_panel_tecnico(nombre_tecnico):
         
         soluciones = obtener_soluciones_activas()
         
-        cursor.execute("SELECT * FROM materiales ORDER BY nombre_material ASC")
+        # Catálogo general de materiales con su stock en Bodega Central (para pedidos y traspasos)
+        cursor.execute("""
+            SELECT id_material, codigo_material, nombre_material, unidad_medida, categoria, stock_bodega
+            FROM materiales
+            WHERE activo = 1
+            ORDER BY nombre_material ASC
+        """)
         catalogo_materiales = cursor.fetchall()
         
-        cursor.execute("SELECT nombre FROM catalogo_modelos_ont WHERE activo = 1 ORDER BY nombre ASC")
+        cursor.execute("""
+            SELECT nombre FROM catalogo_modelos_ont 
+            WHERE activo = 1 
+            ORDER BY CASE 
+                WHEN nombre = 'XX231v' THEN 1 
+                WHEN nombre = 'XX530v' THEN 2 
+                WHEN nombre = 'XPON' THEN 3 
+                ELSE 4 
+            END, nombre ASC
+        """)
         catalogo_ont = cursor.fetchall()
         
-        cursor.execute("SELECT nombre FROM catalogo_modelos_router WHERE activo = 1 ORDER BY nombre ASC")
+        cursor.execute("""
+            SELECT nombre FROM catalogo_modelos_router 
+            WHERE activo = 1 
+            ORDER BY CASE 
+                WHEN nombre LIKE '%EX511%' THEN 1 
+                WHEN nombre LIKE '%AX3%' THEN 2 
+                WHEN nombre LIKE '%AX2%' THEN 3 
+                ELSE 4 
+            END, nombre ASC
+        """)
         catalogo_router = cursor.fetchall()
         
         # Obtener lista de otros técnicos activos para traspaso de insumos
         cursor.execute("SELECT nombre, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') AS placa FROM tecnicos WHERE activo = 1 AND nombre != %s ORDER BY nombre ASC", (nombre_real,))
         tecnicos_list = cursor.fetchall()
         
+        # Obtener IDs de las visitas del técnico para adjuntar materiales usados y equipos retirados
+        visita_ids = [v['id_visita'] for v in visitas_del_tecnico if v.get('id_visita')]
+        materiales_por_visita = {}
+        equipos_retirados_por_visita = {}
+
+        if visita_ids:
+            format_strings = ','.join(['%s'] * len(visita_ids))
+            cursor.execute(f"""
+                SELECT vm.id_visita, vm.id_material, vm.cantidad_usada, 
+                       m.nombre_material, m.unidad_medida, m.codigo_material, m.categoria
+                FROM visitas_materiales vm
+                JOIN materiales m ON vm.id_material = m.id_material
+                WHERE vm.id_visita IN ({format_strings})
+                ORDER BY m.nombre_material ASC
+            """, tuple(visita_ids))
+            for mat in cursor.fetchall():
+                vid = mat['id_visita']
+                if vid not in materiales_por_visita:
+                    materiales_por_visita[vid] = []
+                cant = float(mat['cantidad_usada']) if mat.get('cantidad_usada') is not None else 0
+                mat['cantidad_usada'] = int(cant) if cant.is_integer() else cant
+                materiales_por_visita[vid].append(mat)
+
+            cursor.execute(f"""
+                SELECT er.id_retiro, er.id_visita, er.tipo_equipo, er.modelo, er.numero_serie, 
+                       er.motivo_retiro, er.observacion_retiro, er.estado_custodia
+                FROM equipos_retirados_visitas er
+                WHERE er.id_visita IN ({format_strings})
+                ORDER BY er.id_retiro ASC
+            """, tuple(visita_ids))
+            for eq in cursor.fetchall():
+                vid = eq['id_visita']
+                if vid not in equipos_retirados_por_visita:
+                    equipos_retirados_por_visita[vid] = []
+                equipos_retirados_por_visita[vid].append(eq)
+
         # Formatear fechas y horas para que sean JSON-serializables
         for v in visitas_del_tecnico:
+            vid = v.get('id_visita')
+            v['materiales_usados'] = materiales_por_visita.get(vid, [])
+            v['equipos_retirados'] = equipos_retirados_por_visita.get(vid, [])
+
             if 'fecha_programada' in v and isinstance(v['fecha_programada'], date):
                 v['fecha_programada'] = v['fecha_programada'].isoformat()
-            if 'fecha_ingreso' in v and hasattr(v['fecha_ingreso'], 'isoformat'):
-                v['fecha_ingreso'] = v['fecha_ingreso'].isoformat()
-            if 'hora_en_ruta' in v and hasattr(v['hora_en_ruta'], 'isoformat'):
-                v['hora_en_ruta'] = v['hora_en_ruta'].isoformat()
-            if 'hora_inicio_visita' in v and hasattr(v['hora_inicio_visita'], 'isoformat'):
-                v['hora_inicio_visita'] = v['hora_inicio_visita'].isoformat()
-            if 'hora_fin_visita' in v and hasattr(v['hora_fin_visita'], 'isoformat'):
-                v['hora_fin_visita'] = v['hora_fin_visita'].isoformat()
+            for h_field in ('fecha_ingreso', 'hora_en_ruta', 'hora_inicio_visita', 'hora_fin_visita'):
+                if h_field in v and v[h_field] is not None:
+                    if hasattr(v[h_field], 'isoformat'):
+                        v[h_field] = v[h_field].isoformat()
+                    else:
+                        v[h_field] = str(v[h_field])
                 
         return jsonify({
             "status": "ok",
@@ -201,8 +264,9 @@ def panel_tecnico(nombre_tecnico):
     hoy = date.today().isoformat()
     
     # 1. Obtener estado de actividad, área de trabajo, coordenadas y pánico del técnico
-    cursor.execute("SELECT estado_actividad, area_trabajo, alerta_panico, mensaje_panico, latitud_actual, longitud_actual FROM tecnicos WHERE nombre = %s", (nombre_real,))
+    cursor.execute("SELECT estado_actividad, area_trabajo, alerta_panico, mensaje_panico, latitud_actual, longitud_actual, COALESCE(NULLIF(placa_asignada_hoy, ''), placa_vehiculo, 'S/P') as placa FROM tecnicos WHERE nombre = %s", (nombre_real,))
     tec_estado_row = cursor.fetchone()
+    placa_tec = tec_estado_row['placa'] if tec_estado_row and 'placa' in tec_estado_row else 'S/P'
     estado_actividad = tec_estado_row['estado_actividad'] if tec_estado_row else 'Disponible'
     area_trabajo = tec_estado_row['area_trabajo'] if (tec_estado_row and tec_estado_row['area_trabajo']) else 'SOPORTE'
     alerta_panico = tec_estado_row['alerta_panico'] if tec_estado_row else 0
@@ -243,7 +307,21 @@ def panel_tecnico(nombre_tecnico):
     # --- Carga de catálogos y soluciones (Queda igual) ---
     soluciones = obtener_soluciones_activas()
     
-    cursor.execute("SELECT * FROM materiales ORDER BY nombre_material ASC")
+    if placa_tec and placa_tec != 'S/P':
+        cursor.execute("""
+            SELECT DISTINCT m.id_material, m.codigo_material, m.nombre_material, m.unidad_medida, m.categoria, m.stock_bodega
+            FROM materiales m
+            LEFT JOIN inventario_tecnicos it ON m.id_material = it.id_material AND it.placa_vehiculo = %s
+            WHERE m.activo = 1 AND (m.stock_bodega > 0 OR (it.cantidad_disponible IS NOT NULL AND it.cantidad_disponible > 0))
+            ORDER BY m.nombre_material ASC
+        """, (placa_tec,))
+    else:
+        cursor.execute("""
+            SELECT id_material, codigo_material, nombre_material, unidad_medida, categoria, stock_bodega
+            FROM materiales
+            WHERE activo = 1 AND stock_bodega > 0
+            ORDER BY nombre_material ASC
+        """)
     catalogo_materiales = cursor.fetchall()
     
     cursor.execute("SELECT nombre FROM catalogo_modelos_ont WHERE activo = 1 ORDER BY nombre ASC")
@@ -508,10 +586,10 @@ def finalizar_visita(id_visita):
         datos = request.form
         
     solucion = datos.get('solucion_tecnico')
-    if solucion and any(term in str(solucion).upper() for term in ['REAGENDAD', 'SATURACI']):
+    if solucion and any(term in str(solucion).upper() for term in ['REAGENDAD', 'SATURACI', 'NO DESEA', 'SIN RESPUESTA', 'CANCELAD', 'NO SE PUEDE']):
         return jsonify({
             "status": "error",
-            "message": "Una visita a reagendar o posponer no se puede finalizar. Por favor usa la opción 'Posponer' para que Call Center / Coordinación programe la nueva fecha."
+            "message": "Una visita no realizada o que el cliente rechaza/cancela no se puede finalizar. Debe usar la opción 'Posponer' para que Call Center / Operaciones gestione la cancelación o reagendamiento."
         }), 400
 
     observacion = datos.get('observacion_tecnico')
@@ -800,15 +878,20 @@ def finalizar_visita(id_visita):
                 """, (id_visita, tipo_eq, sn_ret, mod_ret, motivo_ret, obs_ret, tecnico_nombre, placa_vehiculo))
 
         # 4. Actualizar trazabilidad de equipos nuevos instalados si corresponden a los seriales
-        seriales_instalados = [s for s in [sn_onu_normalizado, sn_router, sn_router_secundario] if s and str(s).strip() and str(s).strip() != 'SIN_SERIE']
-        if seriales_instalados:
+        from utils import obtener_variantes_sn_gpon
+        seriales_candidatos = [s for s in [sn_nuevo, sn_onu_normalizado, sn_router, sn_router_secundario] if s and str(s).strip() and str(s).strip() != 'SIN_SERIE']
+        if seriales_candidatos:
             cursor.execute("SELECT cliente, contrato FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
             v_data = cursor.fetchone()
             nombre_cli = v_data['cliente'] if v_data else ''
             contrato_cli = v_data['contrato'] if v_data else ''
 
-            for s_inst in seriales_instalados:
-                cursor.execute("""
+            for s_inst in seriales_candidatos:
+                vars_sn = obtener_variantes_sn_gpon(s_inst)
+                if not vars_sn:
+                    continue
+                format_sn = ','.join(['%s'] * len(vars_sn))
+                cursor.execute(f"""
                     UPDATE trazabilidad_equipos
                     SET estado = 'INSTALADO_CLIENTE',
                         ubicacion_placa = NULL,
@@ -817,13 +900,13 @@ def finalizar_visita(id_visita):
                         nombre_cliente = %s,
                         fecha_instalacion = NOW(),
                         observacion = CONCAT(COALESCE(observacion, ''), %s)
-                    WHERE numero_serie = %s AND estado = 'EN_VEHICULO'
+                    WHERE numero_serie IN ({format_sn}) AND estado IN ('EN_VEHICULO', 'EN_BODEGA')
                 """, (
                     id_visita, 
                     contrato_cli, 
                     nombre_cli, 
                     f" | Instalado en cliente {nombre_cli} (Contrato: {contrato_cli}) por {tecnico_nombre} en visita #{id_visita}", 
-                    s_inst
+                    *vars_sn
                 ))
 
         # Actualizar estado global del técnico
@@ -856,8 +939,9 @@ def finalizar_visita(id_visita):
 @tecnico_bp.route('/api/tecnico/rastreo_vivo/<int:id_visita>', methods=['POST'])
 def rastreo_vivo(id_visita):
     """Recibe la latitud y longitud del celular del técnico y fuerza su guardado."""
-    print(f"[GPS] Alerta! Peticion recibida para la visita #{id_visita}") # Ver en la terminal de la PC
-    
+    import secrets
+    import time
+
     # Manejo ultra flexible por si viene como JSON o Formulario clásico
     if request.is_json:
         datos = request.get_json() or {}
@@ -867,48 +951,122 @@ def rastreo_vivo(id_visita):
     lat = datos.get('latitud')
     lon = datos.get('longitud')
     
-    print(f"[GPS] Datos recibidos del celular -> Lat: {lat}, Lon: {lon}")
+    bateria = datos.get('bateria')
+    try:
+        bateria = int(bateria) if bateria is not None else None
+    except (ValueError, TypeError):
+        bateria = None
+
+    cargando_raw = datos.get('cargando')
+    cargando = 1 if cargando_raw in [True, 1, '1', 'true', 'True'] else 0
+
+    accuracy = float(datos.get('precision') or datos.get('accuracy') or 0.0)
+    speed = float(datos.get('velocidad') or datos.get('speed') or 0.0)
+    bearing = float(datos.get('bearing') or datos.get('rumbo') or 0.0)
+    altitude = float(datos.get('altitud') or datos.get('altitude') or 0.0)
+    device_id = datos.get('device_id') or None
+    modelo_dispositivo = datos.get('modelo_dispositivo') or None
+    version_app = datos.get('version_app') or None
+    tecnico_param = datos.get('tecnico_nombre')
+    ts_now = int(time.time() * 1000)
 
     if lat and lon:
         conexion = get_db_connection()
-        cursor = conexion.cursor()
+        cursor = conexion.cursor(dictionary=True)
         try:
-            # Actualizar coordenadas para el rastreo del cliente
-            query = """
+            # 1. Actualizar coordenadas para el rastreo del cliente en la visita
+            cursor.execute("""
                 UPDATE visitas_tecnicas 
                 SET latitud_gps_vivo = %s, 
                     longitud_gps_vivo = %s, 
                     ultima_actualizacion_gps = NOW() 
                 WHERE id_visita = %s
-            """
-            cursor.execute(query, (lat, lon, id_visita))
+            """, (lat, lon, id_visita))
 
-            # Actualizar coordenadas globales del técnico (para el administrador)
-            tecnico_nombre = session.get('user_name')
+            # 2. Identificar el técnico asignado
+            tecnico_nombre = tecnico_param or session.get('user_name')
             if not tecnico_nombre:
-                cursor.execute("SELECT tecnico_principal FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+                cursor.execute("SELECT tecnico_principal, tecnico_apoyo FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
                 tec_row = cursor.fetchone()
-                tecnico_nombre = tec_row[0] if tec_row else None
+                if tec_row:
+                    tecnico_nombre = tec_row.get('tecnico_principal') or tec_row.get('tecnico_apoyo')
 
             if tecnico_nombre:
+                # 3. Actualizar la ficha del técnico con ubicación y telemetría
                 cursor.execute("""
                     UPDATE tecnicos 
                     SET latitud_actual = %s, 
                         longitud_actual = %s, 
-                        ultima_conexion = NOW()
-                    WHERE nombre = %s
-                """, (lat, lon, tecnico_nombre))
+                        ultima_conexion = NOW(),
+                        bateria = COALESCE(%s, bateria),
+                        cargando = %s,
+                        device_id = COALESCE(%s, device_id),
+                        modelo_dispositivo = COALESCE(%s, modelo_dispositivo),
+                        version_app = COALESCE(%s, version_app)
+                    WHERE nombre = %s OR UPPER(nombre) = %s
+                """, (lat, lon, bateria, cargando, device_id, modelo_dispositivo, version_app, tecnico_nombre, tecnico_nombre.upper()))
+
+                # Obtener id_tecnico y nombre canónico
+                cursor.execute("SELECT id_tecnico, nombre, device_id FROM tecnicos WHERE nombre = %s OR UPPER(nombre) = %s LIMIT 1", (tecnico_nombre, tecnico_nombre.upper()))
+                row_t = cursor.fetchone()
+                id_tec = row_t['id_tecnico'] if row_t else None
+                nombre_canonico = row_t['nombre'] if row_t else tecnico_nombre
+                dev_db = row_t.get('device_id') if row_t else None
+
+                dev_target = device_id or dev_db or f"TECH_{nombre_canonico}"
+                uuid_val = f"{dev_target}_{ts_now}_{secrets.token_hex(4)}"
+
+                # 4. Asegurar que dev_target existe en tracker_devices (requerido por FK)
+                cursor.execute("""
+                    INSERT INTO tracker_devices (
+                        device_id, device_model, android_version, first_seen, last_seen,
+                        last_latitude, last_longitude, battery_level, is_charging, network_type,
+                        last_location_timestamp
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        last_seen = VALUES(last_seen),
+                        last_latitude = VALUES(last_latitude),
+                        last_longitude = VALUES(last_longitude),
+                        battery_level = VALUES(battery_level),
+                        is_charging = VALUES(is_charging),
+                        network_type = VALUES(network_type),
+                        last_location_timestamp = VALUES(last_location_timestamp)
+                """, (
+                    dev_target, modelo_dispositivo or 'PMT Device', version_app or 'Android', ts_now, ts_now,
+                    float(lat), float(lon), bateria if bateria is not None else 100, cargando, 'fused', ts_now
+                ))
+
+                # 5. Auto-vincular en tracker_device_profiles
+                cursor.execute("""
+                    INSERT INTO tracker_device_profiles (device_id, display_name, technician, atlas_technician_id)
+                    VALUES (%s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE 
+                        technician = VALUES(technician),
+                        atlas_technician_id = VALUES(atlas_technician_id),
+                        display_name = IF(display_name IS NULL OR display_name = '', VALUES(display_name), display_name)
+                """, (dev_target, f"PMT {nombre_canonico}", nombre_canonico, id_tec))
+
+                # 6. Registrar punto de ruta histórico en tracker_location_records
+                cursor.execute("""
+                    INSERT INTO tracker_location_records (
+                        uuid, device_id, latitude, longitude, accuracy, speed, bearing, altitude,
+                        battery_level, is_charging, network_type, provider, timestamp, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    uuid_val, dev_target, float(lat), float(lon), accuracy, speed, bearing, altitude,
+                    bateria if bateria is not None else 100, cargando, 'fused', 'fused', ts_now, ts_now
+                ))
 
             conexion.commit()
-            print("[GPS] Ubicacion guardada con exito en MySQL!")
+            print(f"[GPS] Ubicación y ruta guardadas con éxito para técnico {tecnico_nombre} en visita #{id_visita}")
         except Exception as e:
-            print(f"[GPS] Error critico en la consulta MySQL: {e}")
+            print(f"[GPS] Error crítico en rastreo_vivo: {e}")
         finally:
             if 'conexion' in locals() and conexion.is_connected():
                 cursor.close()
                 conexion.close()
     else:
-        print("[GPS] Advertencia: Llego la peticion pero los valores lat/lon vinieron vacios.")
+        print("[GPS] Advertencia: Llego la petición pero los valores lat/lon vinieron vacíos.")
                 
     return jsonify({"status": "ok"})
 
@@ -1038,8 +1196,23 @@ def obtener_historial_cliente(nombre_cliente):
         conexion.close()
 
 
+@tecnico_bp.route('/api/app/version', methods=['GET'])
+def get_app_version():
+    return jsonify({
+        "status": "ok",
+        "version_code": 3,
+        "version_name": "1.2.0",
+        "apk_url": "/static/app/futurity_atlas.apk",
+        "release_notes": "Sincronización continua de ubicación con pantalla apagada, telemetría de batería en tiempo real y soporte offline para visitas técnicas.",
+        "force_update": False
+    })
+
+
 @tecnico_bp.route('/api/tecnico/ping_global', methods=['POST'])
 def ping_global():
+    import secrets
+    import time
+
     usuario = obtener_usuario_autenticado()
     if not usuario or usuario.get('role') not in ['TECNICO', 'ADMIN', 'ASESOR']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
@@ -1055,18 +1228,98 @@ def ping_global():
     if usuario.get('role') == 'TECNICO' or not tecnico_nombre:
         tecnico_nombre = usuario.get('username')
 
+    bateria = datos.get('bateria')
+    try:
+        bateria = int(bateria) if bateria is not None else None
+    except (ValueError, TypeError):
+        bateria = None
+
+    cargando_raw = datos.get('cargando')
+    cargando = 1 if cargando_raw in [True, 1, '1', 'true', 'True'] else 0
+
+    accuracy = float(datos.get('precision') or datos.get('accuracy') or 0.0)
+    speed = float(datos.get('velocidad') or datos.get('speed') or 0.0)
+    bearing = float(datos.get('bearing') or datos.get('rumbo') or 0.0)
+    altitude = float(datos.get('altitud') or datos.get('altitude') or 0.0)
+    device_id = datos.get('device_id') or None
+    modelo_dispositivo = datos.get('modelo_dispositivo') or None
+    version_app = datos.get('version_app') or None
+    network_type = str(datos.get('network_type') or 'fused')
+    ts_now = int(time.time() * 1000)
+
     if lat and lon and tecnico_nombre:
         conexion = get_db_connection()
-        cursor = conexion.cursor()
+        if not conexion:
+            return jsonify({"status": "error", "message": "Error de conexión a base de datos"}), 500
+        cursor = conexion.cursor(dictionary=True)
         try:
+            # 1. Actualizar ficha del técnico en tiempo real
             cursor.execute("""
                 UPDATE tecnicos 
                 SET latitud_actual = %s, 
                     longitud_actual = %s, 
                     ultima_conexion = NOW(),
-                    estado_actividad = IF(estado_actividad = 'Desconectado', 'Disponible', estado_actividad)
+                    estado_actividad = IF(estado_actividad = 'Desconectado', 'Disponible', estado_actividad),
+                    bateria = COALESCE(%s, bateria),
+                    cargando = %s,
+                    device_id = COALESCE(%s, device_id),
+                    modelo_dispositivo = COALESCE(%s, modelo_dispositivo),
+                    version_app = COALESCE(%s, version_app)
                 WHERE nombre = %s OR UPPER(nombre) = %s
-            """, (lat, lon, tecnico_nombre, tecnico_nombre.upper()))
+            """, (lat, lon, bateria, cargando, device_id, modelo_dispositivo, version_app, tecnico_nombre, tecnico_nombre.upper()))
+            conexion.commit()
+
+            # Obtener id_tecnico y nombre canónico
+            cursor.execute("SELECT id_tecnico, nombre, device_id FROM tecnicos WHERE nombre = %s OR UPPER(nombre) = %s LIMIT 1", (tecnico_nombre, tecnico_nombre.upper()))
+            row_tec = cursor.fetchone()
+            id_tec = row_tec['id_tecnico'] if row_tec else None
+            nombre_canonico = row_tec['nombre'] if row_tec else tecnico_nombre
+            dev_db = row_tec.get('device_id') if row_tec else None
+
+            dev_target = device_id or dev_db or f"TECH_{nombre_canonico}"
+            uuid_val = f"{dev_target}_{ts_now}_{secrets.token_hex(4)}"
+
+            # 2. Asegurar que dev_target existe en tracker_devices (requerido por FK)
+            cursor.execute("""
+                INSERT INTO tracker_devices (
+                    device_id, device_model, android_version, first_seen, last_seen,
+                    last_latitude, last_longitude, battery_level, is_charging, network_type,
+                    last_location_timestamp
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    last_seen = VALUES(last_seen),
+                    last_latitude = VALUES(last_latitude),
+                    last_longitude = VALUES(last_longitude),
+                    battery_level = VALUES(battery_level),
+                    is_charging = VALUES(is_charging),
+                    network_type = VALUES(network_type),
+                    last_location_timestamp = VALUES(last_location_timestamp)
+            """, (
+                dev_target, modelo_dispositivo or 'PMT Device', version_app or 'Android', ts_now, ts_now,
+                float(lat), float(lon), bateria if bateria is not None else 100, cargando, network_type, ts_now
+            ))
+
+            # 3. Vincular automáticamente dispositivo con perfil de técnico
+            cursor.execute("""
+                INSERT INTO tracker_device_profiles (device_id, display_name, technician, atlas_technician_id)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE 
+                    technician = VALUES(technician),
+                    atlas_technician_id = VALUES(atlas_technician_id),
+                    display_name = IF(display_name IS NULL OR display_name = '', VALUES(display_name), display_name)
+            """, (dev_target, f"PMT {nombre_canonico}", nombre_canonico, id_tec))
+
+            # 4. Registrar punto de ruta histórico en tracker_location_records
+            cursor.execute("""
+                INSERT INTO tracker_location_records (
+                    uuid, device_id, latitude, longitude, accuracy, speed, bearing, altitude,
+                    battery_level, is_charging, network_type, provider, timestamp, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                uuid_val, dev_target, float(lat), float(lon), accuracy, speed, bearing, altitude,
+                bateria if bateria is not None else 100, cargando, network_type, 'fused', ts_now, ts_now
+            ))
+
             conexion.commit()
         except Exception as e:
             print(f"Error in ping_global: {e}")
@@ -1075,6 +1328,7 @@ def ping_global():
             conexion.close()
             
     return jsonify({"status": "ok"})
+
 
 
 @tecnico_bp.route('/api/tecnico/descanso', methods=['POST'])
@@ -1251,6 +1505,8 @@ def desactivar_panico():
 def verificar_firma(id_visita):
     from flask import url_for
     conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de conexión a base de datos"}), 500
     cursor = conexion.cursor(dictionary=True)
     try:
         cursor.execute("SELECT firma_cliente, token_rastreo FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
@@ -1460,6 +1716,16 @@ def api_tecnico_mis_requisiciones():
         reqs = cursor.fetchall()
 
         for r in reqs:
+            r['tipo_requisicion'] = r.get('tipo_requisicion') or 'MATERIALES'
+            r['requiere_comodato'] = bool(r.get('requiere_comodato'))
+            obs = r.get('observaciones') or ''
+            if '[RECHAZO:' in obs:
+                m_rechazo = re.search(r'\[RECHAZO:\s*(.*?)\]', obs)
+                r['motivo_rechazo'] = m_rechazo.group(1).strip() if m_rechazo else ''
+                r['comentario_tecnico'] = re.sub(r'\[RECHAZO:\s*.*?\]', '', obs).strip()
+            else:
+                r['comentario_tecnico'] = obs.strip()
+                r['motivo_rechazo'] = ''
             cursor.execute("""
                 SELECT ri.*
                 FROM requisiciones_materiales_items ri
@@ -1523,7 +1789,7 @@ def api_tecnico_requisicion_firmar(id_requisicion):
 
         # Transferencia atómica
         for it in items:
-            id_mat = it['id_material']
+            id_mat = it.get('id_material')
             if it.get('cantidad_aprobada') is not None:
                 cant = int(it['cantidad_aprobada'])
             else:
@@ -1532,16 +1798,17 @@ def api_tecnico_requisicion_firmar(id_requisicion):
             if cant <= 0:
                 continue
 
-            # Restar de materiales (bodega)
-            cursor.execute("UPDATE materiales SET stock_bodega = GREATEST(0, stock_bodega - %s) WHERE id_material = %s", (cant, id_mat))
+            # Restar de materiales (bodega) solo si es material tradicional
+            if id_mat:
+                cursor.execute("UPDATE materiales SET stock_bodega = GREATEST(0, stock_bodega - %s) WHERE id_material = %s", (cant, id_mat))
 
-            # Sumar a inventario_tecnicos de la placa
-            cursor.execute("SELECT id_inventario, cantidad_disponible FROM inventario_tecnicos WHERE placa_vehiculo = %s AND id_material = %s", (placa, id_mat))
-            inv_row = cursor.fetchone()
-            if inv_row:
-                cursor.execute("UPDATE inventario_tecnicos SET cantidad_disponible = cantidad_disponible + %s WHERE id_inventario = %s", (cant, inv_row['id_inventario']))
-            else:
-                cursor.execute("INSERT INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible) VALUES (%s, %s, %s)", (placa, id_mat, cant))
+                # Sumar a inventario_tecnicos de la placa
+                cursor.execute("SELECT id_inventario, cantidad_disponible FROM inventario_tecnicos WHERE placa_vehiculo = %s AND id_material = %s", (placa, id_mat))
+                inv_row = cursor.fetchone()
+                if inv_row:
+                    cursor.execute("UPDATE inventario_tecnicos SET cantidad_disponible = cantidad_disponible + %s WHERE id_inventario = %s", (cant, inv_row['id_inventario']))
+                else:
+                    cursor.execute("INSERT INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible) VALUES (%s, %s, %s)", (placa, id_mat, cant))
 
         # Actualizar estado
         cursor.execute("""
@@ -1766,6 +2033,19 @@ def reasignar_vehiculo_tecnico():
         # Placa final a asignar
         placa_final = placa_titular if es_reset else nueva_placa_db
         
+        # Si la placa elegida coincide con la titular habitual del técnico, se trata como reset
+        if placa_final == placa_titular or placa_final == 'S/P':
+            es_reset = True
+            nueva_placa_db = None
+            placa_final = placa_titular
+
+        # Regla de seguridad crítica: Si se está retornando a la furgoneta titular o las placas son iguales,
+        # NUNCA se debe transferir el inventario. Cada furgoneta mantiene sus materiales y equipos.
+        if es_reset or placa_anterior == placa_final or placa_anterior == 'S/P' or placa_final == 'S/P':
+            transferir_inventario = False
+        else:
+            transferir_inventario = (transferir_inventario is True or transferir_inventario == 1 or str(transferir_inventario).lower() == 'true')
+        
         # Si solicitó transferir el inventario físico entre las busetas
         if transferir_inventario and placa_anterior and placa_final and placa_anterior != placa_final and placa_anterior != 'S/P':
             # Buscar todos los insumos disponibles en la buseta anterior
@@ -1794,6 +2074,14 @@ def reasignar_vehiculo_tecnico():
                     INSERT INTO traspasos_tecnicos (tecnico_origen, placa_origen, tecnico_destino, placa_destino, id_material, cantidad, agente_registro, fecha_hora)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                 """, (nombre_tecnico, placa_anterior, nombre_tecnico, placa_final, id_mat, cant, f"CallCenter ({nombre_tecnico})"))
+
+            # Trasladar también los equipos serializados de la buseta anterior a la nueva buseta
+            cursor.execute("""
+                UPDATE trazabilidad_equipos
+                SET ubicacion_placa = %s,
+                    observacion = CONCAT(COALESCE(observacion, ''), %s)
+                WHERE ubicacion_placa = %s AND estado = 'EN_VEHICULO'
+            """, (placa_final, f" | Traslado automático por reasignación de buseta a {placa_final}", placa_anterior))
                 
         # Actualizar la asignación del técnico
         cursor.execute("UPDATE tecnicos SET placa_asignada_hoy = %s WHERE id_tecnico = %s", (nueva_placa_db, id_tecnico))
@@ -1801,7 +2089,7 @@ def reasignar_vehiculo_tecnico():
         
         msg = f"Buseta reasignada a {placa_final} correctamente."
         if transferir_inventario:
-            msg += " Se trasladó la custodia física de insumos a la nueva buseta."
+            msg += " Se trasladó la custodia física de insumos y equipos a la nueva buseta."
         return jsonify({"status": "ok", "message": msg})
     except Exception as e:
         conexion.rollback()
@@ -1922,6 +2210,8 @@ def api_tecnico_logout():
                 cursor.execute("""
                     UPDATE tecnicos 
                     SET estado_actividad = 'Desconectado', 
+                        latitud_actual = NULL, 
+                        longitud_actual = NULL, 
                         ultima_conexion = NOW()
                     WHERE nombre = %s OR UPPER(nombre) = %s
                 """, (nombre_limpio, nombre_limpio.upper()))
@@ -1932,4 +2222,4 @@ def api_tecnico_logout():
             finally:
                 conexion.close()
 
-    return jsonify({"status": "ok", "message": "Sesión cerrada correctamente"}), 200
+    return jsonify({"status": "ok", "message": "Sesión cerrada correctamente"}), 200

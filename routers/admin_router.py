@@ -45,7 +45,7 @@ def api_dashboard_calidad():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver datos de control de calidad."}), 403
         
     conexion = get_db_connection()
@@ -484,6 +484,200 @@ def exportar_arcotel_excel():
         cursor.close()
         conexion.close()
 
+def get_cliente_audit_records(cursor, contrato, desde=None, hasta=None):
+    """
+    Busca de manera exhaustiva el historial de visitas técnicas y atenciones
+    para un contrato determinado, manejando sufijos F/f/I/i, variaciones de ceros,
+    asociaciones por cliente en directorio y omisiones de fechas.
+    Retorna: (cliente_nombre, cliente_sector, cliente_direccion, visitas, atenciones, nombre_oficial)
+    """
+    import re
+    contrato_clean = (contrato or '').strip()
+    if not contrato_clean:
+        return ("Desconocido", "-", "-", [], [], None)
+
+    is_fibracom = contrato_clean.upper().endswith('F')
+    
+    # Detectar si tiene sufijo de letra (ej: '128D', '101I', '825F') o es numérico puro
+    m_suffix = re.search(r'^([0-9]+)([A-Za-z]+)$', contrato_clean)
+
+    variants = set()
+    variants.add(contrato_clean)
+    variants.add(contrato_clean.upper())
+    variants.add(contrato_clean.lower())
+
+    if m_suffix:
+        # El contrato tiene un número y un sufijo de letra específico (D, I, F, etc.)
+        num_part = m_suffix.group(1)
+        suffix_part = m_suffix.group(2)
+        num_stripped = num_part.lstrip('0') or num_part
+        
+        # Variaciones manteniendo SIEMPRE el sufijo de letra
+        variants.add(f"{num_part}{suffix_part.upper()}")
+        variants.add(f"{num_part}{suffix_part.lower()}")
+        variants.add(f"{num_stripped}{suffix_part.upper()}")
+        variants.add(f"{num_stripped}{suffix_part.lower()}")
+        # NO despojamos el sufijo porque contratos como 128D, 128I y 128 son clientes completamente distintos
+    else:
+        # Es puramente numérico u otro formato sin sufijo
+        num_only = re.sub(r'[^0-9]', '', contrato_clean)
+        num_stripped = num_only.lstrip('0') if num_only else ''
+        if num_only:
+            variants.add(num_only)
+        if num_stripped:
+            variants.add(num_stripped)
+
+    variants_list = list(variants)
+
+    # 1. Buscar en directorio_clientes respetando la empresa y prioridad exacta
+    placeholders_dir = ', '.join(['%s'] * len(variants_list))
+    empresa_target = 'FIBRACOM' if is_fibracom else 'SERVICABLE'
+    cursor.execute(f"""
+        SELECT nombre_cliente AS cliente, zona AS sector, COALESCE(direccion, '-') as direccion, contrato, empresa 
+        FROM directorio_clientes 
+        WHERE contrato IN ({placeholders_dir}) 
+        ORDER BY (contrato = %s) DESC, (contrato = %s) DESC, (empresa = %s) DESC
+        LIMIT 1
+    """, tuple(variants_list) + (contrato_clean, contrato_clean.upper(), empresa_target))
+    cliente_dir = cursor.fetchone()
+
+    # Si no se encontró en directorio_clientes, probar fallback solo si era numérico puro buscando en Fibracom o viceversa
+    if not cliente_dir:
+        num_only = re.sub(r'[^0-9]', '', contrato_clean)
+        num_stripped = num_only.lstrip('0') if num_only else ''
+        fallback_variants = set()
+        if not m_suffix and num_only:
+            fallback_variants.add(f"{num_only}F")
+            fallback_variants.add(f"{num_only}f")
+        if fallback_variants:
+            fb_list = list(fallback_variants)
+            cursor.execute(f"""
+                SELECT nombre_cliente AS cliente, zona AS sector, COALESCE(direccion, '-') as direccion, contrato, empresa 
+                FROM directorio_clientes 
+                WHERE contrato IN ({', '.join(['%s']*len(fb_list))}) 
+                LIMIT 1
+            """, tuple(fb_list))
+            cliente_dir = cursor.fetchone()
+    
+    nombre_oficial = cliente_dir['cliente'] if cliente_dir else None
+    cliente_sector = (cliente_dir.get('sector') or "-") if cliente_dir else "-"
+    cliente_direccion = (cliente_dir.get('direccion') or "-") if cliente_dir else "-"
+
+    # 2. Si se identificó el cliente, buscar otros números de contrato asociados a este MISMO cliente
+    if nombre_oficial:
+        cursor.execute("SELECT DISTINCT contrato FROM visitas_tecnicas WHERE cliente = %s", (nombre_oficial,))
+        for r in cursor.fetchall():
+            if r.get('contrato'):
+                c_val = str(r['contrato']).strip()
+                variants.add(c_val)
+                variants.add(c_val.upper())
+                variants.add(c_val.lower())
+        
+        cursor.execute("SELECT DISTINCT contrato FROM atenciones WHERE cliente = %s", (nombre_oficial,))
+        for r in cursor.fetchall():
+            if r.get('contrato'):
+                c_val = str(r['contrato']).strip()
+                variants.add(c_val)
+                variants.add(c_val.upper())
+                variants.add(c_val.lower())
+
+    variants_list = list(variants)
+
+    # 3. Consultar Visitas Técnicas
+    placeholders_visitas = ', '.join(['%s'] * len(variants_list))
+    params_visitas = []
+
+    if nombre_oficial:
+        query_visitas = f"""
+            SELECT id_visita, fecha_programada, cliente, problema, solucion_tecnico, 
+                   observacion_tecnico, tecnico_principal, tecnico_apoyo, 
+                   estado, calificacion_estrellas, calificacion_comentario,
+                   'visita_tecnica' AS tipo_registro, sector, direccion
+            FROM visitas_tecnicas 
+            WHERE (cliente = %s)
+               OR (contrato IN ({placeholders_visitas}) AND (cliente IS NULL OR cliente = '' OR cliente = %s))
+        """
+        params_visitas = [nombre_oficial] + list(variants_list) + [nombre_oficial]
+    else:
+        query_visitas = f"""
+            SELECT id_visita, fecha_programada, cliente, problema, solucion_tecnico, 
+                   observacion_tecnico, tecnico_principal, tecnico_apoyo, 
+                   estado, calificacion_estrellas, calificacion_comentario,
+                   'visita_tecnica' AS tipo_registro, sector, direccion
+            FROM visitas_tecnicas 
+            WHERE contrato IN ({placeholders_visitas})
+        """
+        params_visitas = list(variants_list)
+
+    if desde:
+        query_visitas += " AND fecha_programada >= %s"
+        params_visitas.append(desde)
+    if hasta:
+        query_visitas += " AND fecha_programada <= %s"
+        params_visitas.append(hasta)
+    query_visitas += " ORDER BY fecha_programada DESC"
+
+    cursor.execute(query_visitas, tuple(params_visitas))
+    visitas = cursor.fetchall()
+
+    # 4. Consultar Atenciones
+    params_atenciones = []
+    if nombre_oficial:
+        query_atenciones = f"""
+            SELECT id_atencion AS id_visita, fecha AS fecha_programada, cliente, tipo_solicitud AS problema, 
+                   accion AS solucion_tecnico, observacion AS observacion_tecnico, 
+                   agente AS tecnico_principal, medio_contacto AS tecnico_apoyo,
+                   'FINALIZADA' AS estado, NULL AS calificacion_estrellas, NULL AS calificacion_comentario,
+                   'atencion' AS tipo_registro, hora, olt, ont, router, timer_minutos, sector
+            FROM atenciones 
+            WHERE (cliente = %s)
+               OR (contrato IN ({placeholders_visitas}) AND (cliente IS NULL OR cliente = '' OR cliente = %s))
+        """
+        params_atenciones = [nombre_oficial] + list(variants_list) + [nombre_oficial]
+    else:
+        query_atenciones = f"""
+            SELECT id_atencion AS id_visita, fecha AS fecha_programada, cliente, tipo_solicitud AS problema, 
+                   accion AS solucion_tecnico, observacion AS observacion_tecnico, 
+                   agente AS tecnico_principal, medio_contacto AS tecnico_apoyo,
+                   'FINALIZADA' AS estado, NULL AS calificacion_estrellas, NULL AS calificacion_comentario,
+                   'atencion' AS tipo_registro, hora, olt, ont, router, timer_minutos, sector
+            FROM atenciones 
+            WHERE contrato IN ({placeholders_visitas})
+        """
+        params_atenciones = list(variants_list)
+
+    if desde:
+        query_atenciones += " AND fecha >= %s"
+        params_atenciones.append(desde)
+    if hasta:
+        query_atenciones += " AND fecha <= %s"
+        params_atenciones.append(hasta)
+    query_atenciones += " ORDER BY fecha DESC, hora DESC"
+
+    cursor.execute(query_atenciones, tuple(params_atenciones))
+    atenciones = cursor.fetchall()
+
+    # Fallback si no estaba en directorio
+    if not nombre_oficial:
+        if visitas:
+            nombre_oficial = visitas[0].get('cliente')
+            cliente_sector = visitas[0].get('sector') or cliente_sector
+            cliente_direccion = visitas[0].get('direccion') or cliente_direccion
+        elif atenciones:
+            nombre_oficial = atenciones[0].get('cliente')
+            cliente_sector = atenciones[0].get('sector') or cliente_sector
+
+    cliente_nombre = nombre_oficial or "Desconocido"
+
+    if nombre_oficial:
+        for v in visitas:
+            v['cliente'] = nombre_oficial
+        for a in atenciones:
+            a['cliente'] = nombre_oficial
+
+    return (cliente_nombre, cliente_sector, cliente_direccion, visitas, atenciones, nombre_oficial)
+
+
 @admin_bp.route('/api/admin/auditoria_cliente', methods=['GET'])
 def auditoria_cliente():
     token = request.headers.get('Authorization')
@@ -498,95 +692,26 @@ def auditoria_cliente():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para realizar auditorías de clientes."}), 403
 
     contrato = request.args.get('contrato', '').strip()
     desde = request.args.get('desde', '')
     hasta = request.args.get('hasta', '')
     
-    # Determinar si es Fibracom o Servicable basándose en el sufijo 'F'
-    is_fibracom = contrato.upper().endswith('F')
-    
-    if is_fibracom:
-        contrato_base = contrato[:-1]
-        contrato_directorio = contrato
-    else:
-        contrato_base = contrato
-        contrato_directorio = contrato
+    if not contrato:
+        return jsonify([])
         
     conexion = get_db_connection()
     if not conexion:
         return jsonify([])
     cursor = conexion.cursor(dictionary=True)
     
-    # Obtener el nombre oficial del cliente desde el directorio
-    cursor.execute("""
-        SELECT nombre_cliente FROM directorio_clientes WHERE contrato = %s
-    """, (contrato_directorio,))
-    cliente_dir = cursor.fetchone()
-    nombre_oficial = cliente_dir['nombre_cliente'] if cliente_dir else None
-    
-    # 1. Obtener Visitas Técnicas
-    if is_fibracom:
-        query_visitas = """
-            SELECT id_visita, fecha_programada, cliente, problema, solucion_tecnico, 
-                   observacion_tecnico, tecnico_principal, tecnico_apoyo, 
-                   estado, calificacion_estrellas, calificacion_comentario,
-                   'visita_tecnica' AS tipo_registro
-            FROM visitas_tecnicas 
-            WHERE contrato = %s AND empresa = 'FIBRACOM'
-        """
-    else:
-        query_visitas = """
-            SELECT id_visita, fecha_programada, cliente, problema, solucion_tecnico, 
-                   observacion_tecnico, tecnico_principal, tecnico_apoyo, 
-                   estado, calificacion_estrellas, calificacion_comentario,
-                   'visita_tecnica' AS tipo_registro
-            FROM visitas_tecnicas 
-            WHERE contrato = %s AND (empresa != 'FIBRACOM' OR empresa IS NULL)
-        """
-    params_visitas = [contrato_base]
-    if desde:
-        query_visitas += " AND fecha_programada >= %s"
-        params_visitas.append(desde)
-    if hasta:
-        query_visitas += " AND fecha_programada <= %s"
-        params_visitas.append(hasta)
-        
-    cursor.execute(query_visitas, tuple(params_visitas))
-    visitas = cursor.fetchall()
-    
-    # 2. Obtener Atenciones Diarias
-    query_atenciones = """
-        SELECT id_atencion AS id_visita, fecha AS fecha_programada, cliente, tipo_solicitud AS problema, 
-               accion AS solucion_tecnico, observacion AS observacion_tecnico, 
-               agente AS tecnico_principal, medio_contacto AS tecnico_apoyo,
-               'FINALIZADA' AS estado, NULL AS calificacion_estrellas, NULL AS calificacion_comentario,
-               'atencion' AS tipo_registro, hora, olt, ont, router, timer_minutos
-        FROM atenciones 
-        WHERE contrato = %s
-    """
-    params_atenciones = [contrato_directorio]
-    if desde:
-        query_atenciones += " AND fecha >= %s"
-        params_atenciones.append(desde)
-    if hasta:
-        query_atenciones += " AND fecha <= %s"
-        params_atenciones.append(hasta)
-        
-    cursor.execute(query_atenciones, tuple(params_atenciones))
-    atenciones = cursor.fetchall()
-    
-    cursor.close()
-    conexion.close()
-    
-    # Unificar nombre de cliente si se encontró en el directorio
-    if nombre_oficial:
-        for v in visitas:
-            v['cliente'] = nombre_oficial
-        for a in atenciones:
-            a['cliente'] = nombre_oficial
+    try:
+        cliente_nombre, cliente_sector, cliente_direccion, visitas, atenciones, nombre_oficial = get_cliente_audit_records(cursor, contrato, desde, hasta)
+    finally:
+        cursor.close()
+        conexion.close()
     
     # Combinar ambas listas
     from datetime import time as dt_time
@@ -651,7 +776,7 @@ def api_tecnicos_ubicaciones():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'BODEGA', 'AUDITOR', 'ATC_AUDITOR']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'BODEGA', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver la ubicación de los técnicos."}), 403
         
     raw_area = request.args.get('area') or session.get('active_area', 'TODOS')
@@ -684,12 +809,22 @@ def api_tecnicos_ubicaciones():
                    t.placa_vehiculo,
                    t.alerta_panico,
                    t.mensaje_panico,
+                   t.bateria,
+                   t.cargando,
+                   t.device_id,
+                   t.modelo_dispositivo,
+                   t.version_app,
                    CASE 
                       WHEN t.latitud_actual IS NOT NULL 
                        AND t.longitud_actual IS NOT NULL 
                        AND t.estado_actividad NOT IN ('Desconectado', 'DESCONECTADO', 'Inactivo', 'INACTIVO') 
                        AND (t.ultima_conexion >= DATE_SUB(NOW(), INTERVAL 15 MINUTE) OR t.alerta_panico = 1) 
                         THEN 1 
+                      WHEN t.latitud_actual IS NOT NULL 
+                       AND t.longitud_actual IS NOT NULL 
+                       AND t.estado_actividad NOT IN ('Desconectado', 'DESCONECTADO', 'Inactivo', 'INACTIVO') 
+                       AND (DATE(t.ultima_conexion) = CURDATE() OR t.ultima_conexion >= DATE_SUB(NOW(), INTERVAL 16 HOUR)) 
+                        THEN 2 
                       ELSE 0 
                     END AS conectado,
                    v.id_visita AS visita_activa_id,
@@ -731,6 +866,126 @@ def api_tecnicos_ubicaciones():
         cursor.close()
         conexion.close()
 
+
+@admin_bp.route('/api/admin/tecnicos/<int:id_tecnico>/historial_ruta', methods=['GET'])
+def api_tecnico_historial_ruta(id_tecnico):
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    if not user and 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
+
+    if not user:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    fecha = request.args.get('fecha') or datetime.now().strftime('%Y-%m-%d')
+    
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de base de datos"}), 500
+        
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id_tecnico, nombre, device_id, latitud_actual, longitud_actual, ultima_conexion, bateria, cargando FROM tecnicos WHERE id_tecnico = %s", (id_tecnico,))
+        tecnico = cursor.fetchone()
+        if not tecnico:
+            return jsonify({"status": "error", "message": "Técnico no encontrado"}), 404
+            
+        nombre = tecnico['nombre']
+        dev_id = tecnico.get('device_id') or ''
+        
+        # Buscar dispositivos vinculados en tracker_device_profiles
+        cursor.execute("""
+            SELECT device_id FROM tracker_device_profiles 
+            WHERE atlas_technician_id = %s OR technician = %s OR UPPER(technician) = %s
+        """, (id_tecnico, nombre, nombre.upper()))
+        profile_devs = [row['device_id'] for row in cursor.fetchall() if row.get('device_id')]
+        
+        # Lista exhaustiva de identificadores asociados a este técnico
+        candidates = set()
+        if dev_id:
+            candidates.add(dev_id)
+        candidates.add(nombre)
+        candidates.add(nombre.upper())
+        candidates.add(nombre.title())
+        candidates.add(f"TECH_{nombre}")
+        candidates.add(f"TECH_{nombre.upper()}")
+        candidates.add(f"TECH_{nombre.title()}")
+        candidates.add(f"TECH_{nombre.replace(' ', '_')}")
+        candidates.add(f"TECH_{nombre.upper().replace(' ', '_')}")
+        candidates.update(profile_devs)
+        
+        placeholders = ', '.join(['%s'] * len(candidates))
+        query = f"""
+            SELECT latitude AS lat, longitude AS lon, accuracy, speed, bearing, altitude,
+                   battery_level AS bateria, is_charging AS cargando, timestamp,
+                   FROM_UNIXTIME(timestamp / 1000) AS fecha_hora
+            FROM tracker_location_records
+            WHERE device_id IN ({placeholders})
+              AND DATE(FROM_UNIXTIME(timestamp / 1000)) = %s
+            ORDER BY timestamp ASC
+        """
+        cursor.execute(query, tuple(list(candidates) + [fecha]))
+        puntos = cursor.fetchall()
+        
+        # Si no hay puntos históricos en tracker_location_records pero el técnico reportó ubicación hoy en tecnicos
+        if not puntos and tecnico.get('latitud_actual') and tecnico.get('longitud_actual'):
+            ult_con = tecnico.get('ultima_conexion')
+            if ult_con and ult_con.strftime('%Y-%m-%d') == fecha:
+                lat_v = float(tecnico['latitud_actual'])
+                lon_v = float(tecnico['longitud_actual'])
+                ts_v = int(ult_con.timestamp() * 1000)
+                puntos.append({
+                    'lat': lat_v,
+                    'lon': lon_v,
+                    'accuracy': 5.0,
+                    'speed': 0.0,
+                    'bearing': 0.0,
+                    'altitude': 0.0,
+                    'bateria': tecnico.get('bateria'),
+                    'cargando': tecnico.get('cargando') or 0,
+                    'timestamp': ts_v,
+                    'fecha_hora': ult_con.strftime('%H:%M:%S')
+                })
+                # Auto-guardar este punto para que ya quede en la base
+                try:
+                    import secrets
+                    uid = f"TECH_{nombre}_{ts_v}_{secrets.token_hex(4)}"
+                    cursor.execute("""
+                        INSERT IGNORE INTO tracker_location_records (
+                            uuid, device_id, latitude, longitude, accuracy, speed, bearing, altitude,
+                            battery_level, is_charging, network_type, provider, timestamp, created_at
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        uid, f"TECH_{nombre}", lat_v, lon_v, 5.0, 0.0, 0.0, 0.0,
+                        tecnico.get('bateria') or 100, tecnico.get('cargando') or 0, 'fused', 'live_fallback', ts_v, ts_v
+                    ))
+                    conexion.commit()
+                except Exception as e_seed:
+                    print(f"Error seeding initial point: {e_seed}")
+        
+        for p in puntos:
+            if hasattr(p.get('fecha_hora'), 'strftime'):
+                p['fecha_hora'] = p['fecha_hora'].strftime('%H:%M:%S')
+                
+        return jsonify({
+            "status": "ok",
+            "id_tecnico": id_tecnico,
+            "tecnico": nombre,
+            "device_id": dev_id,
+            "fecha": fecha,
+            "total_puntos": len(puntos),
+            "puntos": puntos
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
 @admin_bp.route('/api/admin/metricas_globales', methods=['GET'])
 def metricas_globales():
     token = request.headers.get('Authorization')
@@ -745,7 +1000,7 @@ def metricas_globales():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas globales."}), 403
 
     active_area = request.args.get('area') or session.get('active_area')
@@ -848,27 +1103,52 @@ def metricas_globales():
         cursor.execute(query_top_clientes, params)
         top_clientes = cursor.fetchall()
         
-        # 4. Top 5 Problemas comunes (o Productos en caso de instalación)
+        # 4. Problemas y Soluciones más comunes (en visitas atendidas / no canceladas)
+        where_efectivas = f"{where_clause} AND estado != 'CANCELADA'"
         if es_instalacion_val == 1:
             query_problemas = f"""
                 SELECT COALESCE(NULLIF(producto, ''), 'Sin Producto') as problema, COUNT(*) as cantidad
                 FROM visitas_tecnicas
-                {where_clause}
+                {where_efectivas}
                 GROUP BY problema
                 ORDER BY cantidad DESC
-                LIMIT 5
+            """
+            query_soluciones = f"""
+                SELECT COALESCE(NULLIF(solucion_tecnico, ''), 'Sin Solución Registrada') as solucion, COUNT(*) as cantidad
+                FROM visitas_tecnicas
+                {where_efectivas}
+                GROUP BY solucion
+                ORDER BY cantidad DESC
             """
         else:
             query_problemas = f"""
                 SELECT COALESCE(NULLIF(problema, ''), 'Sin Especificar') as problema, COUNT(*) as cantidad
                 FROM visitas_tecnicas
-                {where_clause}
+                {where_efectivas}
                 GROUP BY problema
                 ORDER BY cantidad DESC
-                LIMIT 5
             """
+            query_soluciones = f"""
+                SELECT COALESCE(NULLIF(solucion_tecnico, ''), 'Sin Solución Registrada') as solucion, COUNT(*) as cantidad
+                FROM visitas_tecnicas
+                {where_efectivas}
+                GROUP BY solucion
+                ORDER BY cantidad DESC
+            """
+
         cursor.execute(query_problemas, params)
-        top_problemas = cursor.fetchall()
+        raw_problemas = cursor.fetchall()
+        if len(raw_problemas) > 10:
+            top_problemas = raw_problemas[:9] + [{'problema': 'Otros', 'cantidad': sum(r['cantidad'] for r in raw_problemas[9:])}]
+        else:
+            top_problemas = raw_problemas
+
+        cursor.execute(query_soluciones, params)
+        raw_soluciones = cursor.fetchall()
+        if len(raw_soluciones) > 10:
+            top_soluciones = raw_soluciones[:9] + [{'solucion': 'Otros', 'cantidad': sum(r['cantidad'] for r in raw_soluciones[9:])}]
+        else:
+            top_soluciones = raw_soluciones
         
         # 5. Evolución semanal (Total vs Completadas)
         query_evolucion = f"""
@@ -913,6 +1193,8 @@ def metricas_globales():
             'top_clientes': top_clientes,
             'top_problemas': top_problemas,
             'problemas': [{'motivo': p['problema'], 'problema': p['problema'], 'cantidad': p['cantidad']} for p in top_problemas],
+            'top_soluciones': top_soluciones,
+            'soluciones': [{'motivo': s['solucion'], 'solucion': s['solucion'], 'cantidad': s['cantidad']} for s in top_soluciones],
             'evolucion': evolucion,
             'tecnicos': tecnicos
         }
@@ -978,7 +1260,7 @@ def reporte_pdf():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para descargar reportes."}), 403
 
     contrato = request.args.get('contrato', '').strip()
@@ -988,105 +1270,13 @@ def reporte_pdf():
     if not contrato:
         return jsonify({"status": "error", "message": "Debe especificar un número de contrato"}), 400
 
-    # Determinar si es Fibracom o Servicable basándose en el sufijo 'F'
-    is_fibracom = contrato.upper().endswith('F')
-    
-    if is_fibracom:
-        contrato_base = contrato[:-1]
-        contrato_directorio = contrato
-    else:
-        contrato_base = contrato
-        contrato_directorio = contrato
-
     conexion = get_db_connection()
     if not conexion:
         return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
         
     cursor = conexion.cursor(dictionary=True)
     try:
-        # 1. Obtener datos del cliente de directorio_clientes
-        cursor.execute("""
-            SELECT nombre_cliente AS cliente, zona AS sector, COALESCE(direccion, '-') as direccion FROM directorio_clientes WHERE contrato = %s
-        """, (contrato_directorio,))
-        cliente_data = cursor.fetchone()
-        
-        if not cliente_data:
-            # Fallback a visitas_tecnicas
-            if is_fibracom:
-                cursor.execute("""
-                    SELECT cliente, sector, direccion FROM visitas_tecnicas WHERE contrato = %s AND empresa = 'FIBRACOM' LIMIT 1
-                """, (contrato_base,))
-            else:
-                cursor.execute("""
-                    SELECT cliente, sector, direccion FROM visitas_tecnicas WHERE contrato = %s AND (empresa != 'FIBRACOM' OR empresa IS NULL) LIMIT 1
-                """, (contrato_base,))
-            cliente_data = cursor.fetchone()
-            
-            if not cliente_data:
-                # Fallback a atenciones
-                cursor.execute("""
-                    SELECT cliente, sector, '-' as direccion FROM atenciones WHERE contrato = %s LIMIT 1
-                """, (contrato_directorio,))
-                cliente_data = cursor.fetchone()
-        
-        cliente_nombre = "Desconocido"
-        cliente_sector = "-"
-        cliente_direccion = "-"
-        if cliente_data:
-            cliente_nombre = cliente_data['cliente']
-            cliente_sector = cliente_data['sector'] or "-"
-            cliente_direccion = cliente_data.get('direccion') or "-"
-        
-        # 2. Obtener Visitas Técnicas
-        if is_fibracom:
-            query_visitas = """
-                SELECT id_visita, fecha_programada, cliente, problema, solucion_tecnico, 
-                       observacion_tecnico, tecnico_principal, tecnico_apoyo, 
-                       estado, calificacion_estrellas, calificacion_comentario,
-                       'visita_tecnica' AS tipo_registro
-                FROM visitas_tecnicas 
-                WHERE contrato = %s AND empresa = 'FIBRACOM'
-            """
-        else:
-            query_visitas = """
-                SELECT id_visita, fecha_programada, cliente, problema, solucion_tecnico, 
-                       observacion_tecnico, tecnico_principal, tecnico_apoyo, 
-                       estado, calificacion_estrellas, calificacion_comentario,
-                       'visita_tecnica' AS tipo_registro
-                FROM visitas_tecnicas 
-                WHERE contrato = %s AND (empresa != 'FIBRACOM' OR empresa IS NULL)
-            """
-        params_visitas = [contrato_base]
-        if desde:
-            query_visitas += " AND fecha_programada >= %s"
-            params_visitas.append(desde)
-        if hasta:
-            query_visitas += " AND fecha_programada <= %s"
-            params_visitas.append(hasta)
-        query_visitas += " ORDER BY fecha_programada DESC"
-        cursor.execute(query_visitas, tuple(params_visitas))
-        visitas = cursor.fetchall()
-        
-        # 3. Obtener Atenciones Diarias
-        query_atenciones = """
-            SELECT id_atencion AS id_visita, fecha AS fecha_programada, cliente, tipo_solicitud AS problema, 
-                   accion AS solucion_tecnico, observacion AS observacion_tecnico, 
-                   agente AS tecnico_principal, medio_contacto AS tecnico_apoyo,
-                   'FINALIZADA' AS estado, NULL AS calificacion_estrellas, NULL AS calificacion_comentario,
-                   'atencion' AS tipo_registro, hora, olt, ont, router, timer_minutos
-            FROM atenciones 
-            WHERE contrato = %s
-        """
-        params_atenciones = [contrato_directorio]
-        if desde:
-            query_atenciones += " AND fecha >= %s"
-            params_atenciones.append(desde)
-        if hasta:
-            query_atenciones += " AND fecha <= %s"
-            params_atenciones.append(hasta)
-        query_atenciones += " ORDER BY fecha DESC, hora DESC"
-        cursor.execute(query_atenciones, tuple(params_atenciones))
-        atenciones = cursor.fetchall()
+        cliente_nombre, cliente_sector, cliente_direccion, visitas, atenciones, _ = get_cliente_audit_records(cursor, contrato, desde, hasta)
         
         # KPIs calculations
         total_visitas = len(visitas)
@@ -1670,12 +1860,15 @@ def preview_reporte_calidad():
                 AND solucion_tecnico NOT IN (
                     'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
                     'SIN RESPUESTA DEL CLIENTE',
+                    'NO DESEA VISITA',
                     'GENERAR CAMBIO DE FO',
                     'GENERAR ARREGLO DE INSTALACIÓN',
                     'GESTIONAR ARREGLO DE INSTALACIÓN'
                 )
                 AND solucion_tecnico NOT LIKE '%NOC%'
                 AND solucion_tecnico NOT LIKE '%PARCIAL%'
+                AND solucion_tecnico NOT LIKE '%NO DESEA%'
+                AND solucion_tecnico NOT LIKE '%SIN RESPUESTA%'
             """)
             
         order_clause = "COALESCE(DATE(hora_fin_visita), fecha_programada) ASC, hora_fin_visita ASC" if is_sunday else "hora_fin_visita ASC"
@@ -1790,12 +1983,15 @@ def download_excel_reporte_calidad():
                 AND solucion_tecnico NOT IN (
                     'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
                     'SIN RESPUESTA DEL CLIENTE',
+                    'NO DESEA VISITA',
                     'GENERAR CAMBIO DE FO',
                     'GENERAR ARREGLO DE INSTALACIÓN',
                     'GESTIONAR ARREGLO DE INSTALACIÓN'
                 )
                 AND solucion_tecnico NOT LIKE '%NOC%'
                 AND solucion_tecnico NOT LIKE '%PARCIAL%'
+                AND solucion_tecnico NOT LIKE '%NO DESEA%'
+                AND solucion_tecnico NOT LIKE '%SIN RESPUESTA%'
             """)
             
         order_clause = "COALESCE(DATE(hora_fin_visita), fecha_programada) ASC, hora_fin_visita ASC" if is_sunday else "hora_fin_visita ASC"
@@ -1960,8 +2156,11 @@ def preview_reporte_actividades():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE'
+                  'SIN RESPUESTA DEL CLIENTE',
+                  'NO DESEA VISITA'
               )
+              AND solucion_tecnico NOT LIKE '%NO DESEA%'
+              AND solucion_tecnico NOT LIKE '%SIN RESPUESTA%'
               AND es_instalacion = %s
             GROUP BY tecnico_principal, tecnico_apoyo, solucion_tecnico
             ORDER BY tecnico_principal, tecnico_apoyo, cantidad DESC
@@ -2032,8 +2231,11 @@ def download_excel_reporte_actividades():
               AND solucion_tecnico IS NOT NULL 
               AND solucion_tecnico NOT IN (
                   'NO SE PUEDE REALIZAR VISITA - SATURACIÓN DEL DÍA', 
-                  'SIN RESPUESTA DEL CLIENTE'
+                  'SIN RESPUESTA DEL CLIENTE',
+                  'NO DESEA VISITA'
               )
+              AND solucion_tecnico NOT LIKE '%NO DESEA%'
+              AND solucion_tecnico NOT LIKE '%SIN RESPUESTA%'
               AND es_instalacion = %s
             GROUP BY tecnico_principal, tecnico_apoyo, solucion_tecnico
             ORDER BY tecnico_principal, tecnico_apoyo, cantidad DESC
@@ -2666,12 +2868,13 @@ def preview_cuadro_mando():
         soporte_b = saved_config.get('soporte_b') if saved_config.get('soporte_b') is not None else 0
         soporte_c = saved_config.get('soporte_c') if saved_config.get('soporte_c') is not None else 0
 
-        # 2. Intentar auto-detectar los 3 agentes más activos en esta fecha
+        # 2. Intentar auto-detectar los 3 agentes más activos en esta fecha (exclusivamente Call Center)
         cursor.execute("""
-            SELECT agente, COUNT(*) as c 
-            FROM atenciones 
-            WHERE fecha = %s AND agente IS NOT NULL AND agente != '' AND agente != 'Importado'
-            GROUP BY agente 
+            SELECT a.agente, COUNT(*) as c 
+            FROM atenciones a
+            INNER JOIN callcenter cc ON a.agente = cc.nombre COLLATE utf8mb4_0900_ai_ci
+            WHERE a.fecha = %s AND cc.activo = 1
+            GROUP BY a.agente 
             ORDER BY c DESC 
             LIMIT 3
         """, (fecha,))
@@ -3621,11 +3824,31 @@ def api_obtener_inventario():
                 placas_set.add(tv['placa_asignada_hoy'])
         placas = sorted(list(placas_set))
         
-        # 3. Obtener stock disponible en custodia por placa
+        # 3. Obtener conteo de equipos (ONT y Router) asignados por placa en trazabilidad_equipos
+        cursor.execute("""
+            SELECT ubicacion_placa,
+                   SUM(CASE WHEN tipo_equipo = 'ONT' THEN 1 ELSE 0 END) as total_ont,
+                   SUM(CASE WHEN tipo_equipo = 'ROUTER' THEN 1 ELSE 0 END) as total_router,
+                   COUNT(*) as total_equipos
+            FROM trazabilidad_equipos
+            WHERE estado = 'EN_VEHICULO' AND ubicacion_placa IS NOT NULL AND ubicacion_placa != ''
+            GROUP BY ubicacion_placa
+        """)
+        equipos_por_placa = {r['ubicacion_placa']: r for r in cursor.fetchall()}
+        
+        # Enriquecer tecnicos_vehiculos con su conteo de equipos
+        for tv in tecnicos_vehiculos:
+            placa_activa = tv.get('placa_asignada_hoy') or tv.get('placa_vehiculo') or 'S/P'
+            eq_info = equipos_por_placa.get(placa_activa, {'total_ont': 0, 'total_router': 0, 'total_equipos': 0})
+            tv['total_ont'] = int(eq_info.get('total_ont') or 0)
+            tv['total_router'] = int(eq_info.get('total_router') or 0)
+            tv['total_equipos'] = int(eq_info.get('total_equipos') or 0)
+
+        # 4. Obtener stock disponible en custodia por placa
         cursor.execute("SELECT placa_vehiculo, id_material, cantidad_disponible FROM inventario_tecnicos")
         custodia_raw = cursor.fetchall()
         
-        # 4. Obtener consumo histórico (usado) por placa
+        # 5. Obtener consumo histórico (usado) por placa
         cursor.execute("""
             SELECT t.placa_vehiculo, vm.id_material, SUM(vm.cantidad_usada) as total_usado
             FROM visitas_materiales vm
@@ -3664,6 +3887,7 @@ def api_obtener_inventario():
             "placas": placas,
             "tecnicos": placas,  # Retorna placas bajo la clave 'tecnicos' para compatibilidad con el JS
             "tecnicos_vehiculos": tecnicos_vehiculos,
+            "equipos_por_placa": equipos_por_placa,
             "inventario_tecnicos": inventario_tecnicos
         })
         
@@ -4353,7 +4577,7 @@ def obtener_tecnico_mas_cercano():
         user = {'id_usuario': session['user_id'], 'role': session.get('user_role'), 'rol': session.get('user_role')}
 
     user_role = user.get('role') or user.get('rol') if user else None
-    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'BODEGA', 'AUDITOR', 'ATC_AUDITOR']:
+    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'BODEGA', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     lat_str = request.args.get('lat')
@@ -4441,7 +4665,7 @@ def metricas_tiempos():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas de tiempos."}), 403
 
     active_area = request.args.get('area') or session.get('active_area')
@@ -4736,7 +4960,7 @@ def crear_recordatorio():
         user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'nombre': session.get('user_name')}
 
     user_role = user.get('role') or user.get('rol') if user else None
-    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     datos = request.get_json() or {}
@@ -4802,7 +5026,7 @@ def eliminar_recordatorio(id_recordatorio):
         user = {'id_usuario': session['user_id'], 'rol': session.get('user_role')}
 
     user_role = user.get('role') or user.get('rol') if user else None
-    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if not user or user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
         
     conexion = get_db_connection()
@@ -4923,7 +5147,7 @@ def editar_visita(id_visita):
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes permiso para editar visitas."}), 403
 
     # Validar que la visita no esté cerrada o en progreso antes de editar
@@ -5177,7 +5401,16 @@ def api_admin_catalogo_ont():
         return jsonify({"status": "error", "message": "Error de base de datos"}), 500
     try:
         cursor = conexion.cursor(dictionary=True)
-        cursor.execute("SELECT id_ont, nombre, activo FROM catalogo_modelos_ont WHERE activo = 1 ORDER BY nombre ASC")
+        cursor.execute("""
+            SELECT id_ont, nombre, activo FROM catalogo_modelos_ont 
+            WHERE activo = 1 
+            ORDER BY CASE 
+                WHEN nombre = 'XX231v' THEN 1 
+                WHEN nombre = 'XX530v' THEN 2 
+                WHEN nombre = 'XPON' THEN 3 
+                ELSE 4 
+            END, nombre ASC
+        """)
         return jsonify({"status": "ok", "catalogos": cursor.fetchall()})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -5193,7 +5426,16 @@ def api_admin_catalogo_router():
         return jsonify({"status": "error", "message": "Error de base de datos"}), 500
     try:
         cursor = conexion.cursor(dictionary=True)
-        cursor.execute("SELECT id_router, nombre, activo FROM catalogo_modelos_router WHERE activo = 1 ORDER BY nombre ASC")
+        cursor.execute("""
+            SELECT id_router, nombre, activo FROM catalogo_modelos_router 
+            WHERE activo = 1 
+            ORDER BY CASE 
+                WHEN nombre LIKE '%EX511%' THEN 1 
+                WHEN nombre LIKE '%AX3%' THEN 2 
+                WHEN nombre LIKE '%AX2%' THEN 3 
+                ELSE 4 
+            END, nombre ASC
+        """)
         return jsonify({"status": "ok", "catalogos": cursor.fetchall()})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -5680,16 +5922,86 @@ def api_equipos_reingreso_bodega():
         conexion.close()
 
 
+@admin_bp.route('/api/equipos/<int:id_equipo>/regresar_bodega', methods=['POST'])
+def api_equipos_regresar_bodega(id_equipo):
+    token = request.headers.get('Authorization')
+    user = None
+    if token and token.startswith("Bearer "):
+        from utils_jwt import verify_token
+        user = verify_token(token)
+    if not user and 'user_id' in session:
+        user = {'id_usuario': session['user_id'], 'rol': session.get('user_role'), 'nombre': session.get('user_name')}
+    user_name = (user.get('nombre') if user else None) or session.get('user_name', 'Bodega Central')
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de base de datos"}), 500
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT id_equipo, numero_serie, modelo, estado, ubicacion_placa 
+            FROM trazabilidad_equipos 
+            WHERE id_equipo = %s
+        """, (id_equipo,))
+        eq = cursor.fetchone()
+        if not eq:
+            return jsonify({"status": "error", "message": "Equipo no encontrado."}), 404
+        
+        if eq['estado'] == 'EN_BODEGA':
+            return jsonify({"status": "error", "message": "El equipo ya se encuentra en Bodega Central."}), 400
+        
+        if eq['estado'] == 'INSTALADO_CLIENTE':
+            return jsonify({
+                "status": "error", 
+                "message": f"El equipo {eq['numero_serie']} está instalado en un cliente. No se puede regresar directamente a bodega; debe registrarse su retiro técnico."
+            }), 400
+
+        placa_ant = (eq.get('ubicacion_placa') or '').strip().upper() or 'Vehículo'
+        ahora_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+        obs_log = f" | Devuelto a Bodega Central desde {placa_ant} por {user_name} ({ahora_str})"
+
+        cursor.execute("""
+            UPDATE trazabilidad_equipos
+            SET estado = 'EN_BODEGA',
+                ubicacion_placa = NULL,
+                fecha_ingreso_bodega = NOW(),
+                observacion = CONCAT(COALESCE(observacion, ''), %s)
+            WHERE id_equipo = %s
+        """, (obs_log, id_equipo))
+        conexion.commit()
+        return jsonify({
+            "status": "ok", 
+            "message": f"Equipo {eq['numero_serie']} ({eq.get('modelo') or 'Equipo'}) devuelto a Bodega Central correctamente desde {placa_ant}."
+        })
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+
 @admin_bp.route('/api/equipos/<int:id_equipo>', methods=['DELETE'])
 def api_equipos_eliminar(id_equipo):
     conexion = get_db_connection()
     if not conexion:
         return jsonify({"status": "error", "message": "Error de base de datos"}), 500
     try:
-        cursor = conexion.cursor()
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("SELECT id_equipo, numero_serie, estado, ubicacion_placa FROM trazabilidad_equipos WHERE id_equipo = %s", (id_equipo,))
+        eq = cursor.fetchone()
+        if not eq:
+            return jsonify({"status": "error", "message": "Equipo no encontrado."}), 404
+        
+        if eq['estado'] != 'EN_BODEGA':
+            return jsonify({
+                "status": "error", 
+                "message": f"No se puede eliminar el equipo {eq['numero_serie']} porque su estado actual es '{eq['estado']}' (Ubicación: {eq['ubicacion_placa'] or 'N/A'}). Solo se pueden eliminar registros que estén físicamente en Bodega Central."
+            }), 400
+
         cursor.execute("DELETE FROM trazabilidad_equipos WHERE id_equipo = %s", (id_equipo,))
         conexion.commit()
-        return jsonify({"status": "ok", "message": "Equipo eliminado correctamente."})
+        return jsonify({"status": "ok", "message": f"Equipo {eq['numero_serie']} eliminado correctamente de Bodega."})
     except Exception as e:
         conexion.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -5848,6 +6160,7 @@ def api_admin_requisiciones_lista():
 
     estado = request.args.get('estado')
     placa = request.args.get('placa')
+    tipo = request.args.get('tipo')
 
     conn = get_db_connection()
     if not conn:
@@ -5862,12 +6175,26 @@ def api_admin_requisiciones_lista():
         if placa and placa != 'TODAS':
             query += " AND placa_vehiculo = %s"
             params.append(placa)
+        if tipo and tipo != 'TODOS':
+            query += " AND tipo_requisicion = %s"
+            params.append(tipo)
         query += " ORDER BY fecha_solicitud DESC LIMIT 100"
         
         cur.execute(query, tuple(params))
         reqs = cur.fetchall()
 
         for r in reqs:
+            r['tipo_requisicion'] = r.get('tipo_requisicion') or 'MATERIALES'
+            r['requiere_comodato'] = bool(r.get('requiere_comodato'))
+            obs = r.get('observaciones') or ''
+            if '[RECHAZO:' in obs:
+                import re
+                m_rechazo = re.search(r'\[RECHAZO:\s*(.*?)\]', obs)
+                r['motivo_rechazo'] = m_rechazo.group(1).strip() if m_rechazo else ''
+                r['comentario_tecnico'] = re.sub(r'\[RECHAZO:\s*.*?\]', '', obs).strip()
+            else:
+                r['comentario_tecnico'] = obs.strip()
+                r['motivo_rechazo'] = ''
             cur.execute("""
                 SELECT ri.*, m.stock_bodega
                 FROM requisiciones_materiales_items ri
@@ -5907,13 +6234,16 @@ def api_admin_requisiciones_crear():
     placa = str(data.get('placa_vehiculo') or '').strip().upper()
     nombre_tecnico = str(data.get('nombre_tecnico') or user.get('nombre') or 'Técnico').strip()
     id_tecnico = data.get('id_tecnico')
+    tipo_req = str(data.get('tipo_requisicion') or 'MATERIALES').strip().upper()
+    if tipo_req not in ['MATERIALES', 'EQUIPOS']:
+        tipo_req = 'MATERIALES'
     items = data.get('items') or []
     observaciones = data.get('observaciones')
 
     if not placa:
         return jsonify({"status": "error", "message": "La placa del vehículo es obligatoria."}), 400
     if not items:
-        return jsonify({"status": "error", "message": "Debe agregar al menos un material a la solicitud."}), 400
+        return jsonify({"status": "error", "message": "Debe agregar al menos un ítem a la solicitud."}), 400
 
     conn = get_db_connection()
     if not conn:
@@ -5924,36 +6254,59 @@ def api_admin_requisiciones_crear():
         year = datetime.now().year
         cur.execute("SELECT COUNT(*) as total FROM requisiciones_materiales WHERE YEAR(fecha_solicitud) = %s", (year,))
         count = (cur.fetchone()['total'] or 0) + 1
-        numero_solicitud = f"REQ-{year}-{count:04d}"
+        prefijo = "REQ-EQ" if tipo_req == 'EQUIPOS' else "REQ"
+        numero_solicitud = f"{prefijo}-{year}-{count:04d}"
 
         creado_por = str(user.get('nombre') or user.get('sub') or 'Usuario').strip()
+        requiere_comodato = 1 if data.get('requiere_comodato') in [True, 1, '1', 'true', 'True'] else 0
 
         cur.execute("""
             INSERT INTO requisiciones_materiales (
-                numero_solicitud, placa_vehiculo, nombre_tecnico, id_tecnico,
-                fecha_solicitud, estado, observaciones, creado_por
-            ) VALUES (%s, %s, %s, %s, NOW(), 'PENDIENTE', %s, %s)
-        """, (numero_solicitud, placa, nombre_tecnico, id_tecnico, observaciones, creado_por))
+                numero_solicitud, tipo_requisicion, placa_vehiculo, nombre_tecnico, id_tecnico,
+                fecha_solicitud, estado, observaciones, requiere_comodato, creado_por
+            ) VALUES (%s, %s, %s, %s, %s, NOW(), 'PENDIENTE', %s, %s, %s)
+        """, (numero_solicitud, tipo_req, placa, nombre_tecnico, id_tecnico, observaciones, requiere_comodato, creado_por))
         id_requisicion = cur.lastrowid
 
-        for it in items:
-            id_mat = it.get('id_material')
-            cant = int(it.get('cantidad_solicitada') or 0)
-            if cant <= 0:
-                continue
+        if tipo_req == 'EQUIPOS':
+            for it in items:
+                tipo_eq = str(it.get('tipo_equipo') or it.get('tipo') or 'ONT').strip().upper()
+                modelo = str(it.get('modelo') or it.get('nombre_material') or 'Estándar').strip()
+                cant = int(it.get('cantidad_solicitada') or it.get('cantidad') or 0)
+                if cant <= 0:
+                    continue
 
-            cur.execute("SELECT codigo_material, nombre_material, unidad_medida FROM materiales WHERE id_material = %s", (id_mat,))
-            mat_info = cur.fetchone()
-            if mat_info:
+                if modelo.startswith(f"[{tipo_eq}]") or modelo.startswith('['):
+                    nombre_completo = modelo
+                else:
+                    nombre_completo = f"[{tipo_eq}] {modelo}"
                 cur.execute("""
                     INSERT INTO requisiciones_materiales_items (
                         id_requisicion, id_material, codigo_material, nombre_material,
                         cantidad_solicitada, cantidad_aprobada, unidad_medida
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, NULL, %s, %s, %s, %s, 'UNIDAD')
                 """, (
-                    id_requisicion, id_mat, mat_info['codigo_material'], mat_info['nombre_material'],
-                    cant, cant, mat_info['unidad_medida']
+                    id_requisicion, tipo_eq, nombre_completo, cant, cant
                 ))
+        else:
+            for it in items:
+                id_mat = it.get('id_material')
+                cant = int(it.get('cantidad_solicitada') or 0)
+                if cant <= 0:
+                    continue
+
+                cur.execute("SELECT codigo_material, nombre_material, unidad_medida FROM materiales WHERE id_material = %s", (id_mat,))
+                mat_info = cur.fetchone()
+                if mat_info:
+                    cur.execute("""
+                        INSERT INTO requisiciones_materiales_items (
+                            id_requisicion, id_material, codigo_material, nombre_material,
+                            cantidad_solicitada, cantidad_aprobada, unidad_medida
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        id_requisicion, id_mat, mat_info['codigo_material'], mat_info['nombre_material'],
+                        cant, cant, mat_info['unidad_medida']
+                    ))
 
         conn.commit()
         return jsonify({"status": "ok", "message": f"Solicitud {numero_solicitud} enviada con éxito.", "id_requisicion": id_requisicion, "numero_solicitud": numero_solicitud})
@@ -6050,21 +6403,21 @@ def api_admin_requisiciones_firmar_y_entregar(id_requisicion):
         items = cur.fetchall()
 
         for it in items:
-            id_mat = it['id_material']
-            cant = int(it['cantidad_aprobada'] or 0)
+            id_mat = it.get('id_material')
+            cant = int(it.get('cantidad_aprobada') or 0)
             if cant <= 0:
                 continue
 
-            # Restar de materiales (bodega)
-            cur.execute("UPDATE materiales SET stock_bodega = GREATEST(0, stock_bodega - %s) WHERE id_material = %s", (cant, id_mat))
+            # Si es un material de bodega tradicional (tiene id_material)
+            if id_mat:
+                cur.execute("UPDATE materiales SET stock_bodega = GREATEST(0, stock_bodega - %s) WHERE id_material = %s", (cant, id_mat))
 
-            # Sumar a inventario_tecnicos de la placa
-            cur.execute("SELECT id_inventario, cantidad_disponible FROM inventario_tecnicos WHERE placa_vehiculo = %s AND id_material = %s", (placa, id_mat))
-            inv_row = cur.fetchone()
-            if inv_row:
-                cur.execute("UPDATE inventario_tecnicos SET cantidad_disponible = cantidad_disponible + %s WHERE id_inventario = %s", (cant, inv_row['id_inventario']))
-            else:
-                cur.execute("INSERT INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible) VALUES (%s, %s, %s)", (placa, id_mat, cant))
+                cur.execute("SELECT id_inventario, cantidad_disponible FROM inventario_tecnicos WHERE placa_vehiculo = %s AND id_material = %s", (placa, id_mat))
+                inv_row = cur.fetchone()
+                if inv_row:
+                    cur.execute("UPDATE inventario_tecnicos SET cantidad_disponible = cantidad_disponible + %s WHERE id_inventario = %s", (cant, inv_row['id_inventario']))
+                else:
+                    cur.execute("INSERT INTO inventario_tecnicos (placa_vehiculo, id_material, cantidad_disponible) VALUES (%s, %s, %s)", (placa, id_mat, cant))
 
         cur.execute("""
             UPDATE requisiciones_materiales
@@ -6602,7 +6955,7 @@ def api_admin_calidad_visitas_lista():
         return jsonify({"status": "error", "message": "No autorizado."}), 401
 
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver datos de control de calidad."}), 403
 
     fecha_inicio = request.args.get('fecha_inicio', '')
@@ -6760,7 +7113,7 @@ def api_admin_calidad_visitas_guardar():
         return jsonify({"status": "error", "message": "No autorizado."}), 401
 
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para registrar control de calidad."}), 403
 
     user_name = user.get('nombre') or user.get('usuario') or 'Auditor Calidad'
@@ -7307,4 +7660,4 @@ def api_exportar_equipos_obsoletos():
         conn.close()
 
 
-
+

@@ -8,8 +8,9 @@ export default function AuditoriaAtcTab({ token, user }) {
     return `${year}-${month}-${day}`;
   };
 
+  const isSupervisorOrAdmin = ['ADMIN', 'SUPERVISOR_ATC', 'AUDITOR'].includes((user?.rol || user?.role || '').toUpperCase());
   const [fecha, setFecha] = useState(getTodayLocal());
-  const [filtroAuditor, setFiltroAuditor] = useState('MIS_ASIGNADAS');
+  const [filtroAuditor, setFiltroAuditor] = useState(isSupervisorOrAdmin ? 'TODAS' : 'MIS_ASIGNADAS');
   const [filtroEstado, setFiltroEstado] = useState('');
   const [busqueda, setBusqueda] = useState('');
 
@@ -103,7 +104,8 @@ export default function AuditoriaAtcTab({ token, user }) {
       p6_facilidad: item.p6_facilidad || null,
       respuesta_facilidad: item.respuesta_facilidad || '',
       recomendacion_cliente: item.recomendacion_cliente || '',
-      observaciones: item.observaciones || ''
+      observaciones: item.observaciones || '',
+      justificacion_no_auditar: item.justificacion_no_auditar || ''
     });
     setShowModal(true);
   };
@@ -118,6 +120,12 @@ export default function AuditoriaAtcTab({ token, user }) {
   const handleGuardarAuditoria = async (e) => {
     e.preventDefault();
     if (!ticketActivo) return;
+
+    if (formData.estado_contacto === 'NO_AUDITAR' && !formData.justificacion_no_auditar?.trim()) {
+      alert('Por favor ingrese la justificación o motivo por el cual no se audita esta atención.');
+      return;
+    }
+
     setGuardando(true);
     try {
       const payload = {
@@ -131,7 +139,8 @@ export default function AuditoriaAtcTab({ token, user }) {
         p6_facilidad: formData.estado_contacto === 'CONTESTO' ? formData.p6_facilidad : null,
         respuesta_facilidad: formData.respuesta_facilidad,
         recomendacion_cliente: formData.recomendacion_cliente,
-        observaciones: formData.observaciones
+        observaciones: formData.observaciones,
+        justificacion_no_auditar: formData.estado_contacto === 'NO_AUDITAR' ? formData.justificacion_no_auditar : null
       };
 
       const res = await fetch('/api/atc/auditoria/guardar', {
@@ -221,6 +230,12 @@ export default function AuditoriaAtcTab({ token, user }) {
         return (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', background: 'rgba(107, 114, 128, 0.15)', color: '#9ca3af', border: '1px solid #9ca3af', whiteSpace: 'nowrap' }}>
             ⚪ Fuera Serv.
+          </span>
+        );
+      case 'NO_AUDITAR':
+        return (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', background: 'rgba(100, 116, 139, 0.15)', color: '#64748b', border: '1px solid #94a3b8', whiteSpace: 'nowrap' }}>
+            🚫 No Auditar
           </span>
         );
       default:
@@ -351,6 +366,10 @@ export default function AuditoriaAtcTab({ token, user }) {
                 <span style={{ fontWeight: 'bold' }}>{(contact.equivocados || 0) + (contact.fuera_servicio || 0)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>🚫 No Auditadas:</span>
+                <span style={{ fontWeight: 'bold', color: '#64748b' }}>{contact.no_auditadas || 0}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>⏳ Pendientes de Llamar:</span>
                 <span style={{ fontWeight: 'bold', color: '#3b82f6' }}>{contact.pendientes || 0}</span>
               </div>
@@ -433,23 +452,25 @@ export default function AuditoriaAtcTab({ token, user }) {
       {/* BARRA DE FILTROS Y BÚSQUEDA */}
       <div style={{ background: 'var(--card-bg, #ffffff)', borderRadius: '12px', padding: '14px 18px', border: '1px solid var(--border-color, #e2e8f0)', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         
-        {/* Tabs de Asignación */}
-        <div style={{ display: 'flex', gap: '6px', background: 'var(--hover-bg, #f1f5f9)', padding: '4px', borderRadius: '10px' }}>
-          <button
-            onClick={() => setFiltroAuditor('MIS_ASIGNADAS')}
-            style={{
-              padding: '7px 14px',
-              borderRadius: '8px',
-              border: 'none',
-              fontWeight: 'bold',
-              fontSize: '12px',
-              cursor: 'pointer',
-              background: filtroAuditor === 'MIS_ASIGNADAS' ? '#2563eb' : 'transparent',
-              color: filtroAuditor === 'MIS_ASIGNADAS' ? '#ffffff' : 'inherit'
-            }}
-          >
-            👤 Mis Asignadas ({auditorias.filter(a => a.auditor_asignado === (user?.nombre || '')).length || 0})
-          </button>
+        {/* Tabs de Asignación / Supervisión */}
+        <div style={{ display: 'flex', gap: '6px', background: 'var(--hover-bg, #f1f5f9)', padding: '4px', borderRadius: '10px', flexWrap: 'wrap' }}>
+          {!isSupervisorOrAdmin && (
+            <button
+              onClick={() => setFiltroAuditor('MIS_ASIGNADAS')}
+              style={{
+                padding: '7px 14px',
+                borderRadius: '8px',
+                border: 'none',
+                fontWeight: 'bold',
+                fontSize: '12px',
+                cursor: 'pointer',
+                background: filtroAuditor === 'MIS_ASIGNADAS' ? '#2563eb' : 'transparent',
+                color: filtroAuditor === 'MIS_ASIGNADAS' ? '#ffffff' : 'inherit'
+              }}
+            >
+              👤 Mis Asignadas ({auditorias.filter(a => a.auditor_asignado === (user?.nombre || '')).length || 0})
+            </button>
+          )}
 
           <button
             onClick={() => setFiltroAuditor('TODAS')}
@@ -466,6 +487,41 @@ export default function AuditoriaAtcTab({ token, user }) {
           >
             📋 Todas las del Día
           </button>
+
+          {isSupervisorOrAdmin && (
+            (() => {
+              const auditoresList = metricas?.ranking_auditores?.map(r => r.auditor).filter(Boolean) || [];
+              const finalAuditores = Array.from(new Set(['Andrea Mendoza', 'Jennifer Atancuri', ...auditoresList]));
+              return finalAuditores.map((audNombre, idx) => {
+                const activo = filtroAuditor === audNombre;
+                const ra = metricas?.ranking_auditores?.find(r => r.auditor === audNombre);
+                const totalAud = ra ? ra.total_asignadas : auditorias.filter(a => a.auditor_asignado === audNombre).length;
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => setFiltroAuditor(activo ? 'TODAS' : audNombre)}
+                    style={{
+                      padding: '7px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      fontWeight: 'bold',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      background: activo ? '#9333ea' : 'transparent',
+                      color: activo ? '#ffffff' : 'inherit',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      transition: 'all 0.15s ease'
+                    }}
+                    title={`Ver solo atenciones asignadas a ${audNombre}`}
+                  >
+                    <span>👩‍💼</span> {audNombre.split(' ')[0]} ({totalAud || 0})
+                  </button>
+                );
+              });
+            })()
+          )}
         </div>
 
         {/* Filtros de Estado y Búsqueda */}
@@ -481,6 +537,7 @@ export default function AuditoriaAtcTab({ token, user }) {
             <option value="NO_CONTESTA">🔴 No Contesta</option>
             <option value="NUMERO_EQUIVOCADO">🟡 Número Equivocado</option>
             <option value="FUERA_SERVICIO">⚪ Fuera de Servicio</option>
+            <option value="NO_AUDITAR">🚫 No Auditadas</option>
           </select>
 
           <input
@@ -502,7 +559,7 @@ export default function AuditoriaAtcTab({ token, user }) {
               <th style={{ padding: '12px 14px', minWidth: '180px' }}>Contrato / Cliente</th>
               <th style={{ padding: '12px 14px', minWidth: '170px' }}>Teléfonos</th>
               <th style={{ padding: '12px 14px', minWidth: '140px' }}>Asesor Atendió</th>
-              <th style={{ padding: '12px 14px', minWidth: '140px' }}>Motivo</th>
+              <th style={{ padding: '12px 14px', minWidth: '220px' }}>Motivo / Comentario</th>
               <th style={{ padding: '12px 14px', minWidth: '130px' }}>Auditor Asignado</th>
               <th style={{ padding: '12px 14px', textAlign: 'center', minWidth: '120px', whiteSpace: 'nowrap' }}>Estado</th>
               <th style={{ padding: '12px 14px', textAlign: 'center', minWidth: '90px', whiteSpace: 'nowrap' }}>Nota Global</th>
@@ -606,8 +663,53 @@ export default function AuditoriaAtcTab({ token, user }) {
                       👤 {item.agente_evaluado || 'Call Center'}
                     </td>
 
-                    <td style={{ padding: '12px 14px', color: 'var(--text-muted, #475569)' }}>
-                      {item.motivo_atencion || 'Soporte Técnico'}
+                    <td style={{ padding: '12px 14px', maxWidth: '300px' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '12px', color: 'var(--text-main, #1e293b)' }}>
+                        {item.motivo_atencion || 'Soporte Técnico'}
+                      </div>
+                      {item.accion_atencion && (
+                        <div style={{ fontSize: '10.5px', color: '#2563eb', fontWeight: '600', marginTop: '2px' }}>
+                          ⚡ {item.accion_atencion} {item.medio_contacto_atencion ? `(${item.medio_contacto_atencion})` : ''}
+                        </div>
+                      )}
+                      {item.observacion_atencion && (
+                        <div 
+                          title={item.observacion_atencion}
+                          style={{ 
+                            fontSize: '11px', 
+                            color: 'var(--text-muted, #475569)', 
+                            background: 'var(--hover-bg, #f8fafc)', 
+                            border: '1px solid var(--border-color, #e2e8f0)', 
+                            borderRadius: '6px', 
+                            padding: '4px 7px', 
+                            marginTop: '4px',
+                            lineHeight: '1.3',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 3,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          💬 <em>"{item.observacion_atencion}"</em>
+                        </div>
+                      )}
+                      {item.estado_contacto === 'NO_AUDITAR' && item.justificacion_no_auditar && (
+                        <div 
+                          title={item.justificacion_no_auditar}
+                          style={{ 
+                            fontSize: '11px', 
+                            color: '#b91c1c', 
+                            background: '#fef2f2', 
+                            border: '1px solid #fecaca', 
+                            borderRadius: '6px', 
+                            padding: '4px 7px', 
+                            marginTop: '4px',
+                            lineHeight: '1.3'
+                          }}
+                        >
+                          🚫 <strong>Justificación:</strong> {item.justificacion_no_auditar}
+                        </div>
+                      )}
                     </td>
 
                     <td style={{ padding: '12px 14px' }}>
@@ -637,7 +739,11 @@ export default function AuditoriaAtcTab({ token, user }) {
                           padding: '6px 12px',
                           borderRadius: '8px',
                           border: 'none',
-                          background: item.estado_contacto === 'PENDIENTE' ? '#2563eb' : '#475569',
+                          background: item.estado_contacto === 'PENDIENTE' 
+                            ? '#2563eb' 
+                            : item.estado_contacto === 'NO_AUDITAR'
+                            ? '#64748b'
+                            : '#059669',
                           color: '#ffffff',
                           fontWeight: 'bold',
                           fontSize: '11px',
@@ -648,7 +754,11 @@ export default function AuditoriaAtcTab({ token, user }) {
                           whiteSpace: 'nowrap'
                         }}
                       >
-                        {item.estado_contacto === 'PENDIENTE' ? '📞 Auditar' : '✏️ Editar'}
+                        {item.estado_contacto === 'PENDIENTE' 
+                          ? '📞 Auditar' 
+                          : item.estado_contacto === 'NO_AUDITAR'
+                          ? '🚫 Ver / Editar'
+                          : '✏️ Editar'}
                       </button>
                     </td>
                   </tr>
@@ -686,18 +796,74 @@ export default function AuditoriaAtcTab({ token, user }) {
               </button>
             </div>
 
+            {/* Tarjeta de Información de la Atención Registrada por Call Center */}
+            <div style={{ 
+              background: 'linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%)', 
+              border: '1px solid #bfdbfe', 
+              borderRadius: '12px', 
+              padding: '12px 16px', 
+              marginBottom: '18px' 
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: '#1e40af', letterSpacing: '0.5px' }}>
+                  📋 Detalle de la Atención Registrada
+                </div>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  {ticketActivo.hora_atencion && (
+                    <span style={{ fontSize: '11px', background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '6px', fontWeight: '600' }}>
+                      🕒 {ticketActivo.hora_atencion}
+                    </span>
+                  )}
+                  {ticketActivo.medio_contacto_atencion && (
+                    <span style={{ fontSize: '11px', background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '6px', fontWeight: '600' }}>
+                      📡 {ticketActivo.medio_contacto_atencion}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', fontSize: '12px', marginBottom: '10px' }}>
+                <div>
+                  <span style={{ color: '#64748b' }}>Motivo: </span>
+                  <strong style={{ color: '#0f172a' }}>{ticketActivo.motivo_atencion || 'N/A'}</strong>
+                </div>
+                <div>
+                  <span style={{ color: '#64748b' }}>Acción: </span>
+                  <strong style={{ color: '#0f172a' }}>{ticketActivo.accion_atencion || 'N/A'}</strong>
+                </div>
+              </div>
+
+              {/* Comentario / Observación de la Atención */}
+              <div style={{ 
+                background: '#ffffff', 
+                border: '1px solid #cbd5e1', 
+                borderRadius: '8px', 
+                padding: '9px 12px', 
+                fontSize: '12px', 
+                color: '#1e293b' 
+              }}>
+                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  💬 Comentario del Asesor ({ticketActivo.agente_evaluado}):
+                </div>
+                <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.4', fontStyle: ticketActivo.observacion_atencion ? 'normal' : 'italic', color: ticketActivo.observacion_atencion ? '#0f172a' : '#94a3b8' }}>
+                  {ticketActivo.observacion_atencion || 'Sin comentario u observación registrada en la atención original.'}
+                </div>
+              </div>
+            </div>
+
             <form onSubmit={handleGuardarAuditoria}>
               {/* Selector de Estado de Llamada */}
               <div style={{ marginBottom: '18px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '6px' }}>
-                  RESULTADO DE LA LLAMADA:
+                  RESULTADO DE LA LLAMADA / ACCIÓN:
                 </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))', gap: '8px' }}>
                   {[
                     { id: 'CONTESTO', label: '🟢 Contestó', desc: 'Realizó Encuesta' },
                     { id: 'NO_CONTESTA', label: '🔴 No Contesta', desc: 'Sin Respuesta' },
                     { id: 'NUMERO_EQUIVOCADO', label: '🟡 Equivocado', desc: 'No Corresponde' },
-                    { id: 'FUERA_SERVICIO', label: '⚪ Fuera Serv.', desc: 'Apagado' }
+                    { id: 'FUERA_SERVICIO', label: '⚪ Fuera Serv.', desc: 'Apagado' },
+                    { id: 'NO_AUDITAR', label: '🚫 No Auditar', desc: 'Excluir / Descartar' }
                   ].map((st) => (
                     <button
                       key={st.id}
@@ -721,6 +887,38 @@ export default function AuditoriaAtcTab({ token, user }) {
                   ))}
                 </div>
               </div>
+
+              {/* Si se marca NO AUDITAR, mostrar campo de justificación obligatorio */}
+              {formData.estado_contacto === 'NO_AUDITAR' && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', padding: '16px', marginBottom: '18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '18px' }}>🚫</span>
+                    <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#991b1b' }}>
+                      JUSTIFICACIÓN DE NO AUDITAR (Obligatorio):
+                    </label>
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#7f1d1d', marginBottom: '8px' }}>
+                    Indique la razón por la cual no se audita esta atención (por ejemplo: ya se coordinó visita técnica previa, reclamo resuelto internamente, trámite repetido, cliente conflictivo, etc.). Puede ser un comentario corto o detallado.
+                  </div>
+                  <textarea
+                    rows="3"
+                    required
+                    placeholder="Escriba aquí la justificación clara..."
+                    value={formData.justificacion_no_auditar || ''}
+                    onChange={(e) => setFormData({ ...formData, justificacion_no_auditar: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #f87171',
+                      background: '#ffffff',
+                      color: '#0f172a',
+                      fontSize: '12.5px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              )}
 
               {/* Si contestó, desplegar las 6 preguntas */}
               {formData.estado_contacto === 'CONTESTO' && (

@@ -1,12 +1,17 @@
 package com.futurity.app;
 
 import android.Manifest;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.Settings;
 import android.util.Log;
 import android.webkit.CookieManager;
@@ -25,7 +30,11 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+
+import java.io.File;
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -322,14 +331,54 @@ public class MainActivity extends AppCompatActivity {
     public class WebAppInterface {
         @JavascriptInterface
         public void startGlobalTracking(String tecnicoNombre, String serverUrl) {
-            Log.d(TAG, "JS triggered startGlobalTracking: " + tecnicoNombre + ", URL: " + serverUrl);
-            runOnUiThread(() -> startGlobalTrackingService(tecnicoNombre, serverUrl));
+            startGlobalTracking(tecnicoNombre, serverUrl, "");
+        }
+
+        @JavascriptInterface
+        public void startGlobalTracking(String tecnicoNombre, String serverUrl, String token) {
+            Log.d(TAG, "JS triggered startGlobalTracking: " + tecnicoNombre + ", URL: " + serverUrl + ", hasToken: " + (token != null && !token.isEmpty()));
+            runOnUiThread(() -> startGlobalTrackingService(tecnicoNombre, serverUrl, token));
+        }
+
+        @JavascriptInterface
+        public String getDeviceInfo() {
+            try {
+                JSONObject obj = new JSONObject();
+                String deviceId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
+                String model = Build.MANUFACTURER + " " + Build.MODEL;
+                int currentVersionCode = 3;
+                String currentVersionName = "1.2.0";
+                try {
+                    currentVersionCode = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+                    currentVersionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+                } catch (Exception ignored) {}
+
+                obj.put("device_id", deviceId);
+                obj.put("model", model);
+                obj.put("android_version", "Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")");
+                obj.put("version_code", currentVersionCode);
+                obj.put("version_name", currentVersionName);
+                return obj.toString();
+            } catch (Exception e) {
+                return "{}";
+            }
+        }
+
+        @JavascriptInterface
+        public void downloadAndInstallUpdate(String apkUrl) {
+            Log.d(TAG, "downloadAndInstallUpdate requested for URL: " + apkUrl);
+            runOnUiThread(() -> startApkDownloadAndInstall(apkUrl));
         }
 
         @JavascriptInterface
         public void startTracking(String idVisita, String serverUrl) {
-            Log.d(TAG, "JS triggered startTracking: " + idVisita + ", URL: " + serverUrl);
-            runOnUiThread(() -> startTrackingService(idVisita, serverUrl));
+            startTracking(idVisita, serverUrl, "", "");
+        }
+
+        @JavascriptInterface
+        public void startTracking(String idVisita, String serverUrl, String token, String tecnicoNombre) {
+            Log.d(TAG, "JS triggered startTracking: " + idVisita + ", URL: " + serverUrl + ", tecnico: " + tecnicoNombre);
+            runOnUiThread(() -> startTrackingService(idVisita, serverUrl, token, tecnicoNombre));
         }
 
         @JavascriptInterface
@@ -511,6 +560,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void startGlobalTrackingService(String tecnicoNombre, String serverUrl) {
+        startGlobalTrackingService(tecnicoNombre, serverUrl, "");
+    }
+
+    public void startGlobalTrackingService(String tecnicoNombre, String serverUrl, String token) {
         checkBatteryOptimizations();
         
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -518,9 +571,20 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        String deviceId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
+        String deviceModel = Build.MANUFACTURER + " " + Build.MODEL;
+        String versionName = "1.2.0";
+        try {
+            versionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception ignored) {}
+
         Intent serviceIntent = new Intent(this, LocationService.class);
         serviceIntent.putExtra("tecnico_nombre", tecnicoNombre);
         serviceIntent.putExtra("server_url", serverUrl);
+        serviceIntent.putExtra("auth_token", token);
+        serviceIntent.putExtra("device_id", deviceId);
+        serviceIntent.putExtra("device_model", deviceModel);
+        serviceIntent.putExtra("version_app", versionName);
         serviceIntent.putExtra("id_visita", "");
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -528,10 +592,95 @@ public class MainActivity extends AppCompatActivity {
         } else {
             startService(serviceIntent);
         }
-        Log.d(TAG, "Global foreground location service started for tecnico: " + tecnicoNombre);
+        Log.d(TAG, "Global foreground location service started for tecnico: " + tecnicoNombre + ", deviceId: " + deviceId);
+    }
+
+    private void startApkDownloadAndInstall(String apkUrl) {
+        try {
+            if (apkUrl == null || apkUrl.isEmpty()) return;
+            String fullUrl = apkUrl;
+            if (apkUrl.startsWith("/")) {
+                String baseUrl = getString(R.string.server_url);
+                fullUrl = (baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl) + apkUrl;
+            }
+
+            Toast.makeText(this, "Descargando actualización en segundo plano...", Toast.LENGTH_LONG).show();
+
+            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(fullUrl));
+            request.setTitle("Actualización Futurity Atlas");
+            request.setDescription("Descargando nueva versión...");
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+
+            File destination = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "futurity_update.apk");
+            if (destination.exists()) {
+                destination.delete();
+            }
+            request.setDestinationUri(Uri.fromFile(destination));
+
+            final DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+            if (dm != null) {
+                final long downloadId = dm.enqueue(request);
+
+                BroadcastReceiver onComplete = new BroadcastReceiver() {
+                    @Override
+                    public void onReceive(Context context, Intent intent) {
+                        long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+                        if (id == downloadId) {
+                            try {
+                                unregisterReceiver(this);
+                            } catch (Exception ignored) {}
+
+                            launchApkInstaller(destination);
+                        }
+                    }
+                };
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    registerReceiver(onComplete, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED);
+                } else {
+                    registerReceiver(onComplete, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error starting APK download: " + e.getMessage(), e);
+            try {
+                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl));
+                startActivity(browserIntent);
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private void launchApkInstaller(File apkFile) {
+        try {
+            if (!apkFile.exists()) {
+                Toast.makeText(this, "Error: archivo de instalación no encontrado.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            Intent installIntent = new Intent(Intent.ACTION_VIEW);
+            installIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                Uri contentUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", apkFile);
+                installIntent.setDataAndType(contentUri, "application/vnd.android.package-archive");
+                installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } else {
+                installIntent.setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive");
+            }
+
+            Toast.makeText(this, "Instalando actualización...", Toast.LENGTH_SHORT).show();
+            startActivity(installIntent);
+        } catch (Exception e) {
+            Log.e(TAG, "Error launching APK installer: " + e.getMessage(), e);
+            Toast.makeText(this, "Error al abrir instalador: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     public void startTrackingService(String idVisita, String serverUrl) {
+        startTrackingService(idVisita, serverUrl, "", "");
+    }
+
+    public void startTrackingService(String idVisita, String serverUrl, String token, String tecnicoNombre) {
         checkBatteryOptimizations();
         
         // Double check permissions
@@ -540,16 +689,28 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        String deviceId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
+        String deviceModel = Build.MANUFACTURER + " " + Build.MODEL;
+        String versionName = "1.2.0";
+        try {
+            versionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception ignored) {}
+
         Intent serviceIntent = new Intent(this, LocationService.class);
         serviceIntent.putExtra("id_visita", idVisita);
         serviceIntent.putExtra("server_url", serverUrl);
+        serviceIntent.putExtra("auth_token", token);
+        serviceIntent.putExtra("tecnico_nombre", tecnicoNombre);
+        serviceIntent.putExtra("device_id", deviceId);
+        serviceIntent.putExtra("device_model", deviceModel);
+        serviceIntent.putExtra("version_app", versionName);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent);
         } else {
             startService(serviceIntent);
         }
-        Log.d(TAG, "Foreground location service started from WebView trigger");
+        Log.d(TAG, "Foreground location service started for visita: " + idVisita + ", tecnico: " + tecnicoNombre);
     }
 
     public void stopTrackingService() {

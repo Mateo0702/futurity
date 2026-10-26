@@ -487,16 +487,42 @@ export default function EquiposBodegaTab({ token: tokenProp } = {}) {
   };
 
   const handleEliminarEquipo = async (id, sn) => {
-    if (!window.confirm(`¿Estás seguro de eliminar el equipo con serial "${sn}"?`)) return;
+    if (!window.confirm(`¿Estás seguro de eliminar el registro del equipo con serial "${sn}"? Esta acción solo es para registros en Bodega Central.`)) return;
     try {
-      await fetch(`/api/equipos/${id}`, {
+      const res = await fetch(`/api/equipos/${id}`, {
         method: 'DELETE',
         headers: getAuthHeaders()
       });
-      cargarResumen();
-      cargarEquipos();
+      const data = await res.json();
+      if (data?.status === 'ok') {
+        cargarResumen();
+        cargarEquipos();
+      } else {
+        alert(`❌ ${data?.message || 'Error eliminando equipo'}`);
+      }
     } catch (e) {
-      alert('Error eliminando equipo');
+      alert(`❌ Error eliminando equipo: ${e.message}`);
+    }
+  };
+
+  const handleRegresarABodega = async (eq) => {
+    const ubicacion = eq.ubicacion_placa ? `la buseta [${eq.ubicacion_placa}]` : 'el vehículo asignado';
+    if (!window.confirm(`¿Confirmas que el equipo "${eq.numero_serie}" (${eq.modelo || 'Equipo'}) fue devuelto físicamente desde ${ubicacion} a Bodega Central?`)) return;
+    try {
+      const res = await fetch(`/api/equipos/${eq.id_equipo}/regresar_bodega`, {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' })
+      });
+      const data = await res.json();
+      if (data?.status === 'ok') {
+        alert(`📥 ${data.message || 'Equipo devuelto a Bodega Central exitosamente.'}`);
+        cargarResumen();
+        cargarEquipos();
+      } else {
+        alert(`❌ ${data?.message || 'Error al retornar equipo a bodega'}`);
+      }
+    } catch (e) {
+      alert(`❌ Error al retornar equipo: ${e.message}`);
     }
   };
 
@@ -879,11 +905,38 @@ export default function EquiposBodegaTab({ token: tokenProp } = {}) {
                           Recibido por {eq.recibido_por || 'Bodega'}
                         </span>
                       )
+                    ) : eq.estado === 'EN_VEHICULO' ? (
+                      <button
+                        type="button"
+                        onClick={() => handleRegresarABodega(eq)}
+                        style={{
+                          padding: '5px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(59, 130, 246, 0.4)',
+                          background: 'rgba(59, 130, 246, 0.12)',
+                          color: '#3b82f6',
+                          fontWeight: 700,
+                          fontSize: '0.74rem',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          whiteSpace: 'nowrap',
+                          transition: 'all 0.2s ease'
+                        }}
+                        title={`Retornar este equipo a Bodega Central desde ${eq.ubicacion_placa || 'el vehículo'}`}
+                      >
+                        <i className="fa-solid fa-arrow-rotate-left"></i> Regresar a Bodega
+                      </button>
+                    ) : eq.estado === 'INSTALADO_CLIENTE' ? (
+                      <span style={{ color: 'var(--sidebar-text)', fontSize: '0.74rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <i className="fa-solid fa-lock" style={{ opacity: 0.6 }}></i> En Cliente
+                      </span>
                     ) : (
                       <button
                         onClick={() => handleEliminarEquipo(eq.id_equipo, eq.numero_serie)}
                         style={{ padding: '4px 8px', background: 'none', border: 'none', color: 'var(--sidebar-text)', cursor: 'pointer', borderRadius: '6px' }}
-                        title="Eliminar registro"
+                        title="Eliminar registro de bodega"
                       >
                         <i className="fa-solid fa-trash-can" style={{ color: '#ef4444' }}></i>
                       </button>

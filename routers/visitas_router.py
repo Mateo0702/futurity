@@ -29,7 +29,7 @@ def registrar_visita():
     # Protección de sesión y rol
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC']:
+    if session.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'ATC_AUDITOR']:
         flash('No tienes permiso para registrar visitas.', 'danger')
         return redirect(url_for('dashboard'))
 
@@ -148,6 +148,27 @@ def registrar_visita():
         conexion = get_db_connection()
         cursor = conexion.cursor()
  
+        # Protección contra doble clic / duplicación inmediata (< 30 segundos)
+        cursor_check = conexion.cursor(dictionary=True)
+        cursor_check.execute("""
+            SELECT id_visita FROM visitas_tecnicas
+            WHERE cliente = %s 
+              AND (contrato = %s OR (contrato IS NULL AND %s IS NULL))
+              AND problema = %s 
+              AND fecha_programada = %s 
+              AND fecha_registro >= DATE_SUB(NOW(), INTERVAL 30 SECOND)
+            ORDER BY id_visita DESC
+            LIMIT 1
+        """, (cliente, contrato, contrato, problema, fecha_programada))
+        duplicado_reciente = cursor_check.fetchone()
+        cursor_check.close()
+        if duplicado_reciente:
+            return jsonify({
+                "status": "success",
+                "message": "Visita ya registrada previamente.",
+                "id_visita": duplicado_reciente['id_visita']
+            }), 200
+
         # Añadimos los campos ventana_inicio_min y ventana_fin_min al INSERT
         query = """
             INSERT INTO visitas_tecnicas 
@@ -192,31 +213,49 @@ def buscar_cliente(contrato):
         query_val = contrato.strip()
         empresa = request.args.get('empresa', '').strip().upper()
 
-        query_contrato_f = query_val if query_val.upper().endswith('F') else (query_val + 'F')
-        query_contrato_plain = query_val[:-1] if query_val.upper().endswith('F') else query_val
-
         from utils import MAPEO_NODOS
-        # Buscar por Contrato directo, Cédula o Contrato Fibracom
-        query = """
+        query_base = """
             SELECT contrato, cedula, empresa, nombre_cliente, zona, telefono1, telefono2, telefono3,
                    COALESCE(direccion, '') AS direccion, producto, velocidad_mbps, ip_cliente, ip_nodo,
                    numero_serie, estado, forma_pago, total_mensual, antiguedad, fecha_instalacion,
                    modelo_ont, router_principal, router_secundario, tipo_mesh,
                    cantidad_routers, modo_acceso
             FROM directorio_clientes 
-            WHERE contrato = %s 
-               OR contrato = %s 
-               OR contrato = %s 
-               OR cedula = %s
         """
-        cursor.execute(query, (query_val, query_contrato_f, query_contrato_plain, query_val))
-        rows = cursor.fetchall()
-        
-        # Si se filtró por empresa en el frontend, priorizar/filtrar si aplica
-        if empresa and len(rows) > 1:
-            empresa_rows = [r for r in rows if (r.get('empresa') or '').upper() == empresa]
-            if empresa_rows:
-                rows = empresa_rows
+
+        is_cedula = len(query_val) >= 10 and query_val.isdigit()
+
+        if is_cedula:
+            cursor.execute(query_base + " WHERE cedula = %s", (query_val,))
+            rows = cursor.fetchall()
+            if empresa and len(rows) > 1:
+                empresa_rows = [r for r in rows if (r.get('empresa') or '').upper() == empresa]
+                if empresa_rows:
+                    rows = empresa_rows
+        else:
+            if empresa == 'FIBRACOM':
+                target = query_val if query_val.upper().endswith('F') else (query_val + 'F')
+                alt_target = query_val[:-1] if query_val.upper().endswith('F') else query_val
+            elif empresa == 'SERVICABLE':
+                target = query_val[:-1] if query_val.upper().endswith('F') else query_val
+                alt_target = query_val if query_val.upper().endswith('F') else (query_val + 'F')
+            else:
+                target = query_val
+                alt_target = (query_val + 'F') if not query_val.upper().endswith('F') else query_val[:-1]
+
+            # 1. Búsqueda exacta por contrato
+            cursor.execute(query_base + " WHERE contrato = %s", (target,))
+            rows = cursor.fetchall()
+
+            # 2. Si no se encontró por contrato exacto, probar variante (con o sin F)
+            if not rows and alt_target != target:
+                cursor.execute(query_base + " WHERE contrato = %s", (alt_target,))
+                rows = cursor.fetchall()
+
+            # 3. Si aún no se encuentra, probar por cédula
+            if not rows:
+                cursor.execute(query_base + " WHERE cedula = %s", (query_val,))
+                rows = cursor.fetchall()
 
         def format_cliente_payload(row):
             tel1 = str(row['telefono1']).strip() if row.get('telefono1') else ""
@@ -290,7 +329,7 @@ def reagendar_visita(id_visita):
     usuario = obtener_usuario_visitas()
     if not usuario:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes permiso para reagendar visitas."}), 403
 
     nueva_fecha = request.form.get('nueva_fecha', '').strip()
@@ -364,7 +403,7 @@ def cancelar_visita(id_visita):
     usuario = obtener_usuario_visitas()
     if not usuario:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes permiso para cancelar visitas."}), 403
     
     estado_cancelacion = request.form.get('estado_cancelacion')
@@ -398,7 +437,7 @@ def reasignar_tecnicos(id_visita):
     usuario = obtener_usuario_visitas()
     if not usuario:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes permiso para reasignar técnicos."}), 403
     
     nuevo_principal = request.form.get('tecnico_principal')
@@ -489,4 +528,4 @@ def crear_cambio_fo():
     finally:
         cursor.close()
         conexion.close()
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('dashboard'))

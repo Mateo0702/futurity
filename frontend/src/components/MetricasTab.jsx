@@ -15,17 +15,50 @@ function MetricasTab({ token, user }) {
     return formatLocalIso(ago);
   };
 
+  const role = user?.rol || user?.role || 'ASESOR';
+
   // State filters
   const [desde, setDesde] = useState(getThreeMonthsAgoIso());
   const [hasta, setHasta] = useState(getTodayIso());
   const [tecnico, setTecnico] = useState('TODOS');
   const [tecnicosList, setTecnicosList] = useState([]);
+  const [tipoGraficaVisitas, setTipoGraficaVisitas] = useState('problemas'); // 'problemas' | 'soluciones'
 
-  // Subtab navigation
+  // Subtab navigation - Default to calidad-atc for SUPERVISOR_ATC
   const [subTab, setSubTab] = useState(() => {
+    if (user?.rol === 'SUPERVISOR_ATC' || user?.role === 'SUPERVISOR_ATC') return 'calidad-atc';
     if (user?.rol === 'CALIDAD' || user?.role === 'CALIDAD') return 'tiempos';
     return 'visitas';
-  }); // 'visitas', 'atenciones', 'tiempos', 'modernizacion'
+  }); // 'visitas', 'atenciones', 'tiempos', 'modernizacion', 'calidad-atc'
+
+  // Call Center Advisor filter & data states
+  const [asesorAtc, setAsesorAtc] = useState('TODOS');
+  const [dataCalidadAtc, setDataCalidadAtc] = useState(null);
+
+  // Quick Date Range Helper
+  const handleQuickDate = (period) => {
+    const now = new Date();
+    if (period === 'este-mes') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      setDesde(formatLocalIso(start));
+      setHasta(getTodayIso());
+    } else if (period === 'mes-anterior') {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 0);
+      setDesde(formatLocalIso(start));
+      setHasta(formatLocalIso(end));
+    } else if (period === '30-dias') {
+      const start = new Date();
+      start.setDate(start.getDate() - 30);
+      setDesde(formatLocalIso(start));
+      setHasta(getTodayIso());
+    } else if (period === '90-dias') {
+      const start = new Date();
+      start.setDate(start.getDate() - 90);
+      setDesde(formatLocalIso(start));
+      setHasta(getTodayIso());
+    }
+  };
 
   // Loading states
   const [loading, setLoading] = useState(false);
@@ -41,9 +74,10 @@ function MetricasTab({ token, user }) {
 
   // Audit (Timeline) states
   const [contratoAudit, setContratoAudit] = useState('');
-  const [auditDesde, setAuditDesde] = useState(getThreeMonthsAgoIso());
-  const [auditHasta, setAuditHasta] = useState(getTodayIso());
+  const [auditDesde, setAuditDesde] = useState('');
+  const [auditHasta, setAuditHasta] = useState('');
   const [auditResults, setAuditResults] = useState(null); // original array
+  const [auditFiltroTipo, setAuditFiltroTipo] = useState('todos'); // 'todos', 'visitas', 'atenciones'
 
   // Chart references
   const chartsRef = useRef({});
@@ -65,10 +99,17 @@ function MetricasTab({ token, user }) {
   const canvasModernizacionDoughnutRef = useRef(null);
   const canvasModernizacionBarrasRef = useRef(null);
 
+  // Calidad ATC canvas refs
+  const canvasAtcRankingRef = useRef(null);
+  const canvasAtcRadarRef = useRef(null);
+  const canvasAtcEvolucionRef = useRef(null);
+  const canvasAtcContactRef = useRef(null);
+  const canvasAtcAuditoresRef = useRef(null);
+
   // Fetch metrics data when filters change or subtab switches
   useEffect(() => {
     fetchMetrics();
-  }, [desde, hasta, tecnico, subTab]);
+  }, [desde, hasta, tecnico, subTab, asesorAtc]);
 
   // Clean up charts on unmount
   useEffect(() => {
@@ -147,6 +188,18 @@ function MetricasTab({ token, user }) {
           setDataModernizacion(dataM);
           setTimeout(() => {
             renderModernizacionCharts(dataM);
+          }, 150);
+        }
+      } else if (subTab === 'calidad-atc') {
+        // Fetch Calidad Call Center (Auditoría ATC) metrics
+        const res = await fetch(`/api/atc/auditoria/metricas?fecha_inicio=${desde}&fecha_fin=${hasta}&asesor=${encodeURIComponent(asesorAtc)}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const dataC = await res.json();
+        if (dataC.status === 'ok') {
+          setDataCalidadAtc(dataC);
+          setTimeout(() => {
+            renderCalidadAtcCharts(dataC);
           }, 150);
         }
       }
@@ -251,7 +304,369 @@ function MetricasTab({ token, user }) {
     }
   };
 
-  // Render Visitas (VT) Charts
+  // Render Calidad Call Center (Auditoría ATC) Charts
+  const renderCalidadAtcCharts = (data) => {
+    if (!window.Chart || !data) return;
+    const isDark = document.body.classList.contains('dark-mode');
+    const textColor = isDark ? '#f8fafc' : '#64748b';
+    const gridColor = isDark ? '#334155' : '#e2e8f0';
+
+    const getShortName = (name = '') => {
+      if (name.includes('Quezada') || name.includes('Guissella')) return 'Guissella Q.';
+      if (name.includes('Mateo')) return 'Mateo S.';
+      if (name.includes('Luis')) return 'Luis S.';
+      return name.replace('CC. ', '');
+    };
+
+    // 1. Bar Chart: Ranking Comparativo Asesores (Notas y Volumen)
+    if (canvasAtcRankingRef.current && Array.isArray(data.ranking_asesores)) {
+      const ctx = canvasAtcRankingRef.current.getContext('2d');
+      const asesores = data.ranking_asesores;
+      chartsRef.current.atcRanking = new window.Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: asesores.map(a => getShortName(a.agente)),
+          datasets: [
+            {
+              label: 'Nota Promedio (/10)',
+              data: asesores.map(a => a.promedio_total || 0),
+              backgroundColor: 'rgba(139, 92, 246, 0.85)',
+              borderColor: '#8b5cf6',
+              borderWidth: 1,
+              borderRadius: 8,
+              yAxisID: 'y'
+            },
+            {
+              label: 'Llamadas Evaluadas',
+              data: asesores.map(a => a.total_evaluadas || 0),
+              backgroundColor: 'rgba(16, 185, 129, 0.75)',
+              borderColor: '#10b981',
+              borderWidth: 1,
+              borderRadius: 8,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { color: textColor, font: { family: 'Inter', weight: 600 } }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  if (ctx.datasetIndex === 0) return ` Nota: ${ctx.raw} / 10`;
+                  return ` Evaluadas: ${ctx.raw} llamadas`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: textColor, font: { family: 'Inter', weight: 700 } }
+            },
+            y: {
+              type: 'linear',
+              display: true,
+              position: 'left',
+              min: 0,
+              max: 10,
+              grid: { color: gridColor },
+              ticks: { color: textColor, font: { family: 'Inter', size: 10 } },
+              title: { display: true, text: 'Nota Calidad', color: textColor, font: { size: 11, weight: 700 } }
+            },
+            y1: {
+              type: 'linear',
+              display: true,
+              position: 'right',
+              beginAtZero: true,
+              grid: { drawOnChartArea: false },
+              ticks: { color: textColor, font: { family: 'Inter', size: 10 } },
+              title: { display: true, text: 'N° Evaluadas', color: textColor, font: { size: 11, weight: 700 } }
+            }
+          }
+        }
+      });
+    }
+
+    // 2. Radar Chart: Competencias P1 a P6 por Asesor
+    if (canvasAtcRadarRef.current && Array.isArray(data.ranking_asesores)) {
+      const ctx = canvasAtcRadarRef.current.getContext('2d');
+      const radarLabels = ['P1 Claridad', 'P2 Amabilidad', 'P3 Rapidez', 'P4 Efectividad', 'P5 Satisfacción', 'P6 Facilidad'];
+      
+      const colors = [
+        { border: '#ec4899', bg: 'rgba(236, 72, 153, 0.2)' },
+        { border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.2)' },
+        { border: '#10b981', bg: 'rgba(16, 185, 129, 0.2)' },
+        { border: '#f59e0b', bg: 'rgba(245, 158, 11, 0.2)' }
+      ];
+
+      const datasets = data.ranking_asesores.map((a, idx) => {
+        const c = colors[idx % colors.length];
+        return {
+          label: getShortName(a.agente),
+          data: [
+            a.p1_claridad || 0,
+            a.p2_amabilidad || 0,
+            a.p3_rapidez || 0,
+            a.p4_efectividad || 0,
+            a.p5_satisfaccion || 0,
+            a.p6_facilidad || 0
+          ],
+          borderColor: c.border,
+          backgroundColor: c.bg,
+          borderWidth: 2,
+          pointBackgroundColor: c.border,
+          pointRadius: 3
+        };
+      });
+
+      chartsRef.current.atcRadar = new window.Chart(ctx, {
+        type: 'radar',
+        data: {
+          labels: radarLabels,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { color: textColor, font: { family: 'Inter', weight: 600, size: 11 } }
+            }
+          },
+          scales: {
+            r: {
+              min: 0,
+              max: 10,
+              ticks: { stepSize: 2, color: textColor, backdropColor: 'transparent', font: { size: 9 } },
+              grid: { color: gridColor },
+              angleLines: { color: gridColor },
+              pointLabels: { color: textColor, font: { family: 'Inter', size: 11, weight: 700 } }
+            }
+          }
+        }
+      });
+    }
+
+    // 3. Line Chart: Evolución Temporal
+    if (canvasAtcEvolucionRef.current && Array.isArray(data.evolucion_diaria)) {
+      const ctx = canvasAtcEvolucionRef.current.getContext('2d');
+      const evo = data.evolucion_diaria;
+      chartsRef.current.atcEvolucion = new window.Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: evo.map(e => {
+            const parts = e.fecha.split('-');
+            return parts.length === 3 ? `${parts[2]}/${parts[1]}` : e.fecha;
+          }),
+          datasets: [
+            {
+              label: 'Nota Promedio Diaria',
+              data: evo.map(e => e.promedio_dia),
+              borderColor: '#8b5cf6',
+              backgroundColor: 'rgba(139, 92, 246, 0.1)',
+              borderWidth: 2.5,
+              tension: 0.3,
+              fill: false,
+              pointRadius: 3,
+              pointHoverRadius: 6,
+              yAxisID: 'y'
+            },
+            {
+              label: 'Llamadas Auditadas',
+              data: evo.map(e => e.total_evaluadas),
+              borderColor: '#38bdf8',
+              backgroundColor: 'rgba(56, 189, 248, 0.25)',
+              borderWidth: 1.5,
+              fill: true,
+              tension: 0.3,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { color: textColor, font: { family: 'Inter', weight: 600 } }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: gridColor },
+              ticks: { color: textColor, font: { family: 'Inter', size: 10 } }
+            },
+            y: {
+              type: 'linear',
+              position: 'left',
+              min: 0,
+              max: 10,
+              grid: { color: gridColor },
+              ticks: { color: textColor, font: { family: 'Inter', size: 10 } },
+              title: { display: true, text: 'Nota Promedio', color: textColor, font: { size: 11, weight: 700 } }
+            },
+            y1: {
+              type: 'linear',
+              position: 'right',
+              beginAtZero: true,
+              grid: { drawOnChartArea: false },
+              ticks: { color: textColor, font: { family: 'Inter', size: 10 } },
+              title: { display: true, text: 'Auditadas', color: textColor, font: { size: 11, weight: 700 } }
+            }
+          }
+        }
+      });
+    }
+
+    // 4. Doughnut Chart: Contactabilidad
+    if (canvasAtcContactRef.current && data.contactabilidad) {
+      const ctx = canvasAtcContactRef.current.getContext('2d');
+      const c = data.contactabilidad;
+      chartsRef.current.atcContact = new window.Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Contestó (Auditada)', 'No Contesta', 'No Auditar (Descarte)', 'Equivocado / Fuera Serv.', 'Pendientes'],
+          datasets: [{
+            data: [
+              c.contestaron || 0,
+              c.no_contestaron || 0,
+              c.no_auditadas || 0,
+              (c.equivocados || 0) + (c.fuera_servicio || 0),
+              c.pendientes || 0
+            ],
+            backgroundColor: ['#10b981', '#f59e0b', '#64748b', '#ef4444', '#cbd5e1'],
+            borderWidth: isDark ? 2 : 1,
+            borderColor: isDark ? '#1e293b' : '#ffffff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: textColor, font: { family: 'Inter', weight: 600, size: 11 }, padding: 10 }
+            }
+          },
+          cutout: '62%'
+        }
+      });
+    }
+
+    // 5. Bar Chart: Productividad Auditoras ATC (Andrea vs Jennifer)
+    if (canvasAtcAuditoresRef.current && Array.isArray(data.ranking_auditores)) {
+      const ctx = canvasAtcAuditoresRef.current.getContext('2d');
+      const auditores = data.ranking_auditores;
+      chartsRef.current.atcAuditores = new window.Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: auditores.map(a => a.auditor || 'Sin Asignar'),
+          datasets: [
+            {
+              label: 'Auditadas (Contestó)',
+              data: auditores.map(a => a.contestadas || 0),
+              backgroundColor: '#8b5cf6',
+              borderRadius: 6
+            },
+            {
+              label: 'No Contestó / Descarte',
+              data: auditores.map(a => (a.no_contestadas || 0) + (a.no_auditadas || 0)),
+              backgroundColor: '#94a3b8',
+              borderRadius: 6
+            },
+            {
+              label: 'Pendientes',
+              data: auditores.map(a => a.pendientes || 0),
+              backgroundColor: '#cbd5e1',
+              borderRadius: 6
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { color: textColor, font: { family: 'Inter', weight: 600, size: 11 } }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: textColor, font: { family: 'Inter', weight: 700 } }
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: gridColor },
+              ticks: { color: textColor, font: { family: 'Inter' } }
+            }
+          }
+        }
+      });
+    }
+  };
+  const renderProblemasSolucionesChart = (data, tipo = tipoGraficaVisitas) => {
+    if (!window.Chart || !canvasProblemasRef.current || !data) return;
+    if (chartsRef.current.problemas) {
+      chartsRef.current.problemas.destroy();
+      delete chartsRef.current.problemas;
+    }
+
+    const ctx = canvasProblemasRef.current.getContext('2d');
+    const isDark = document.body.classList.contains('dark-mode');
+    const textColor = isDark ? '#f8fafc' : '#64748b';
+    const gridColor = isDark ? '#334155' : '#e2e8f0';
+
+    const isSol = tipo === 'soluciones';
+    const items = isSol ? (data.soluciones || data.top_soluciones || []) : (data.problemas || data.top_problemas || []);
+    const labels = items.map(p => isSol ? (p.solucion || p.motivo || 'Sin especificar') : (p.problema || p.motivo || 'Sin especificar'));
+    const counts = items.map(p => p.cantidad || 0);
+
+    chartsRef.current.problemas = new window.Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          data: counts,
+          backgroundColor: isSol ? '#0284c7' : '#ef4444',
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (context) => ` ${context.parsed.y} visitas (${isSol ? 'Solución' : 'Problema'})`
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: textColor, font: { family: 'Inter', size: 9 }, maxRotation: 25, minRotation: 0 } },
+          y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: textColor, font: { family: 'Inter', size: 9 }, precision: 0 } }
+        }
+      }
+    });
+  };
+
+  const handleCambiarTipoGrafica = (nuevoTipo) => {
+    setTipoGraficaVisitas(nuevoTipo);
+    if (dataVisitas) {
+      renderProblemasSolucionesChart(dataVisitas, nuevoTipo);
+    }
+  };
+
   const renderVisitasCharts = (data) => {
     if (!window.Chart || !data) return;
     const isDark = document.body.classList.contains('dark-mode');
@@ -332,31 +747,8 @@ function MetricasTab({ token, user }) {
       });
     }
 
-    // 3. Problemas Comunes
-    if (canvasProblemasRef.current) {
-      const ctx = canvasProblemasRef.current.getContext('2d');
-      const problemas = data.problemas || data.top_problemas || [];
-      chartsRef.current.problemas = new window.Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: problemas.map(p => p.motivo || p.problema || 'Sin especificar'),
-          datasets: [{
-            data: problemas.map(p => p.cantidad || 0),
-            backgroundColor: '#ef4444',
-            borderRadius: 6
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            x: { grid: { display: false }, ticks: { color: textColor, font: { family: 'Inter', size: 9 } } },
-            y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: textColor, font: { family: 'Inter', size: 9 } } }
-          }
-        }
-      });
-    }
+    // 3. Problemas / Soluciones Comunes
+    renderProblemasSolucionesChart(data, tipoGraficaVisitas);
   };
 
   // Render Atenciones Charts
@@ -653,17 +1045,31 @@ function MetricasTab({ token, user }) {
     }
   };
 
-  // Filter audit timeline based on current sub-tab type
+  // Filter audit timeline based on local filter type (independent of top charts)
   const getFilteredAudit = () => {
     if (!Array.isArray(auditResults)) return [];
-    if (subTab === 'visitas') {
-      return auditResults.filter(v => v.tipo_registro === 'visita_tecnica');
+    let items = auditResults.filter(v => v.tipo_registro !== 'meta');
+
+    // Ordenar cronológicamente (más reciente primero)
+    items.sort((a, b) => {
+      const fechaA = (a.fecha_programada || '') + ' ' + (a.hora || '00:00:00');
+      const fechaB = (b.fecha_programada || '') + ' ' + (b.hora || '00:00:00');
+      return fechaB.localeCompare(fechaA);
+    });
+
+    if (auditFiltroTipo === 'visitas') {
+      return items.filter(v => v.tipo_registro === 'visita_tecnica');
     }
-    // otherwise filter by 'atencion'
-    return auditResults.filter(v => v.tipo_registro === 'atencion');
+    if (auditFiltroTipo === 'atenciones') {
+      return items.filter(v => v.tipo_registro === 'atencion');
+    }
+    return items;
   };
 
   const filteredAudit = getFilteredAudit();
+  const totalAuditItems = Array.isArray(auditResults) ? auditResults.filter(v => v.tipo_registro !== 'meta').length : 0;
+  const countVisitas = Array.isArray(auditResults) ? auditResults.filter(v => v.tipo_registro === 'visita_tecnica').length : 0;
+  const countAtenciones = Array.isArray(auditResults) ? auditResults.filter(v => v.tipo_registro === 'atencion').length : 0;
 
   return (
     <div id="tab-metricas" className="tab-content active" style={{ display: 'block', padding: '25px', overflowY: 'auto', flexGrow: 1 }}>
@@ -695,24 +1101,107 @@ function MetricasTab({ token, user }) {
             style={{ padding: '10px', width: '100%', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
           />
         </div>
-        <div style={{ flex: 1.5, minWidth: '200px' }}>
-          <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--sidebar-text)', display: 'block', marginBottom: '6px' }}>Técnico Responsable:</label>
-          <select
-            value={tecnico}
-            onChange={(e) => setTecnico(e.target.value)}
-            className="form-control"
-            style={{ padding: '10px', width: '100%', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
+
+        {/* Conditional Filter: Call Center Asesor for calidad-atc, Técnico for other subtabs */}
+        {subTab === 'calidad-atc' ? (
+          <div style={{ flex: 1.5, minWidth: '220px' }}>
+            <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--sidebar-text)', display: 'block', marginBottom: '6px' }}>
+              <i className="fa-solid fa-headset" style={{ color: '#8b5cf6', marginRight: '5px' }}></i> Asesor Call Center:
+            </label>
+            <select
+              value={asesorAtc}
+              onChange={(e) => setAsesorAtc(e.target.value)}
+              className="form-control"
+              style={{ padding: '10px', width: '100%', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
+            >
+              <option value="TODOS">👥 Todos los Asesores Call Center</option>
+              <option value="CC. Mateo Samaniego">👨‍💼 CC. Mateo Samaniego</option>
+              <option value="CC. Guissella Quezada">👩‍💼 CC. Guissella Quezada</option>
+              <option value="CC. Luis Saenz">👨‍💼 CC. Luis Saenz</option>
+            </select>
+          </div>
+        ) : (
+          <div style={{ flex: 1.5, minWidth: '200px' }}>
+            <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--sidebar-text)', display: 'block', marginBottom: '6px' }}>Técnico Responsable:</label>
+            <select
+              value={tecnico}
+              onChange={(e) => setTecnico(e.target.value)}
+              className="form-control"
+              style={{ padding: '10px', width: '100%', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
+            >
+              <option value="TODOS">👥 Todos los Técnicos</option>
+              {tecnicosList.map((t, idx) => (
+                <option key={idx} value={t}>👤 {t}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Quick Date Pills */}
+        <div style={{ width: '100%', display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '5px', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--sidebar-text)', marginRight: '5px' }}>
+            <i className="fa-solid fa-bolt" style={{ color: '#f59e0b', marginRight: '4px' }}></i> Atajos de Fecha:
+          </span>
+          <button
+            type="button"
+            onClick={() => handleQuickDate('este-mes')}
+            style={{
+              padding: '6px 14px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', border: '1px solid var(--border-color)',
+              background: 'var(--profile-bg)', color: 'var(--text-main)', transition: 'all 0.15s'
+            }}
           >
-            <option value="TODOS">👥 Todos los Técnicos</option>
-            {tecnicosList.map((t, idx) => (
-              <option key={idx} value={t}>👤 {t}</option>
-            ))}
-          </select>
+            📅 Este Mes
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickDate('mes-anterior')}
+            style={{
+              padding: '6px 14px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', border: '1px solid var(--border-color)',
+              background: 'var(--profile-bg)', color: 'var(--text-main)', transition: 'all 0.15s'
+            }}
+          >
+            ⏮️ Mes Anterior
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickDate('30-dias')}
+            style={{
+              padding: '6px 14px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', border: '1px solid var(--border-color)',
+              background: 'var(--profile-bg)', color: 'var(--text-main)', transition: 'all 0.15s'
+            }}
+          >
+            ⚡ Últimos 30 días
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickDate('90-dias')}
+            style={{
+              padding: '6px 14px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', border: '1px solid var(--border-color)',
+              background: 'var(--profile-bg)', color: 'var(--text-main)', transition: 'all 0.15s'
+            }}
+          >
+            🗓️ Últimos 90 días
+          </button>
         </div>
       </div>
 
       {/* Sub-tabs bar */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '25px', borderBottom: '2px solid var(--border-color)', paddingBottom: '10px', flexWrap: 'wrap' }}>
+        {['ADMIN', 'SUPERVISOR_ATC'].includes(role) && (
+          <button
+            type="button"
+            onClick={() => setSubTab('calidad-atc')}
+            style={{
+              background: 'none', border: 'none', padding: '10px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s',
+              fontSize: '0.95rem',
+              color: subTab === 'calidad-atc' ? '#8b5cf6' : 'var(--sidebar-text)',
+              borderBottom: subTab === 'calidad-atc' ? '3px solid #8b5cf6' : 'none',
+              fontWeight: subTab === 'calidad-atc' ? '800' : '700'
+            }}
+          >
+            <i className="fa-solid fa-star" style={{ color: '#8b5cf6' }}></i> Calidad Call Center
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setSubTab('visitas')}
@@ -859,11 +1348,53 @@ function MetricasTab({ token, user }) {
                       <canvas ref={canvasEvolucionRef} id="chartEvolucionGlobal"></canvas>
                     </div>
                   </div>
-                  {/* Issues */}
+                  {/* Issues & Solutions Toggle Card */}
                   <div className="card" style={{ padding: '20px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <h4 style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      <i className="fa-solid fa-list-check" style={{ color: '#0f172a', marginRight: '8px' }}></i> Problemas más Comunes
-                    </h4>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '8px' }}>
+                      <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <i className={tipoGraficaVisitas === 'soluciones' ? "fa-solid fa-screwdriver-wrench" : "fa-solid fa-list-check"} style={{ color: tipoGraficaVisitas === 'soluciones' ? '#0284c7' : '#ef4444' }}></i>
+                        {tipoGraficaVisitas === 'soluciones' ? 'Soluciones más Comunes' : 'Problemas más Comunes'}
+                      </h4>
+                      {/* Switch Problemas / Soluciones */}
+                      <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.06)', borderRadius: '10px', padding: '3px', border: '1px solid var(--border-color)' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleCambiarTipoGrafica('problemas')}
+                          style={{
+                            border: 'none',
+                            padding: '4px 10px',
+                            borderRadius: '7px',
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            background: tipoGraficaVisitas === 'problemas' ? 'var(--card-bg)' : 'transparent',
+                            color: tipoGraficaVisitas === 'problemas' ? '#ef4444' : 'var(--sidebar-text)',
+                            boxShadow: tipoGraficaVisitas === 'problemas' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                          }}
+                        >
+                          📋 Problemas
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCambiarTipoGrafica('soluciones')}
+                          style={{
+                            border: 'none',
+                            padding: '4px 10px',
+                            borderRadius: '7px',
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            background: tipoGraficaVisitas === 'soluciones' ? 'var(--card-bg)' : 'transparent',
+                            color: tipoGraficaVisitas === 'soluciones' ? '#0284c7' : 'var(--sidebar-text)',
+                            boxShadow: tipoGraficaVisitas === 'soluciones' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                          }}
+                        >
+                          🛠️ Soluciones
+                        </button>
+                      </div>
+                    </div>
                     <div style={{ position: 'relative', height: '160px', flex: 1 }}>
                       <canvas ref={canvasProblemasRef} id="chartProblemasComunes"></canvas>
                     </div>
@@ -1111,7 +1642,7 @@ function MetricasTab({ token, user }) {
                       🚀 Avance de Modernización Tecnológica en Red
                     </h3>
                     <p style={{ margin: '5px 0 0 0', color: 'var(--sidebar-text)', fontSize: '0.85rem' }}>
-                      Meta de estandarización a Wi-Fi 6 Gigabit (TP-Link EX511, EXX530v, EXX231v y Huawei AX3).
+                      Meta de estandarización a Wi-Fi 6 Gigabit (TP-Link EX511, XX530v, XX231v y Huawei AX3).
                     </p>
                   </div>
                   <button
@@ -1306,15 +1837,564 @@ function MetricasTab({ token, user }) {
               </div>
             </div>
           )}
+
+          {/* 5. CALIDAD CALL CENTER (AUDITORÍA ATC) SUBTAB */}
+          {subTab === 'calidad-atc' && (
+            <div>
+              {!dataCalidadAtc ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', background: 'var(--card-bg)', borderRadius: '20px', border: '1px solid var(--border-color)' }}>
+                  <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '2.5rem', color: '#8b5cf6', marginBottom: '15px' }}></i>
+                  <h4 style={{ color: 'var(--text-main)', margin: '0 0 8px 0', fontWeight: 800 }}>Cargando Panel de Calidad Call Center...</h4>
+                  <p style={{ color: 'var(--sidebar-text)', margin: 0, fontSize: '0.9rem' }}>Obteniendo métricas de auditoría para Mateo Samaniego, Guissella Quezada y Luis Saenz.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
+                  {/* Executive Header Banner */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.12) 0%, rgba(99, 102, 241, 0.06) 100%)',
+                    border: '1px solid rgba(139, 92, 246, 0.25)',
+                    padding: '24px 28px',
+                    borderRadius: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '15px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <div style={{
+                        width: '52px',
+                        height: '52px',
+                        borderRadius: '16px',
+                        background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontSize: '1.4rem',
+                        boxShadow: '0 8px 20px rgba(139, 92, 246, 0.35)'
+                      }}>
+                        <i className="fa-solid fa-star"></i>
+                      </div>
+                      <div>
+                        <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 900, color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
+                          Control Ejecutivo de Calidad - Call Center
+                        </h2>
+                        <p style={{ margin: '4px 0 0 0', color: 'var(--sidebar-text)', fontSize: '0.88rem', fontWeight: 600 }}>
+                          Evaluaciones de calidad realizadas por ATC (Andrea & Jennifer) a las llamadas de Mateo Samaniego, Guissella Quezada y Luis Saenz.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{
+                        background: 'rgba(139, 92, 246, 0.15)',
+                        color: '#8b5cf6',
+                        padding: '6px 14px',
+                        borderRadius: '12px',
+                        fontWeight: 800,
+                        fontSize: '0.82rem',
+                        border: '1px solid rgba(139, 92, 246, 0.3)'
+                      }}>
+                        <i className="fa-solid fa-filter" style={{ marginRight: '6px' }}></i>
+                        {asesorAtc === 'TODOS' ? 'Todos los Asesores' : asesorAtc.replace('CC. ', '')}
+                      </span>
+                      <span style={{
+                        background: 'var(--card-bg)',
+                        color: 'var(--sidebar-text)',
+                        padding: '6px 14px',
+                        borderRadius: '12px',
+                        fontWeight: 700,
+                        fontSize: '0.82rem',
+                        border: '1px solid var(--border-color)'
+                      }}>
+                        <i className="fa-regular fa-calendar-days" style={{ marginRight: '6px' }}></i>
+                        {desde} al {hasta}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Top 4 KPI Cards */}
+                  {(() => {
+                    const c = dataCalidadAtc.contactabilidad || {};
+                    const p = dataCalidadAtc.promedios_preguntas || {};
+                    const ranking = dataCalidadAtc.ranking_asesores || [];
+                    const top = ranking.find(a => (a.promedio_total || 0) > 0) || ranking[0];
+
+                    let notaBadgeColor = '#10b981';
+                    let notaBadgeText = 'Excelente';
+                    if (p.promedio_global < 7.0) {
+                      notaBadgeColor = '#ef4444';
+                      notaBadgeText = 'En Seguimiento';
+                    } else if (p.promedio_global < 8.5) {
+                      notaBadgeColor = '#f59e0b';
+                      notaBadgeText = 'Satisfactorio';
+                    }
+
+                    return (
+                      <div className="metric-kpi-grid">
+                        {/* KPI 1: Total Evaluadas */}
+                        <div className="metric-kpi-card" style={{ borderLeft: '4px solid #10b981' }}>
+                          <div className="metric-kpi-icon" style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
+                            <i className="fa-solid fa-phone-volume"></i>
+                          </div>
+                          <div className="metric-kpi-info">
+                            <h3 style={{ color: 'var(--text-main)' }}>{c.contestaron || 0}</h3>
+                            <p>Llamadas Auditadas</p>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
+                              De {c.total_asignadas || 0} asignadas · {c.pendientes || 0} pendientes
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* KPI 2: Contactabilidad */}
+                        <div className="metric-kpi-card" style={{ borderLeft: '4px solid #0284c7' }}>
+                          <div className="metric-kpi-icon" style={{ background: 'rgba(2,132,199,0.12)', color: '#0284c7' }}>
+                            <i className="fa-solid fa-signal"></i>
+                          </div>
+                          <div className="metric-kpi-info">
+                            <h3 style={{ color: 'var(--text-main)' }}>{c.pct_contestaron || 0}%</h3>
+                            <p>Tasa de Contacto</p>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
+                              {c.no_contestaron || 0} no contesta · {c.no_auditadas || 0} descartadas
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* KPI 3: Calificación Global */}
+                        <div className="metric-kpi-card" style={{ borderLeft: `4px solid ${notaBadgeColor}` }}>
+                          <div className="metric-kpi-icon" style={{ background: `${notaBadgeColor}1a`, color: notaBadgeColor }}>
+                            <i className="fa-solid fa-star"></i>
+                          </div>
+                          <div className="metric-kpi-info">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <h3 style={{ color: 'var(--text-main)', margin: 0 }}>
+                                {p.promedio_global ? p.promedio_global.toFixed(2) : '0.00'}
+                              </h3>
+                              <span style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 800,
+                                padding: '2px 8px',
+                                borderRadius: '10px',
+                                background: `${notaBadgeColor}20`,
+                                color: notaBadgeColor
+                              }}>
+                                {notaBadgeText}
+                              </span>
+                            </div>
+                            <p>Nota Promedio Calidad</p>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
+                              Basado en {p.total_calificadas || 0} auditorías completas (/10)
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* KPI 4: Asesor Destacado */}
+                        <div className="metric-kpi-card" style={{ borderLeft: '4px solid #8b5cf6' }}>
+                          <div className="metric-kpi-icon" style={{ background: 'rgba(139,92,246,0.12)', color: '#8b5cf6' }}>
+                            <i className="fa-solid fa-crown"></i>
+                          </div>
+                          <div className="metric-kpi-info">
+                            <h3 style={{ color: 'var(--text-main)', fontSize: '1.2rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {top ? top.agente.replace('CC. ', '') : 'Sin datos'}
+                            </h3>
+                            <p>Asesor Destacado</p>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
+                              {top?.promedio_total ? `Promedio: ${top.promedio_total} / 10 (${top.total_evaluadas} eval.)` : 'Pendiente de calificación'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Micro-KPI Strip: 6 Quality Dimensions (P1 a P6) */}
+                  {dataCalidadAtc.promedios_preguntas && (
+                    <div className="card" style={{ background: 'var(--card-bg)', padding: '20px', borderRadius: '18px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                        <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          <i className="fa-solid fa-sliders" style={{ color: '#8b5cf6', marginRight: '8px' }}></i>
+                          Desglose por Competencia Evaluada (Escala 1 a 10)
+                        </h4>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
+                          Promedios consolidados del período
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px' }}>
+                        {[
+                          { key: 'p1_claridad', label: 'P1. Claridad', icon: 'fa-comment-dots', color: '#3b82f6' },
+                          { key: 'p2_amabilidad', label: 'P2. Amabilidad', icon: 'fa-heart', color: '#ec4899' },
+                          { key: 'p3_rapidez', label: 'P3. Rapidez', icon: 'fa-bolt', color: '#f59e0b' },
+                          { key: 'p4_efectividad', label: 'P4. Efectividad', icon: 'fa-circle-check', color: '#10b981' },
+                          { key: 'p5_satisfaccion', label: 'P5. Satisfacción', icon: 'fa-face-smile', color: '#8b5cf6' },
+                          { key: 'p6_facilidad', label: 'P6. Facilidad (CES)', icon: 'fa-thumbs-up', color: '#06b6d4' }
+                        ].map((dim, idx) => {
+                          const val = dataCalidadAtc.promedios_preguntas[dim.key] || 0;
+                          const pct = Math.min(100, Math.max(0, (val / 10) * 100));
+                          return (
+                            <div key={idx} style={{
+                              background: 'var(--profile-bg)',
+                              padding: '14px 16px',
+                              borderRadius: '14px',
+                              border: '1px solid var(--border-color)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px'
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                                  <i className={`fa-solid ${dim.icon}`} style={{ color: dim.color, marginRight: '6px' }}></i>
+                                  {dim.label}
+                                </span>
+                                <span style={{ fontSize: '0.95rem', fontWeight: 900, color: dim.color }}>
+                                  {val > 0 ? val.toFixed(1) : '-'}
+                                </span>
+                              </div>
+                              <div style={{ height: '6px', background: 'rgba(148, 163, 184, 0.2)', borderRadius: '6px', overflow: 'hidden' }}>
+                                <div style={{ width: `${pct}%`, height: '100%', background: dim.color, borderRadius: '6px', transition: 'width 0.4s ease' }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Row 1 Charts: Comparative Bar Chart & Radar Chart */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+                    {/* Chart 1: Ranking Comparativo */}
+                    <div className="card" style={{ padding: '22px', background: 'var(--card-bg)', borderRadius: '18px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          <i className="fa-solid fa-chart-column" style={{ color: '#8b5cf6', marginRight: '8px' }}></i>
+                          Comparativa de Asesores (Nota /10 vs Volumen)
+                        </h4>
+                      </div>
+                      <div style={{ position: 'relative', height: '260px', width: '100%' }}>
+                        <canvas ref={canvasAtcRankingRef} id="chartAtcRanking"></canvas>
+                      </div>
+                    </div>
+
+                    {/* Chart 2: Radar de Competencias */}
+                    <div className="card" style={{ padding: '22px', background: 'var(--card-bg)', borderRadius: '18px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          <i className="fa-solid fa-chart-line" style={{ color: '#ec4899', marginRight: '8px' }}></i>
+                          Radar Multidimensional de Competencias
+                        </h4>
+                      </div>
+                      <div style={{ position: 'relative', height: '260px', width: '100%' }}>
+                        <canvas ref={canvasAtcRadarRef} id="chartAtcRadar"></canvas>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Row 2 Charts: Timeline Evolution & Contactability Doughnut */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+                    {/* Chart 3: Evolución Temporal */}
+                    <div className="card" style={{ padding: '22px', background: 'var(--card-bg)', borderRadius: '18px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          <i className="fa-solid fa-arrow-trend-up" style={{ color: '#0284c7', marginRight: '8px' }}></i>
+                          Evolución Temporal de Calidad y Volumen
+                        </h4>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>Día a Día</span>
+                      </div>
+                      <div style={{ position: 'relative', height: '260px', width: '100%' }}>
+                        <canvas ref={canvasAtcEvolucionRef} id="chartAtcEvolucion"></canvas>
+                      </div>
+                    </div>
+
+                    {/* Chart 4: Contactabilidad & Descarte */}
+                    <div className="card" style={{ padding: '22px', background: 'var(--card-bg)', borderRadius: '18px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          <i className="fa-solid fa-chart-pie" style={{ color: '#10b981', marginRight: '8px' }}></i>
+                          Distribución de Contactabilidad
+                        </h4>
+                      </div>
+                      <div style={{ position: 'relative', height: '210px', width: '100%' }}>
+                        <canvas ref={canvasAtcContactRef} id="chartAtcContact"></canvas>
+                      </div>
+
+                      {/* Motivos de Descarte (No Auditar) */}
+                      {Array.isArray(dataCalidadAtc.motivos_no_auditar) && dataCalidadAtc.motivos_no_auditar.length > 0 && (
+                        <div style={{ marginTop: '16px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--sidebar-text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Top Motivos de Descarte (No Auditar):
+                          </span>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
+                            {dataCalidadAtc.motivos_no_auditar.map((m, idx) => (
+                              <span key={idx} style={{
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                background: 'var(--profile-bg)',
+                                color: 'var(--text-main)',
+                                padding: '3px 8px',
+                                borderRadius: '8px',
+                                border: '1px solid var(--border-color)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px'
+                              }}>
+                                <span>{m.motivo}</span>
+                                <strong style={{ color: '#ef4444' }}>{m.total}</strong>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Row 3: Auditor Productivity & Score Satisfaction Semaphore */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+                    {/* Auditor Productivity */}
+                    <div className="card" style={{ padding: '22px', background: 'var(--card-bg)', borderRadius: '18px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          <i className="fa-solid fa-users-gear" style={{ color: '#8b5cf6', marginRight: '8px' }}></i>
+                          Productividad de Auditoras ATC (Andrea vs Jennifer)
+                        </h4>
+                      </div>
+                      <div style={{ position: 'relative', height: '220px', width: '100%' }}>
+                        <canvas ref={canvasAtcAuditoresRef} id="chartAtcAuditores"></canvas>
+                      </div>
+                    </div>
+
+                    {/* Semáforo de Satisfacción de Clientes */}
+                    {dataCalidadAtc.distribucion_notas && (
+                      <div className="card" style={{ padding: '22px', background: 'var(--card-bg)', borderRadius: '18px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                        <div>
+                          <h4 style={{ margin: '0 0 16px 0', fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            <i className="fa-solid fa-traffic-light" style={{ color: '#f59e0b', marginRight: '8px' }}></i>
+                            Semáforo de Satisfacción del Cliente
+                          </h4>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                            <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '12px 16px', borderRadius: '14px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#10b981' }}>🌟 Sobresaliente</span>
+                                <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#10b981' }}>{dataCalidadAtc.distribucion_notas.sobresaliente || 0}</span>
+                              </div>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--sidebar-text)' }}>Nota 9.0 a 10.0</span>
+                            </div>
+
+                            <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '12px 16px', borderRadius: '14px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#3b82f6' }}>👍 Bueno</span>
+                                <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#3b82f6' }}>{dataCalidadAtc.distribucion_notas.bueno || 0}</span>
+                              </div>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--sidebar-text)' }}>Nota 7.0 a 8.9</span>
+                            </div>
+
+                            <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '12px 16px', borderRadius: '14px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#f59e0b' }}>⚠️ Regular</span>
+                                <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#f59e0b' }}>{dataCalidadAtc.distribucion_notas.regular || 0}</span>
+                              </div>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--sidebar-text)' }}>Nota 5.0 a 6.9</span>
+                            </div>
+
+                            <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '12px 16px', borderRadius: '14px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#ef4444' }}>🚨 Crítico</span>
+                                <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#ef4444' }}>{dataCalidadAtc.distribucion_notas.critico || 0}</span>
+                              </div>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--sidebar-text)' }}>Nota &lt; 5.0</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: '16px', padding: '12px', background: 'var(--profile-bg)', borderRadius: '12px', fontSize: '0.76rem', color: 'var(--sidebar-text)', lineHeight: 1.4 }}>
+                          <i className="fa-solid fa-circle-info" style={{ color: '#8b5cf6', marginRight: '6px' }}></i>
+                          Las calificaciones críticas &lt; 7.0 son notificadas automáticamente al supervisor para retroalimentación con el asesor de call center.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Comprehensive Table: Ranking Asesores Call Center */}
+                  <div className="card" style={{ background: 'var(--card-bg)', borderRadius: '18px', border: '1px solid var(--border-color)', padding: '22px', overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' }}>
+                      <h4 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-main)', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <i className="fa-solid fa-ranking-star" style={{ color: '#8b5cf6' }}></i>
+                        Ranking General de Calidad - Call Center
+                      </h4>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
+                        Mostrando los 3 asesores auditados
+                      </span>
+                    </div>
+
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.86rem' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--profile-bg)', borderBottom: '2px solid var(--border-color)' }}>
+                            <th style={{ padding: '12px 14px', textAlign: 'center', width: '50px' }}>#</th>
+                            <th style={{ padding: '12px 14px', textAlign: 'left' }}>Asesor Call Center</th>
+                            <th style={{ padding: '12px 14px', textAlign: 'center' }}>Asignadas</th>
+                            <th style={{ padding: '12px 14px', textAlign: 'center', color: '#10b981' }}>Auditadas</th>
+                            <th style={{ padding: '12px 14px', textAlign: 'center', color: '#f59e0b' }}>No Contesta</th>
+                            <th style={{ padding: '12px 14px', textAlign: 'center' }}>% Contacto</th>
+                            <th style={{ padding: '12px 10px', textAlign: 'center', fontSize: '0.76rem' }}>P1 Claridad</th>
+                            <th style={{ padding: '12px 10px', textAlign: 'center', fontSize: '0.76rem' }}>P2 Amab.</th>
+                            <th style={{ padding: '12px 10px', textAlign: 'center', fontSize: '0.76rem' }}>P3 Rapid.</th>
+                            <th style={{ padding: '12px 10px', textAlign: 'center', fontSize: '0.76rem' }}>P4 Efect.</th>
+                            <th style={{ padding: '12px 10px', textAlign: 'center', fontSize: '0.76rem' }}>P5 Sat.</th>
+                            <th style={{ padding: '12px 10px', textAlign: 'center', fontSize: '0.76rem' }}>P6 Facil.</th>
+                            <th style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 900 }}>Nota Final</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(!dataCalidadAtc.ranking_asesores || dataCalidadAtc.ranking_asesores.length === 0) ? (
+                            <tr>
+                              <td colSpan="13" style={{ textAlign: 'center', padding: '30px', color: 'var(--sidebar-text)', fontStyle: 'italic' }}>
+                                No se encontraron evaluaciones registradas para los filtros seleccionados.
+                              </td>
+                            </tr>
+                          ) : (
+                            dataCalidadAtc.ranking_asesores.map((a, idx) => {
+                              const rankIcons = ['🥇', '🥈', '🥉'];
+                              const prom = a.promedio_total;
+                              let pillColor = '#10b981';
+                              let pillBg = 'rgba(16, 185, 129, 0.15)';
+                              if (!prom) {
+                                pillColor = 'var(--sidebar-text)';
+                                pillBg = 'var(--profile-bg)';
+                              } else if (prom < 7.0) {
+                                pillColor = '#ef4444';
+                                pillBg = 'rgba(239, 68, 68, 0.15)';
+                              } else if (prom < 8.5) {
+                                pillColor = '#f59e0b';
+                                pillBg = 'rgba(245, 158, 11, 0.15)';
+                              }
+
+                              return (
+                                <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.15s' }}>
+                                  <td style={{ textAlign: 'center', fontWeight: 800, fontSize: '1.1rem' }}>
+                                    {rankIcons[idx] || (idx + 1)}
+                                  </td>
+                                  <td style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--text-main)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <div style={{
+                                        width: '32px',
+                                        height: '32px',
+                                        borderRadius: '50%',
+                                        background: idx === 0 ? 'rgba(139, 92, 246, 0.18)' : idx === 1 ? 'rgba(59, 130, 246, 0.18)' : 'rgba(16, 185, 129, 0.18)',
+                                        color: idx === 0 ? '#8b5cf6' : idx === 1 ? '#3b82f6' : '#10b981',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontWeight: 900,
+                                        fontSize: '0.82rem'
+                                      }}>
+                                        {a.agente.includes('Quezada') ? 'GQ' : a.agente.includes('Mateo') ? 'MS' : 'LS'}
+                                      </div>
+                                      <span>
+                                        {a.agente.replace('CC. ', '')}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td style={{ textAlign: 'center', fontWeight: 700 }}>{a.total_asignadas}</td>
+                                  <td style={{ textAlign: 'center', fontWeight: 800, color: '#10b981' }}>{a.total_evaluadas}</td>
+                                  <td style={{ textAlign: 'center', fontWeight: 700, color: '#f59e0b' }}>{a.no_contestadas}</td>
+                                  <td style={{ textAlign: 'center', fontWeight: 800 }}>{a.tasa_efectividad}%</td>
+                                  <td style={{ textAlign: 'center', color: 'var(--sidebar-text)', fontWeight: 600 }}>{a.p1_claridad ? a.p1_claridad.toFixed(1) : '-'}</td>
+                                  <td style={{ textAlign: 'center', color: 'var(--sidebar-text)', fontWeight: 600 }}>{a.p2_amabilidad ? a.p2_amabilidad.toFixed(1) : '-'}</td>
+                                  <td style={{ textAlign: 'center', color: 'var(--sidebar-text)', fontWeight: 600 }}>{a.p3_rapidez ? a.p3_rapidez.toFixed(1) : '-'}</td>
+                                  <td style={{ textAlign: 'center', color: 'var(--sidebar-text)', fontWeight: 600 }}>{a.p4_efectividad ? a.p4_efectividad.toFixed(1) : '-'}</td>
+                                  <td style={{ textAlign: 'center', color: 'var(--sidebar-text)', fontWeight: 600 }}>{a.p5_satisfaccion ? a.p5_satisfaccion.toFixed(1) : '-'}</td>
+                                  <td style={{ textAlign: 'center', color: 'var(--sidebar-text)', fontWeight: 600 }}>{a.p6_facilidad ? a.p6_facilidad.toFixed(1) : '-'}</td>
+                                  <td style={{ textAlign: 'center' }}>
+                                    <span style={{
+                                      display: 'inline-block',
+                                      padding: '4px 12px',
+                                      borderRadius: '12px',
+                                      background: pillBg,
+                                      color: pillColor,
+                                      fontWeight: 900,
+                                      fontSize: '0.88rem'
+                                    }}>
+                                      {prom ? `${prom.toFixed(2)} ⭐` : 'Sin Calificar'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {/* Buscador de Auditoría */}
       <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', padding: '25px', marginBottom: '25px' }}>
-        <h4 style={{ margin: '0 0 15px 0', color: 'var(--text-main)', fontSize: '1rem', fontWeight: 700 }}><i className="fa-solid fa-magnifying-glass" style={{ marginRight: '8px', color: 'var(--primary)' }}></i> Auditoría por Contrato</h4>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+          <h4 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem', fontWeight: 700 }}>
+            <i className="fa-solid fa-magnifying-glass" style={{ marginRight: '8px', color: 'var(--primary)' }}></i> Auditoría por Contrato
+          </h4>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => { setAuditDesde(''); setAuditHasta(''); }}
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                padding: '4px 10px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                background: (!auditDesde && !auditHasta) ? 'var(--primary)' : 'var(--profile-bg)',
+                color: (!auditDesde && !auditHasta) ? '#fff' : 'var(--sidebar-text)',
+                cursor: 'pointer'
+              }}
+            >
+              <i className="fa-solid fa-infinity"></i> Todo el Historial
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAuditDesde(getThreeMonthsAgoIso()); setAuditHasta(getTodayIso()); }}
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                padding: '4px 10px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                background: (auditDesde && auditDesde === getThreeMonthsAgoIso()) ? 'var(--primary)' : 'var(--profile-bg)',
+                color: (auditDesde && auditDesde === getThreeMonthsAgoIso()) ? '#fff' : 'var(--sidebar-text)',
+                cursor: 'pointer'
+              }}
+            >
+              Últimos 3 Meses
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAuditDesde(`${new Date().getFullYear()}-01-01`); setAuditHasta(getTodayIso()); }}
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                padding: '4px 10px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                background: (auditDesde && auditDesde === `${new Date().getFullYear()}-01-01`) ? 'var(--primary)' : 'var(--profile-bg)',
+                color: (auditDesde && auditDesde === `${new Date().getFullYear()}-01-01`) ? '#fff' : 'var(--sidebar-text)',
+                cursor: 'pointer'
+              }}
+            >
+              Este Año
+            </button>
+          </div>
+        </div>
         <form onSubmit={handleAuditSearch} style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'flex-end' }}>
           <div style={{ flex: 1, minWidth: '150px' }}>
-            <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--sidebar-text)' }}>Desde:</label>
+            <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--sidebar-text)' }}>
+              Desde: <span style={{ fontWeight: 'normal', fontSize: '0.7rem', color: '#94a3b8' }}>(Opcional)</span>
+            </label>
             <input
               type="date"
               value={auditDesde}
@@ -1324,7 +2404,9 @@ function MetricasTab({ token, user }) {
             />
           </div>
           <div style={{ flex: 1, minWidth: '150px' }}>
-            <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--sidebar-text)' }}>Hasta:</label>
+            <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--sidebar-text)' }}>
+              Hasta: <span style={{ fontWeight: 'normal', fontSize: '0.7rem', color: '#94a3b8' }}>(Opcional)</span>
+            </label>
             <input
               type="date"
               value={auditHasta}
@@ -1339,7 +2421,7 @@ function MetricasTab({ token, user }) {
               type="text"
               value={contratoAudit}
               onChange={(e) => setContratoAudit(e.target.value)}
-              placeholder="Ej. 7587"
+              placeholder="Ej. 7587 o 437F"
               className="form-control"
               style={{ padding: '10px', width: '100%', boxSizing: 'border-box', border: '1px solid var(--border-color)' }}
             />
@@ -1374,23 +2456,80 @@ function MetricasTab({ token, user }) {
               </button>
             </div>
             
-            {/* KPI Rápido de contrato */}
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', padding: '10px 15px', borderRadius: '14px', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.65rem', color: 'var(--sidebar-text)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Visitas VT</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-main)' }}>
-                  {Array.isArray(auditResults) ? auditResults.filter(v => v.tipo_registro === 'visita_tecnica').length : 0}
+            {/* KPI Rápido de contrato - Ahora interactivos como filtros */}
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <div 
+                onClick={() => setAuditFiltroTipo('todos')}
+                title="Mostrar todo el historial"
+                style={{ 
+                  background: auditFiltroTipo === 'todos' ? 'rgba(2, 132, 199, 0.16)' : 'var(--profile-bg)', 
+                  border: auditFiltroTipo === 'todos' ? '2px solid #0284c7' : '1px solid var(--border-color)', 
+                  padding: '10px 16px', 
+                  borderRadius: '14px', 
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  transform: auditFiltroTipo === 'todos' ? 'translateY(-2px)' : 'none',
+                  boxShadow: auditFiltroTipo === 'todos' ? '0 4px 12px rgba(2, 132, 199, 0.25)' : 'none'
+                }}
+              >
+                <div style={{ fontSize: '0.65rem', color: auditFiltroTipo === 'todos' ? '#0284c7' : 'var(--sidebar-text)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  🌐 Total
+                </div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '900', color: auditFiltroTipo === 'todos' ? '#0284c7' : 'var(--text-main)' }}>
+                  {totalAuditItems}
                 </div>
               </div>
-              <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', padding: '10px 15px', borderRadius: '14px', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.65rem', color: 'var(--sidebar-text)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Atenciones</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#6366f1' }}>
-                  {Array.isArray(auditResults) ? auditResults.filter(v => v.tipo_registro === 'atencion').length : 0}
+
+              <div 
+                onClick={() => setAuditFiltroTipo('visitas')}
+                title="Filtrar solo Visitas Técnicas"
+                style={{ 
+                  background: auditFiltroTipo === 'visitas' ? 'rgba(16, 185, 129, 0.16)' : 'var(--profile-bg)', 
+                  border: auditFiltroTipo === 'visitas' ? '2px solid #10b981' : '1px solid var(--border-color)', 
+                  padding: '10px 16px', 
+                  borderRadius: '14px', 
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  transform: auditFiltroTipo === 'visitas' ? 'translateY(-2px)' : 'none',
+                  boxShadow: auditFiltroTipo === 'visitas' ? '0 4px 12px rgba(16, 185, 129, 0.25)' : 'none'
+                }}
+              >
+                <div style={{ fontSize: '0.65rem', color: auditFiltroTipo === 'visitas' ? '#10b981' : 'var(--sidebar-text)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  🚐 Visitas VT
+                </div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '900', color: auditFiltroTipo === 'visitas' ? '#10b981' : 'var(--text-main)' }}>
+                  {countVisitas}
                 </div>
               </div>
-              <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', padding: '10px 15px', borderRadius: '14px', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.65rem', color: 'var(--sidebar-text)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Promedio</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#eab308' }}>
+
+              <div 
+                onClick={() => setAuditFiltroTipo('atenciones')}
+                title="Filtrar solo Atenciones Call Center"
+                style={{ 
+                  background: auditFiltroTipo === 'atenciones' ? 'rgba(99, 102, 241, 0.16)' : 'var(--profile-bg)', 
+                  border: auditFiltroTipo === 'atenciones' ? '2px solid #6366f1' : '1px solid var(--border-color)', 
+                  padding: '10px 16px', 
+                  borderRadius: '14px', 
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  transform: auditFiltroTipo === 'atenciones' ? 'translateY(-2px)' : 'none',
+                  boxShadow: auditFiltroTipo === 'atenciones' ? '0 4px 12px rgba(99, 102, 241, 0.25)' : 'none'
+                }}
+              >
+                <div style={{ fontSize: '0.65rem', color: auditFiltroTipo === 'atenciones' ? '#6366f1' : 'var(--sidebar-text)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  🎧 Atenciones
+                </div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '900', color: '#6366f1' }}>
+                  {countAtenciones}
+                </div>
+              </div>
+
+              <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', padding: '10px 16px', borderRadius: '14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', color: 'var(--sidebar-text)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>⭐ Promedio</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '900', color: '#eab308' }}>
                   {(() => {
                     if (!Array.isArray(auditResults)) return '-';
                     const calificadas = auditResults.filter(v => v.tipo_registro === 'visita_tecnica' && v.calificacion_estrellas != null);
@@ -1405,11 +2544,127 @@ function MetricasTab({ token, user }) {
             </div>
           </div>
 
+          {/* Barra de Filtro Rápido del Historial del Cliente */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            marginBottom: '22px',
+            padding: '8px 12px',
+            background: 'var(--profile-bg)',
+            borderRadius: '14px',
+            border: '1px solid var(--border-color)',
+            flexWrap: 'wrap'
+          }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setAuditFiltroTipo('todos')}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: auditFiltroTipo === 'todos' ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)' : 'transparent',
+                  color: auditFiltroTipo === 'todos' ? '#ffffff' : 'var(--sidebar-text)',
+                  fontWeight: 800,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease',
+                  boxShadow: auditFiltroTipo === 'todos' ? '0 2px 8px rgba(2, 132, 199, 0.35)' : 'none'
+                }}
+              >
+                <i className="fa-solid fa-list-check"></i>
+                <span>Ver Todo</span>
+                <span style={{
+                  background: auditFiltroTipo === 'todos' ? 'rgba(255,255,255,0.25)' : 'var(--card-bg)',
+                  padding: '1px 7px',
+                  borderRadius: '10px',
+                  fontSize: '0.74rem',
+                  fontWeight: 900
+                }}>
+                  {totalAuditItems}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAuditFiltroTipo('visitas')}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: auditFiltroTipo === 'visitas' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'transparent',
+                  color: auditFiltroTipo === 'visitas' ? '#ffffff' : 'var(--sidebar-text)',
+                  fontWeight: 800,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease',
+                  boxShadow: auditFiltroTipo === 'visitas' ? '0 2px 8px rgba(16, 185, 129, 0.35)' : 'none'
+                }}
+              >
+                <i className="fa-solid fa-van-shuttle"></i>
+                <span>Visitas Técnicas</span>
+                <span style={{
+                  background: auditFiltroTipo === 'visitas' ? 'rgba(255,255,255,0.25)' : 'var(--card-bg)',
+                  padding: '1px 7px',
+                  borderRadius: '10px',
+                  fontSize: '0.74rem',
+                  fontWeight: 900
+                }}>
+                  {countVisitas}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAuditFiltroTipo('atenciones')}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: auditFiltroTipo === 'atenciones' ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' : 'transparent',
+                  color: auditFiltroTipo === 'atenciones' ? '#ffffff' : 'var(--sidebar-text)',
+                  fontWeight: 800,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease',
+                  boxShadow: auditFiltroTipo === 'atenciones' ? '0 2px 8px rgba(99, 102, 241, 0.35)' : 'none'
+                }}
+              >
+                <i className="fa-solid fa-headset"></i>
+                <span>Atenciones Call Center</span>
+                <span style={{
+                  background: auditFiltroTipo === 'atenciones' ? 'rgba(255,255,255,0.25)' : 'var(--card-bg)',
+                  padding: '1px 7px',
+                  borderRadius: '10px',
+                  fontSize: '0.74rem',
+                  fontWeight: 900
+                }}>
+                  {countAtenciones}
+                </span>
+              </button>
+            </div>
+
+            <div style={{ fontSize: '0.78rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
+              Mostrando: <strong style={{ color: 'var(--text-main)' }}>{filteredAudit.length}</strong> registro(s)
+            </div>
+          </div>
+
           {/* Timeline list */}
           <div className="timeline-container" id="timeline-auditoria">
             {filteredAudit.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px', color: 'var(--sidebar-text)', fontStyle: 'italic' }}>
-                No se encontraron registros de este tipo para el contrato #{contratoAudit} en el período seleccionado.
+                No se encontraron {auditFiltroTipo === 'visitas' ? 'visitas técnicas' : auditFiltroTipo === 'atenciones' ? 'atenciones de soporte' : 'registros'} para el contrato #{contratoAudit} en el período seleccionado.
               </div>
             ) : (
               filteredAudit.map((v, idx) => {

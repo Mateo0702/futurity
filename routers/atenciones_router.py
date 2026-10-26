@@ -17,6 +17,7 @@ def buscar_contrato_json():
             return jsonify({"status": "error", "message": "No autorizado"}), 401
 
     contrato = request.args.get('contrato', '') or request.args.get('q', '') or request.args.get('cedula', '')
+    empresa = request.args.get('empresa', '').strip().upper()
     contrato = contrato.strip()
     if not contrato:
         return jsonify({"status": "error", "message": "Parámetro de búsqueda vacío"}), 400
@@ -28,10 +29,10 @@ def buscar_contrato_json():
     cursor = conn.cursor(dictionary=True)
     try:
         from utils import format_antiguedad, MAPEO_NODOS
-        query_contrato_f = contrato if contrato.upper().endswith('F') else (contrato + 'F')
-        query_contrato_plain = contrato[:-1] if contrato.upper().endswith('F') else contrato
+        val = contrato
+        is_cedula = len(val) >= 10 and val.isdigit()
 
-        query = """
+        query_base = """
             SELECT contrato, cedula, empresa, nombre_cliente AS cliente, zona AS sector, 
                    telefono1, telefono2, telefono3, fecha_instalacion,
                    total_mensual, antiguedad, numero_serie, producto, direccion, forma_pago,
@@ -39,13 +40,39 @@ def buscar_contrato_json():
                    modelo_ont, router_principal, router_secundario, tipo_mesh,
                    cantidad_routers, modo_acceso
             FROM directorio_clientes 
-            WHERE contrato = %s 
-               OR contrato = %s 
-               OR contrato = %s 
-               OR cedula = %s
         """
-        cursor.execute(query, (contrato, query_contrato_f, query_contrato_plain, contrato))
-        rows = cursor.fetchall()
+
+        if is_cedula:
+            cursor.execute(query_base + " WHERE cedula = %s", (val,))
+            rows = cursor.fetchall()
+            if empresa and len(rows) > 1:
+                empresa_rows = [r for r in rows if (r.get('empresa') or '').upper() == empresa]
+                if empresa_rows:
+                    rows = empresa_rows
+        else:
+            if empresa == 'FIBRACOM':
+                target = val if val.upper().endswith('F') else (val + 'F')
+                alt_target = val[:-1] if val.upper().endswith('F') else val
+            elif empresa == 'SERVICABLE':
+                target = val[:-1] if val.upper().endswith('F') else val
+                alt_target = val if val.upper().endswith('F') else (val + 'F')
+            else:
+                target = val
+                alt_target = (val + 'F') if not val.upper().endswith('F') else val[:-1]
+
+            # 1. Búsqueda exacta por contrato objetivo
+            cursor.execute(query_base + " WHERE contrato = %s", (target,))
+            rows = cursor.fetchall()
+
+            # 2. Variante con o sin 'F' si no se encontró
+            if not rows and alt_target != target:
+                cursor.execute(query_base + " WHERE contrato = %s", (alt_target,))
+                rows = cursor.fetchall()
+
+            # 3. Cédula si aún no se encuentra
+            if not rows:
+                cursor.execute(query_base + " WHERE cedula = %s", (val,))
+                rows = cursor.fetchall()
         
         def format_cliente_dict(cliente):
             cliente['antiguedad_fmt'] = format_antiguedad(cliente.get('antiguedad'), cliente.get('fecha_instalacion'))
@@ -137,7 +164,8 @@ def registrar_atencion():
     user = obtener_usuario_actual(request)
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if user.get('rol') not in ['ADMIN', 'ASESOR', 'ATC']:
+    user_role = (user.get('rol') or user.get('role') or '').upper()
+    if user_role not in ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR']:
         return jsonify({"status": "error", "message": "No tienes privilegios para registrar atenciones."}), 403
         
     # Obtener parámetros del JSON o del formulario
@@ -258,7 +286,8 @@ def atenciones_recientes():
     user = obtener_usuario_actual(request)
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if user.get('rol') not in ['ADMIN', 'ASESOR', 'ATC']:
+    user_role = (user.get('rol') or user.get('role') or '').upper()
+    if user_role not in ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver atenciones."}), 403
     
     conn = get_db_connection()
@@ -325,7 +354,7 @@ def metricas_atenciones():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR']:
+    if user_role not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para ver métricas de atenciones."}), 403
 
     # Obtener parámetros de filtros (hoy y hace 3 meses por defecto si no se especifican)
@@ -505,6 +534,9 @@ def registrar_atenciones_masivo():
     user = obtener_usuario_actual(request)
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
+    user_role = (user.get('rol') or user.get('role') or '').upper()
+    if user_role not in ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR']:
+        return jsonify({"status": "error", "message": "No tienes privilegios para registrar atenciones."}), 403
 
     data = request.get_json() if request.is_json else request.form
     
@@ -785,8 +817,8 @@ def actualizar_datos_tecnicos_cliente():
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
-    user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'ATC', 'CALIDAD', 'BODEGA']:
+    user_role = (user.get('role') or user.get('rol') or '').upper()
+    if user_role not in ['ADMIN', 'ASESOR', 'ATC', 'CALIDAD', 'BODEGA', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes permisos para modificar datos técnicos de clientes"}), 403
 
     datos = request.get_json() or {}
@@ -894,8 +926,8 @@ def diagnostico_smartolt(sn):
 
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    user_role = user.get('role') or user.get('rol')
-    if user_role not in ['ADMIN', 'ASESOR', 'TECNICO', 'CALIDAD', 'ATC', 'AUDITOR']:
+    user_role = (user.get('role') or user.get('rol') or '').upper()
+    if user_role not in ['ADMIN', 'ASESOR', 'TECNICO', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'BODEGA', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "No tienes privilegios para consultar diagnóstico"}), 403
         
     import urllib.request
@@ -1035,6 +1067,17 @@ def diagnostico_smartolt(sn):
 # GESTIÓN Y AUDITORÍA DE CALIDAD ATC (CALL CENTER)
 # ==========================================================
 
+def es_agente_auditable_callcenter(agente):
+    """
+    Solo son objeto de auditoría de calidad ATC las atenciones realizadas
+    por el equipo de Call Center (Mateo Samaniego, Guissella/Tatiana Quezada y Luis Saenz).
+    """
+    if not agente:
+        return False
+    a_norm = str(agente).upper()
+    return any(p in a_norm for p in ['MATEO', 'QUEZADA', 'TATIANA', 'LUIS SAENZ', 'LUIS SÁENZ']) or a_norm.startswith('CC.')
+
+
 def es_motivo_excluido_auditoria(motivo):
     """
     Retorna True si el motivo de atención corresponde a operaciones
@@ -1050,9 +1093,9 @@ def es_motivo_excluido_auditoria(motivo):
 def asignar_auditoria_atencion(conn, cursor, id_atencion, contrato, cliente, telefono1, telefono2, sector, motivo, agente, fecha_atencion):
     """
     Asigna una atención registrada al auditor con menor carga del día (Round-Robin entre rol ATC_AUDITOR).
-    Excluye automáticamente atenciones operativas (visitas técnicas, activaciones, cortes y reconexiones).
+    Excluye automáticamente atenciones operativas y solo audita atenciones de Call Center (Mateo, Tatiana, Luis).
     """
-    if es_motivo_excluido_auditoria(motivo):
+    if es_motivo_excluido_auditoria(motivo) or not es_agente_auditable_callcenter(agente):
         return
 
     try:
@@ -1100,11 +1143,13 @@ def api_atc_auditoria_lista():
     user = obtener_usuario_actual(request)
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if user.get('rol') not in ['ADMIN', 'ATC_AUDITOR', 'AUDITOR']:
+    if user.get('rol') not in ['ADMIN', 'ATC_AUDITOR', 'AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "Acceso restringido a auditores ATC."}), 403
 
     fecha = request.args.get('fecha', date.today().isoformat()).strip()
     filtro_auditor = request.args.get('filtro_auditor', 'MIS_ASIGNADAS').strip()
+    if user.get('rol') == 'SUPERVISOR_ATC' and filtro_auditor == 'MIS_ASIGNADAS':
+        filtro_auditor = 'TODAS'
     estado = request.args.get('estado', '').strip()
     search = request.args.get('search', '').strip()
     user_name = user.get('nombre', '')
@@ -1116,36 +1161,49 @@ def api_atc_auditoria_lista():
     try:
         cursor = conn.cursor(dictionary=True)
         query = """
-            SELECT * FROM auditoria_calidad_atenciones 
+            SELECT a.*,
+                   at.observacion AS observacion_atencion,
+                   at.accion AS accion_atencion,
+                   at.medio_contacto AS medio_contacto_atencion,
+                   at.hora AS hora_atencion
+            FROM auditoria_calidad_atenciones a
+            LEFT JOIN atenciones at ON a.id_atencion = at.id_atencion
             WHERE 1=1
-              AND UPPER(COALESCE(motivo_atencion, '')) NOT LIKE '%VISITA%'
-              AND UPPER(COALESCE(motivo_atencion, '')) NOT LIKE '%ACTIVACI%'
-              AND UPPER(COALESCE(motivo_atencion, '')) NOT LIKE '%CORTE%'
-              AND UPPER(COALESCE(motivo_atencion, '')) NOT LIKE '%RECONEXI%'
+              AND UPPER(COALESCE(a.motivo_atencion, '')) NOT LIKE '%VISITA%'
+              AND UPPER(COALESCE(a.motivo_atencion, '')) NOT LIKE '%ACTIVACI%'
+              AND UPPER(COALESCE(a.motivo_atencion, '')) NOT LIKE '%CORTE%'
+              AND UPPER(COALESCE(a.motivo_atencion, '')) NOT LIKE '%RECONEXI%'
+              AND (
+                  UPPER(COALESCE(a.agente_evaluado, '')) LIKE '%MATEO%' OR
+                  UPPER(COALESCE(a.agente_evaluado, '')) LIKE '%QUEZADA%' OR
+                  UPPER(COALESCE(a.agente_evaluado, '')) LIKE '%TATIANA%' OR
+                  UPPER(COALESCE(a.agente_evaluado, '')) LIKE '%LUIS%' OR
+                  UPPER(COALESCE(a.agente_evaluado, '')) LIKE 'CC.%'
+              )
         """
         params = []
 
         if fecha:
-            query += " AND fecha_atencion = %s"
+            query += " AND a.fecha_atencion = %s"
             params.append(fecha)
 
         if filtro_auditor == 'MIS_ASIGNADAS':
-            query += " AND (auditor_asignado = %s OR auditor_gestion = %s)"
+            query += " AND (a.auditor_asignado = %s OR a.auditor_gestion = %s)"
             params.extend([user_name, user_name])
         elif filtro_auditor != 'TODAS' and filtro_auditor:
-            query += " AND auditor_asignado = %s"
+            query += " AND a.auditor_asignado = %s"
             params.append(filtro_auditor)
 
         if estado:
-            query += " AND estado_contacto = %s"
+            query += " AND a.estado_contacto = %s"
             params.append(estado)
 
         if search:
-            query += " AND (cliente LIKE %s OR contrato LIKE %s OR agente_evaluado LIKE %s OR telefono1 LIKE %s OR telefono2 LIKE %s)"
+            query += " AND (a.cliente LIKE %s OR a.contrato LIKE %s OR a.agente_evaluado LIKE %s OR a.telefono1 LIKE %s OR a.telefono2 LIKE %s OR at.observacion LIKE %s)"
             search_p = f"%{search}%"
-            params.extend([search_p, search_p, search_p, search_p, search_p])
+            params.extend([search_p, search_p, search_p, search_p, search_p, search_p])
 
-        query += " ORDER BY id_auditoria ASC"
+        query += " ORDER BY a.id_auditoria ASC"
         cursor.execute(query, tuple(params))
         rows = cursor.fetchall()
 
@@ -1156,6 +1214,8 @@ def api_atc_auditoria_lista():
                 r['fecha_gestion'] = r['fecha_gestion'].isoformat()
             if r.get('fecha_creacion') and hasattr(r['fecha_creacion'], 'isoformat'):
                 r['fecha_creacion'] = r['fecha_creacion'].isoformat()
+            if r.get('hora_atencion') is not None:
+                r['hora_atencion'] = str(r['hora_atencion'])
             if r.get('promedio_total') is not None:
                 r['promedio_total'] = float(r['promedio_total'])
 
@@ -1172,7 +1232,7 @@ def api_atc_auditoria_guardar():
     user = obtener_usuario_actual(request)
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
-    if user.get('rol') not in ['ADMIN', 'ATC_AUDITOR', 'AUDITOR']:
+    if user.get('rol') not in ['ADMIN', 'ATC_AUDITOR', 'AUDITOR', 'SUPERVISOR_ATC']:
         return jsonify({"status": "error", "message": "Acceso restringido a auditores ATC."}), 403
 
     data = request.get_json() or {}
@@ -1190,24 +1250,32 @@ def api_atc_auditoria_guardar():
     p5 = data.get('p5_satisfaccion')
     p6 = data.get('p6_facilidad')
 
-    # Convertir a enteros válidos (1 a 10)
-    scores = []
-    parsed_p = []
-    for p in [p1, p2, p3, p4, p5, p6]:
-        try:
-            if p is not None and str(p).strip() != '':
-                val = int(p)
-                if 1 <= val <= 10:
-                    scores.append(val)
-                    parsed_p.append(val)
+    justificacion_no_auditar = (data.get('justificacion_no_auditar') or '').strip() or None
+
+    if estado_contacto == 'NO_AUDITAR':
+        parsed_p = [None, None, None, None, None, None]
+        promedio_total = None
+        incremento_intentos = 0
+    else:
+        # Convertir a enteros válidos (1 a 10)
+        scores = []
+        parsed_p = []
+        for p in [p1, p2, p3, p4, p5, p6]:
+            try:
+                if p is not None and str(p).strip() != '':
+                    val = int(p)
+                    if 1 <= val <= 10:
+                        scores.append(val)
+                        parsed_p.append(val)
+                    else:
+                        parsed_p.append(None)
                 else:
                     parsed_p.append(None)
-            else:
+            except (ValueError, TypeError):
                 parsed_p.append(None)
-        except (ValueError, TypeError):
-            parsed_p.append(None)
 
-    promedio_total = round(sum(scores) / len(scores), 2) if scores else None
+        promedio_total = round(sum(scores) / len(scores), 2) if (scores and estado_contacto == 'CONTESTO') else None
+        incremento_intentos = 1
 
     respuesta_facilidad = (data.get('respuesta_facilidad') or '').strip() or None
     recomendacion_cliente = (data.get('recomendacion_cliente') or '').strip() or None
@@ -1232,14 +1300,16 @@ def api_atc_auditoria_guardar():
                 respuesta_facilidad = %s,
                 recomendacion_cliente = %s,
                 observaciones = %s,
+                justificacion_no_auditar = %s,
                 auditor_gestion = %s,
                 fecha_gestion = NOW(),
-                intentos_llamada = intentos_llamada + 1
+                intentos_llamada = intentos_llamada + %s
             WHERE id_auditoria = %s
         """, (
             estado_contacto, parsed_p[0], parsed_p[1], parsed_p[2], parsed_p[3], parsed_p[4], parsed_p[5],
             promedio_total, respuesta_facilidad, recomendacion_cliente, observaciones,
-            user_name, id_auditoria
+            justificacion_no_auditar,
+            user_name, incremento_intentos, id_auditoria
         ))
         conn.commit()
         return jsonify({
@@ -1261,9 +1331,17 @@ def api_atc_auditoria_metricas():
     if not user:
         return jsonify({"status": "error", "message": "No autorizado"}), 401
 
-    fecha_inicio = request.args.get('fecha_inicio', date.today().isoformat()).strip()
-    fecha_fin = request.args.get('fecha_fin', date.today().isoformat()).strip()
+    fecha_inicio = request.args.get('fecha_inicio', '').strip()
+    fecha_fin = request.args.get('fecha_fin', '').strip()
+    if not fecha_inicio:
+        fecha_inicio = (date.today() - timedelta(days=90)).isoformat()
+    if not fecha_fin:
+        fecha_fin = date.today().isoformat()
+
     auditor_filter = request.args.get('auditor', '').strip()
+    asesor_filter = request.args.get('asesor', '').strip()
+    if asesor_filter.upper() == 'TODOS':
+        asesor_filter = ''
 
     conn = get_db_connection()
     if not conn:
@@ -1272,36 +1350,55 @@ def api_atc_auditoria_metricas():
     try:
         cursor = conn.cursor(dictionary=True)
 
+        # Cláusula para filtrar exclusivamente agentes de Call Center (Mateo, Tatiana, Luis)
+        filtro_cc = """
+            AND (
+                UPPER(COALESCE(agente_evaluado, '')) LIKE '%MATEO%' OR
+                UPPER(COALESCE(agente_evaluado, '')) LIKE '%QUEZADA%' OR
+                UPPER(COALESCE(agente_evaluado, '')) LIKE '%TATIANA%' OR
+                UPPER(COALESCE(agente_evaluado, '')) LIKE '%LUIS%' OR
+                UPPER(COALESCE(agente_evaluado, '')) LIKE 'CC.%'
+            )
+        """
+
+        cond_extra = ""
+        params_extra = []
+        if asesor_filter:
+            cond_extra += " AND agente_evaluado = %s "
+            params_extra.append(asesor_filter)
+        if auditor_filter:
+            cond_extra += " AND (auditor_asignado = %s OR auditor_gestion = %s) "
+            params_extra.extend([auditor_filter, auditor_filter])
+
         # 1. Métricas de Contactabilidad
-        query_cont = """
+        query_cont = f"""
             SELECT 
                 COUNT(*) as total_asignadas,
                 SUM(CASE WHEN estado_contacto = 'CONTESTO' THEN 1 ELSE 0 END) as contestaron,
                 SUM(CASE WHEN estado_contacto = 'NO_CONTESTA' THEN 1 ELSE 0 END) as no_contestaron,
                 SUM(CASE WHEN estado_contacto = 'NUMERO_EQUIVOCADO' THEN 1 ELSE 0 END) as equivocados,
                 SUM(CASE WHEN estado_contacto = 'FUERA_SERVICIO' THEN 1 ELSE 0 END) as fuera_servicio,
+                SUM(CASE WHEN estado_contacto = 'NO_AUDITAR' THEN 1 ELSE 0 END) as no_auditadas,
                 SUM(CASE WHEN estado_contacto = 'PENDIENTE' THEN 1 ELSE 0 END) as pendientes
             FROM auditoria_calidad_atenciones
             WHERE fecha_atencion BETWEEN %s AND %s
+            {filtro_cc}
+            {cond_extra}
         """
-        params_cont = [fecha_inicio, fecha_fin]
-        if auditor_filter:
-            query_cont += " AND (auditor_asignado = %s OR auditor_gestion = %s)"
-            params_cont.extend([auditor_filter, auditor_filter])
-
-        cursor.execute(query_cont, tuple(params_cont))
+        cursor.execute(query_cont, tuple([fecha_inicio, fecha_fin] + params_extra))
         contact_row = cursor.fetchone() or {}
 
-        tot_asig = contact_row.get('total_asignadas', 0) or 0
-        tot_cont = contact_row.get('contestaron', 0) or 0
-        tot_nocont = contact_row.get('no_contestaron', 0) or 0
-        tot_equiv = contact_row.get('equivocados', 0) or 0
-        tot_fuera = contact_row.get('fuera_servicio', 0) or 0
-        tot_pend = contact_row.get('pendientes', 0) or 0
+        tot_asig = int(contact_row.get('total_asignadas', 0) or 0)
+        tot_cont = int(contact_row.get('contestaron', 0) or 0)
+        tot_nocont = int(contact_row.get('no_contestaron', 0) or 0)
+        tot_equiv = int(contact_row.get('equivocados', 0) or 0)
+        tot_fuera = int(contact_row.get('fuera_servicio', 0) or 0)
+        tot_no_auditar = int(contact_row.get('no_auditadas', 0) or 0)
+        tot_pend = int(contact_row.get('pendientes', 0) or 0)
         pct_cont = round((tot_cont / tot_asig * 100), 1) if tot_asig > 0 else 0.0
 
         # 2. Promedios por Pregunta y Global
-        query_prom = """
+        query_prom = f"""
             SELECT 
                 ROUND(AVG(p1_claridad), 2) as p1_claridad,
                 ROUND(AVG(p2_amabilidad), 2) as p2_amabilidad,
@@ -1313,61 +1410,148 @@ def api_atc_auditoria_metricas():
                 COUNT(promedio_total) as total_calificadas
             FROM auditoria_calidad_atenciones
             WHERE fecha_atencion BETWEEN %s AND %s AND estado_contacto = 'CONTESTO'
+            {filtro_cc}
+            {cond_extra}
         """
-        params_prom = [fecha_inicio, fecha_fin]
-        if auditor_filter:
-            query_prom += " AND (auditor_asignado = %s OR auditor_gestion = %s)"
-            params_prom.extend([auditor_filter, auditor_filter])
-
-        cursor.execute(query_prom, tuple(params_prom))
+        cursor.execute(query_prom, tuple([fecha_inicio, fecha_fin] + params_extra))
         prom_row = cursor.fetchone() or {}
 
-        # 3. Ranking de Calificación por Asesor Evaluado
-        query_asesores = """
+        # 3. Ranking de Asesores Call Center
+        query_asesores = f"""
             SELECT 
                 agente_evaluado as agente,
-                COUNT(*) as total_evaluadas,
-                ROUND(AVG(promedio_total), 2) as promedio_total,
-                ROUND(AVG(p1_claridad), 2) as p1_claridad,
-                ROUND(AVG(p2_amabilidad), 2) as p2_amabilidad,
-                ROUND(AVG(p3_rapidez), 2) as p3_rapidez,
-                ROUND(AVG(p4_efectividad), 2) as p4_efectividad,
-                ROUND(AVG(p5_satisfaccion), 2) as p5_satisfaccion,
-                ROUND(AVG(p6_facilidad), 2) as p6_facilidad
+                COUNT(*) as total_asignadas,
+                SUM(CASE WHEN estado_contacto = 'CONTESTO' THEN 1 ELSE 0 END) as total_evaluadas,
+                SUM(CASE WHEN estado_contacto = 'NO_CONTESTA' THEN 1 ELSE 0 END) as no_contestadas,
+                SUM(CASE WHEN estado_contacto = 'NO_AUDITAR' THEN 1 ELSE 0 END) as no_auditadas,
+                SUM(CASE WHEN estado_contacto = 'PENDIENTE' THEN 1 ELSE 0 END) as pendientes,
+                ROUND(AVG(CASE WHEN estado_contacto = 'CONTESTO' THEN promedio_total ELSE NULL END), 2) as promedio_total,
+                ROUND(AVG(CASE WHEN estado_contacto = 'CONTESTO' THEN p1_claridad ELSE NULL END), 2) as p1_claridad,
+                ROUND(AVG(CASE WHEN estado_contacto = 'CONTESTO' THEN p2_amabilidad ELSE NULL END), 2) as p2_amabilidad,
+                ROUND(AVG(CASE WHEN estado_contacto = 'CONTESTO' THEN p3_rapidez ELSE NULL END), 2) as p3_rapidez,
+                ROUND(AVG(CASE WHEN estado_contacto = 'CONTESTO' THEN p4_efectividad ELSE NULL END), 2) as p4_efectividad,
+                ROUND(AVG(CASE WHEN estado_contacto = 'CONTESTO' THEN p5_satisfaccion ELSE NULL END), 2) as p5_satisfaccion,
+                ROUND(AVG(CASE WHEN estado_contacto = 'CONTESTO' THEN p6_facilidad ELSE NULL END), 2) as p6_facilidad
             FROM auditoria_calidad_atenciones
             WHERE fecha_atencion BETWEEN %s AND %s 
-              AND estado_contacto = 'CONTESTO'
               AND agente_evaluado IS NOT NULL 
               AND agente_evaluado != ''
+              {filtro_cc}
+              {cond_extra}
             GROUP BY agente_evaluado
             ORDER BY promedio_total DESC, total_evaluadas DESC
         """
-        cursor.execute(query_asesores, (fecha_inicio, fecha_fin))
+        cursor.execute(query_asesores, tuple([fecha_inicio, fecha_fin] + params_extra))
         ranking_asesores = cursor.fetchall()
         for r in ranking_asesores:
+            r['total_asignadas'] = int(r.get('total_asignadas') or 0)
+            r['total_evaluadas'] = int(r.get('total_evaluadas') or 0)
+            r['no_contestadas'] = int(r.get('no_contestadas') or 0)
+            r['no_auditadas'] = int(r.get('no_auditadas') or 0)
+            r['pendientes'] = int(r.get('pendientes') or 0)
+            r['tasa_efectividad'] = round((r['total_evaluadas'] / r['total_asignadas'] * 100), 1) if r['total_asignadas'] > 0 else 0.0
             for k in ['promedio_total', 'p1_claridad', 'p2_amabilidad', 'p3_rapidez', 'p4_efectividad', 'p5_satisfaccion', 'p6_facilidad']:
                 if r.get(k) is not None:
                     r[k] = float(r[k])
+                else:
+                    r[k] = None
 
-        # 4. Productividad por Auditor ATC
-        query_auditores = """
+        # 4. Productividad por Auditor ATC (sobre atenciones Call Center)
+        query_auditores = f"""
             SELECT 
                 COALESCE(auditor_gestion, auditor_asignado) as auditor,
                 COUNT(*) as total_asignadas,
                 SUM(CASE WHEN estado_contacto = 'CONTESTO' THEN 1 ELSE 0 END) as contestadas,
                 SUM(CASE WHEN estado_contacto = 'NO_CONTESTA' THEN 1 ELSE 0 END) as no_contestadas,
+                SUM(CASE WHEN estado_contacto = 'NO_AUDITAR' THEN 1 ELSE 0 END) as no_auditadas,
                 SUM(CASE WHEN estado_contacto = 'PENDIENTE' THEN 1 ELSE 0 END) as pendientes,
                 ROUND(AVG(CASE WHEN estado_contacto = 'CONTESTO' THEN promedio_total ELSE NULL END), 2) as promedio_calificado
             FROM auditoria_calidad_atenciones
             WHERE fecha_atencion BETWEEN %s AND %s
+            {filtro_cc}
+            {cond_extra}
             GROUP BY COALESCE(auditor_gestion, auditor_asignado)
             ORDER BY total_asignadas DESC
         """
-        cursor.execute(query_auditores, (fecha_inicio, fecha_fin))
+        cursor.execute(query_auditores, tuple([fecha_inicio, fecha_fin] + params_extra))
         ranking_auditores = cursor.fetchall()
         for a in ranking_auditores:
+            a['total_asignadas'] = int(a.get('total_asignadas') or 0)
+            a['contestadas'] = int(a.get('contestadas') or 0)
+            a['no_contestadas'] = int(a.get('no_contestadas') or 0)
+            a['no_auditadas'] = int(a.get('no_auditadas') or 0)
+            a['pendientes'] = int(a.get('pendientes') or 0)
             if a.get('promedio_calificado') is not None:
                 a['promedio_calificado'] = float(a['promedio_calificado'])
+
+        # 5. Evolución Diaria
+        query_evo = f"""
+            SELECT 
+                fecha_atencion,
+                COUNT(*) as total_asignadas,
+                SUM(CASE WHEN estado_contacto = 'CONTESTO' THEN 1 ELSE 0 END) as total_evaluadas,
+                SUM(CASE WHEN estado_contacto = 'NO_CONTESTA' THEN 1 ELSE 0 END) as no_contestadas,
+                ROUND(AVG(CASE WHEN estado_contacto = 'CONTESTO' THEN promedio_total ELSE NULL END), 2) as promedio_dia
+            FROM auditoria_calidad_atenciones
+            WHERE fecha_atencion BETWEEN %s AND %s
+              {filtro_cc}
+              {cond_extra}
+            GROUP BY fecha_atencion
+            ORDER BY fecha_atencion ASC
+        """
+        cursor.execute(query_evo, tuple([fecha_inicio, fecha_fin] + params_extra))
+        raw_evo = cursor.fetchall()
+        evolucion_diaria = []
+        for e in raw_evo:
+            evolucion_diaria.append({
+                "fecha": e['fecha_atencion'].isoformat() if hasattr(e['fecha_atencion'], 'isoformat') else str(e['fecha_atencion']),
+                "total_asignadas": int(e.get('total_asignadas') or 0),
+                "total_evaluadas": int(e.get('total_evaluadas') or 0),
+                "no_contestadas": int(e.get('no_contestadas') or 0),
+                "promedio_dia": float(e['promedio_dia']) if e.get('promedio_dia') is not None else None
+            })
+
+        # 6. Distribución de Calificaciones (Semáforo de Notas)
+        query_dist = f"""
+            SELECT 
+                SUM(CASE WHEN estado_contacto = 'CONTESTO' AND promedio_total >= 9.0 THEN 1 ELSE 0 END) as sobresaliente,
+                SUM(CASE WHEN estado_contacto = 'CONTESTO' AND promedio_total >= 7.0 AND promedio_total < 9.0 THEN 1 ELSE 0 END) as bueno,
+                SUM(CASE WHEN estado_contacto = 'CONTESTO' AND promedio_total >= 5.0 AND promedio_total < 7.0 THEN 1 ELSE 0 END) as regular,
+                SUM(CASE WHEN estado_contacto = 'CONTESTO' AND promedio_total < 5.0 THEN 1 ELSE 0 END) as critico
+            FROM auditoria_calidad_atenciones
+            WHERE fecha_atencion BETWEEN %s AND %s
+              {filtro_cc}
+              {cond_extra}
+        """
+        cursor.execute(query_dist, tuple([fecha_inicio, fecha_fin] + params_extra))
+        dist_row = cursor.fetchone() or {}
+        distribucion_notas = {
+            "sobresaliente": int(dist_row.get('sobresaliente') or 0),
+            "bueno": int(dist_row.get('bueno') or 0),
+            "regular": int(dist_row.get('regular') or 0),
+            "critico": int(dist_row.get('critico') or 0)
+        }
+
+        # 7. Motivos de No Auditar
+        query_mot = f"""
+            SELECT 
+                COALESCE(NULLIF(TRIM(justificacion_no_auditar), ''), 'SIN JUSTIFICACIÓN') as motivo,
+                COUNT(*) as total
+            FROM auditoria_calidad_atenciones
+            WHERE fecha_atencion BETWEEN %s AND %s 
+              AND estado_contacto = 'NO_AUDITAR'
+              {filtro_cc}
+              {cond_extra}
+            GROUP BY motivo
+            ORDER BY total DESC
+            LIMIT 6
+        """
+        cursor.execute(query_mot, tuple([fecha_inicio, fecha_fin] + params_extra))
+        motivos_no_auditar = [{"motivo": m['motivo'], "total": int(m['total'])} for m in cursor.fetchall()]
+
+        # 8. Asesores disponibles (Call Center)
+        cursor.execute(f"SELECT DISTINCT agente_evaluado FROM auditoria_calidad_atenciones WHERE 1=1 {filtro_cc} ORDER BY agente_evaluado")
+        asesores_disponibles = [r['agente_evaluado'] for r in cursor.fetchall() if r.get('agente_evaluado')]
 
         return jsonify({
             "status": "ok",
@@ -1377,6 +1561,7 @@ def api_atc_auditoria_metricas():
                 "no_contestaron": tot_nocont,
                 "equivocados": tot_equiv,
                 "fuera_servicio": tot_fuera,
+                "no_auditadas": tot_no_auditar,
                 "pendientes": tot_pend,
                 "pct_contestaron": pct_cont
             },
@@ -1388,10 +1573,14 @@ def api_atc_auditoria_metricas():
                 "p5_satisfaccion": float(prom_row.get('p5_satisfaccion') or 0.0),
                 "p6_facilidad": float(prom_row.get('p6_facilidad') or 0.0),
                 "promedio_global": float(prom_row.get('promedio_global') or 0.0),
-                "total_calificadas": prom_row.get('total_calificadas', 0)
+                "total_calificadas": int(prom_row.get('total_calificadas') or 0)
             },
             "ranking_asesores": ranking_asesores,
-            "ranking_auditores": ranking_auditores
+            "ranking_auditores": ranking_auditores,
+            "evolucion_diaria": evolucion_diaria,
+            "distribucion_notas": distribucion_notas,
+            "motivos_no_auditar": motivos_no_auditar,
+            "asesores_disponibles": asesores_disponibles
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -1425,6 +1614,13 @@ def api_atc_auditoria_sincronizar_dia():
               AND UPPER(COALESCE(a.motivo, '')) NOT LIKE '%ACTIVACI%'
               AND UPPER(COALESCE(a.motivo, '')) NOT LIKE '%CORTE%'
               AND UPPER(COALESCE(a.motivo, '')) NOT LIKE '%RECONEXI%'
+              AND (
+                  UPPER(COALESCE(a.agente, '')) LIKE '%MATEO%' OR
+                  UPPER(COALESCE(a.agente, '')) LIKE '%QUEZADA%' OR
+                  UPPER(COALESCE(a.agente, '')) LIKE '%TATIANA%' OR
+                  UPPER(COALESCE(a.agente, '')) LIKE '%LUIS%' OR
+                  UPPER(COALESCE(a.agente, '')) LIKE 'CC.%'
+              )
             ORDER BY a.id_atencion ASC
         """, (fecha,))
         pendientes = cursor.fetchall()

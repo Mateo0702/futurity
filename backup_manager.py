@@ -23,13 +23,7 @@ DB_USER = os.environ.get('DB_USER', 'root')
 DB_PASSWORD = os.environ.get('DB_PASSWORD', 'Futurity2026')
 DB_DATABASE = os.environ.get('DB_DATABASE', 'optimizador_rutas')
 
-# Configuración de Cloudflare R2
-R2_ACCOUNT_ID = os.environ.get('R2_ACCOUNT_ID', '').strip()
-R2_ACCESS_KEY_ID = os.environ.get('R2_ACCESS_KEY_ID', '').strip()
-R2_SECRET_ACCESS_KEY = os.environ.get('R2_SECRET_ACCESS_KEY', '').strip()
-R2_BUCKET_NAME = os.environ.get('R2_BUCKET_NAME', 'futurity-backups').strip()
-
-# Directorios de respaldo
+# Directorios de respaldo local
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKUPS_DIR = os.path.join(BASE_DIR, 'backups')
 DB_BACKUPS_DIR = os.path.join(BACKUPS_DIR, 'db')
@@ -59,41 +53,6 @@ def find_mysqldump():
         if os.path.exists(p):
             return p
     return None
-
-def get_r2_client():
-    """Inicializa el cliente de Cloudflare R2 usando boto3 (S3 API)."""
-    if not (R2_ACCOUNT_ID and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY):
-        return None
-    try:
-        import boto3
-        from botocore.config import Config
-        
-        endpoint = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-        s3 = boto3.client(
-            's3',
-            endpoint_url=endpoint,
-            aws_access_key_id=R2_ACCESS_KEY_ID,
-            aws_secret_access_key=R2_SECRET_ACCESS_KEY,
-            config=Config(signature_version='s3v4'),
-            region_name='auto'
-        )
-        return s3
-    except Exception as e:
-        print(f"[R2] Error al conectar con Cloudflare R2: {e}")
-        return None
-
-def upload_to_r2(s3_client, file_path, r2_key):
-    """Sube un archivo local a Cloudflare R2."""
-    if not s3_client:
-        return False
-    try:
-        print(f"[R2] Subiendo {os.path.basename(file_path)} a Cloudflare R2 (bucket: {R2_BUCKET_NAME})...")
-        s3_client.upload_file(file_path, R2_BUCKET_NAME, r2_key)
-        print(f"[R2] Subida completada con exito: {r2_key}")
-        return True
-    except Exception as e:
-        print(f"[R2] Error subiendo a R2 ({r2_key}): {e}")
-        return False
 
 def backup_database(timestamp_str):
     """Genera un volcado completo de la BD MySQL y lo comprime en .sql.gz."""
@@ -133,7 +92,7 @@ def backup_database(timestamp_str):
             os.remove(raw_sql_path)
 
         size_mb = os.path.getsize(gz_sql_path) / (1024 * 1024)
-        print(f"[BD] Backup de BD completado: {os.path.basename(gz_sql_path)} ({size_mb:.2f} MB)")
+        print(f"[BD] Backup de BD completado exitosamente: {os.path.basename(gz_sql_path)} ({size_mb:.2f} MB)")
         return gz_sql_path
     except subprocess.CalledProcessError as e:
         err_msg = e.stderr.decode('utf-8', errors='ignore') if e.stderr else str(e)
@@ -191,11 +150,11 @@ def rotate_local_backups(days_to_keep=30):
     print(f"[LIMPIEZA] Limpieza local finalizada ({deleted_count} archivos eliminados).")
 
 def run_full_backup():
-    """Ejecuta el ciclo completo de respaldo local y en la nube R2."""
+    """Ejecuta el ciclo completo de respaldo 100% local."""
     now = datetime.now()
     timestamp_str = now.strftime('%Y-%m-%d_%H%M%S')
     print("=" * 65)
-    print(f"INICIANDO RESPALDO COMPLETO FUTURITY ATLAS [{now.strftime('%Y-%m-%d %H:%M:%S')}]")
+    print(f"INICIANDO RESPALDO LOCAL FUTURITY ATLAS [{now.strftime('%Y-%m-%d %H:%M:%S')}]")
     print("=" * 65)
 
     # 1. Respaldo de Base de Datos
@@ -204,38 +163,12 @@ def run_full_backup():
     # 2. Respaldo de Fotos y Firmas
     uploads_file = backup_uploads(timestamp_str)
 
-    # 3. Subir a Cloudflare R2 si está configurado
-    r2_client = get_r2_client()
-    if r2_client:
-        if db_file and os.path.exists(db_file):
-            r2_key = f"db/{now.strftime('%Y-%m')}/{os.path.basename(db_file)}"
-            upload_to_r2(r2_client, db_file, r2_key)
-
-        if uploads_file and os.path.exists(uploads_file):
-            r2_key = f"uploads/{now.strftime('%Y-%m')}/{os.path.basename(uploads_file)}"
-            upload_to_r2(r2_client, uploads_file, r2_key)
-    else:
-        print("[R2] Info: Cloudflare R2 aun no configurado en .env. Respaldo guardado 100% en disco local.")
-
-    # 4. Rotación local (30 días)
+    # 3. Rotación local (mantener últimos 30 días)
     rotate_local_backups(days_to_keep=30)
 
     print("=" * 65)
-    print("RESPALDO FINALIZADO EXITOSAMENTE")
+    print("RESPALDO LOCAL FINALIZADO EXITOSAMENTE")
     print("=" * 65)
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1 and sys.argv[1] == '--test-r2':
-        print("[R2] Probando conexion a Cloudflare R2...")
-        client = get_r2_client()
-        if client:
-            try:
-                buckets = client.list_buckets()
-                names = [b['Name'] for b in buckets.get('Buckets', [])]
-                print(f"[R2] Conexion exitosa! Buckets disponibles: {names}")
-            except Exception as e:
-                print(f"[R2] Error listando buckets: {e}")
-        else:
-            print("[R2] Faltan credenciales R2 en .env (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME).")
-    else:
-        run_full_backup()
+    run_full_backup()

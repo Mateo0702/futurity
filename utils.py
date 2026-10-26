@@ -157,6 +157,44 @@ def normalizar_gpon_sn(sn_raw):
             
     return sn
 
+def obtener_variantes_sn_gpon(sn_raw):
+    """
+    Retorna una lista de representaciones equivalentes para un número de serie GPON o router.
+    Permite coincidir tanto en formato Hexadecimal (16 caracteres, ej: 54504C4745C24FC8)
+    como en formato ASCII normalizado (12 caracteres, ej: TPLG45C24FC8), además de la cadena original.
+    """
+    if not sn_raw:
+        return []
+    s = str(sn_raw).strip().upper()
+    if not s or s in ('SIN_SERIE', 'S/N', 'NONE', 'NAN'):
+        return []
+    variantes = {s}
+    
+    norm = normalizar_gpon_sn(s)
+    if norm:
+        variantes.add(norm)
+        
+    # Si tenemos formato 4 letras + 8 hex (12 chars total, ej: TPLG45C24FC8)
+    if len(norm) == 12 and norm[:4].isalpha():
+        vendor_prefix = norm[:4]
+        suffix8 = norm[4:]
+        try:
+            hex_prefix = vendor_prefix.encode('ascii').hex().upper()
+            variantes.add(hex_prefix + suffix8)
+        except Exception:
+            pass
+
+    # Si el original tenía 16 hex chars (ej: 54504C4745C24FC8)
+    if len(s) == 16:
+        try:
+            ascii_vendor = bytes.fromhex(s[:8]).decode('ascii').upper()
+            if ascii_vendor.isalnum() and len(ascii_vendor) == 4:
+                variantes.add(ascii_vendor + s[8:])
+        except Exception:
+            pass
+
+    return list(variantes)
+
 def parsear_informacion_tecnica(visitas, cursor=None):
     """
     Parsea el campo `informacion_tecnico` de una lista de visitas y extrae

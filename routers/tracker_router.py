@@ -46,7 +46,7 @@ def es_administrador(usuario):
                 return True
         return False
     user_role = str(usuario.get('role') or usuario.get('rol') or '').upper()
-    return user_role in ('ADMIN', 'SUPERADMIN', 'ASESOR', 'CALIDAD', 'BODEGA', 'ATC', 'ATC_AUDITOR', 'AUDITOR', 'CALLCENTER', 'COORDINADOR')
+    return user_role in ('ADMIN', 'SUPERADMIN', 'ASESOR', 'CALIDAD', 'BODEGA', 'ATC', 'ATC_AUDITOR', 'SUPERVISOR_ATC', 'AUDITOR', 'CALLCENTER', 'COORDINADOR')
 
 def validar_credencial_dispositivo(cursor, auth_header):
     if not auth_header or not auth_header.startswith("Bearer "):

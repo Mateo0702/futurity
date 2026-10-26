@@ -22,15 +22,21 @@ function PublicoCuadroMando({ fecha, token }) {
     setError('');
     try {
       const res = await fetch(`/api/publico/cuadro_mando/${fecha}/${token}`);
-      const result = await res.json();
-      if (res.ok && result.status === 'ok') {
+      let result = null;
+      try {
+        result = await res.json();
+      } catch (parseErr) {
+        // Not a JSON response
+      }
+
+      if (res.ok && result && result.status === 'ok') {
         setData(result);
       } else {
-        setError(result.message || "El enlace es inválido, ha expirado o ha sido modificado.");
+        setError(result?.message || (res.status === 403 ? "El enlace es inválido, ha expirado o ha sido modificado." : "Error al procesar el reporte en el servidor."));
       }
     } catch (err) {
       console.error("Error al cargar cuadro de mando público:", err);
-      setError("Error de conexión al servidor del informe público.");
+      setError("Error de conexión con el servidor. Verifique su conexión a internet.");
     } finally {
       setLoading(false);
     }

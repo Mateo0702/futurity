@@ -346,6 +346,8 @@ function UsuariosTab({ token, user }) {
       TECNICO: { bg: 'rgba(16, 185, 129, 0.12)', color: '#059669', label: '🛠️ TÉCNICO' },
       BODEGA: { bg: 'rgba(245, 158, 11, 0.12)', color: '#d97706', label: '📦 BODEGA' },
       CALIDAD: { bg: 'rgba(6, 182, 212, 0.12)', color: '#0891b2', label: '✨ CALIDAD' },
+      ATC_AUDITOR: { bg: 'rgba(236, 72, 153, 0.12)', color: '#db2777', label: '📋 ATC AUDITOR' },
+      SUPERVISOR_ATC: { bg: 'rgba(168, 85, 247, 0.15)', color: '#9333ea', label: '👑 SUPERVISOR ATC' },
     };
     const s = roleStyles[rol] || { bg: '#f1f5f9', color: '#475569', label: rol };
     return (
@@ -794,6 +796,7 @@ function UsuariosTab({ token, user }) {
                   <option value="ASESOR">ASESOR</option>
                   <option value="ATC">ATC (Atención al Cliente)</option>
                   <option value="ATC_AUDITOR">ATC_AUDITOR (Auditor de Calidad ATC)</option>
+                  <option value="SUPERVISOR_ATC">SUPERVISOR_ATC (Supervisor/a Calidad ATC)</option>
                   <option value="AUDITOR">AUDITOR (Auditor de Visitas Técnicas)</option>
                   <option value="ADMIN">ADMIN</option>
                   <option value="TECNICO">TECNICO</option>

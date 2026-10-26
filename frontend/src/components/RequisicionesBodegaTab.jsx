@@ -6,6 +6,7 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
   const [loading, setLoading] = useState(false);
   const [filtroEstado, setFiltroEstado] = useState('TODOS');
   const [filtroPlaca, setFiltroPlaca] = useState('TODAS');
+  const [filtroTipo, setFiltroTipo] = useState('TODOS');
   const [placas, setPlacas] = useState(placasProp || []);
   const [materialesCat, setMaterialesCat] = useState(materialesProp || []);
 
@@ -22,6 +23,7 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
   const [nuevoTecnico, setNuevoTecnico] = useState('');
   const [itemsSolicitud, setItemsSolicitud] = useState([{ id_material: '', cantidad_solicitada: 1 }]);
   const [obsSolicitud, setObsSolicitud] = useState('');
+  const [nuevoRequiereComodato, setNuevoRequiereComodato] = useState(false);
   const [enviando, setEnviando] = useState(false);
 
   // Items para Aprobación
@@ -42,12 +44,12 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
   useEffect(() => {
     cargarDatos();
     cargarCatalogos();
-  }, [filtroEstado, filtroPlaca, authToken]);
+  }, [filtroEstado, filtroPlaca, filtroTipo, authToken]);
 
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      let url = `/api/admin/requisiciones?estado=${filtroEstado}&placa=${filtroPlaca}`;
+      let url = `/api/admin/requisiciones?estado=${filtroEstado}&placa=${filtroPlaca}&tipo=${filtroTipo}`;
       const headers = authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
       const res = await fetch(url, { headers });
       const data = await res.json();
@@ -125,7 +127,8 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
           placa_vehiculo: nuevaPlaca,
           nombre_tecnico: nuevoTecnico,
           items: itemsValidos,
-          observaciones: obsSolicitud
+          observaciones: obsSolicitud,
+          requiere_comodato: nuevoRequiereComodato
         })
       });
       const data = await res.json();
@@ -134,6 +137,7 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
         setShowCrearModal(false);
         setItemsSolicitud([{ id_material: '', cantidad_solicitada: 1 }]);
         setObsSolicitud('');
+        setNuevoRequiereComodato(false);
         setNuevaPlaca('');
         setNuevoTecnico('');
         cargarDatos();
@@ -314,6 +318,19 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
           </select>
         </div>
 
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted, #64748b)' }}>Tipo:</span>
+          <select
+            value={filtroTipo}
+            onChange={(e) => setFiltroTipo(e.target.value)}
+            style={{ padding: '5px 10px', borderRadius: '8px', border: '1px solid var(--border-color, #cbd5e1)', background: 'var(--hover-bg, #f8fafc)', fontSize: '11.5px', fontWeight: 600, color: 'inherit', outline: 'none' }}
+          >
+            <option value="TODOS">Todos los Tipos</option>
+            <option value="MATERIALES">📦 Solo Materiales</option>
+            <option value="EQUIPOS">📡 Solo Equipos (ONT / Router)</option>
+          </select>
+        </div>
+
         <button
           onClick={cargarDatos}
           style={{ background: 'var(--hover-bg, #f1f5f9)', border: '1px solid var(--border-color, #cbd5e1)', padding: '5px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '11.5px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px', marginLeft: 'auto' }}
@@ -353,7 +370,35 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
               requisiciones.map((req) => (
                 <tr key={req.id_requisicion} style={{ borderBottom: '1px solid var(--border-color, #f1f5f9)', transition: 'background 0.15s' }}>
                   <td style={{ padding: '14px 16px' }}>
-                    <div style={{ fontWeight: 'bold', color: '#2563eb', fontSize: '13px' }}>{req.numero_solicitud}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 'bold', color: '#2563eb', fontSize: '13px' }}>{req.numero_solicitud}</span>
+                      {req.tipo_requisicion === 'EQUIPOS' ? (
+                        <span style={{ padding: '2px 6px', borderRadius: '6px', background: '#f3e8ff', color: '#7e22ce', fontSize: '10px', fontWeight: 800 }}>
+                          📡 EQUIPOS
+                        </span>
+                      ) : (
+                        <span style={{ padding: '2px 6px', borderRadius: '6px', background: '#dbeafe', color: '#1e40af', fontSize: '10px', fontWeight: 800 }}>
+                          📦 MATERIALES
+                        </span>
+                      )}
+                      {req.requiere_comodato && (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '2px 7px',
+                          borderRadius: '6px',
+                          background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                          color: '#ffffff',
+                          fontSize: '10px',
+                          fontWeight: 900,
+                          letterSpacing: '0.2px',
+                          boxShadow: '0 2px 5px rgba(16, 185, 129, 0.35)'
+                        }}>
+                          📄 HOJAS DE COMODATO
+                        </span>
+                      )}
+                    </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-muted, #64748b)', marginTop: '2px' }}>
                       📅 {req.fecha_solicitud_fmt || req.fecha_solicitud}
                     </div>
@@ -369,7 +414,26 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
                   </td>
 
                   <td style={{ padding: '14px 16px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', maxHeight: '100px', overflowY: 'auto' }}>
+                    {/* Alerta destacada si lleva Hojas de comodato */}
+                    {req.requiere_comodato && (
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '4px 9px',
+                        borderRadius: '6px',
+                        background: '#ecfdf5',
+                        border: '1.5px solid #10b981',
+                        color: '#065f46',
+                        fontWeight: 900,
+                        fontSize: '11px',
+                        marginBottom: '6px'
+                      }}>
+                        <span>📄</span>
+                        <span>REQUIERE HOJAS DE COMODATO</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', maxHeight: '110px', overflowY: 'auto' }}>
                       {(req.items || []).map((it, idx) => {
                         const cant = it.cantidad_aprobada !== undefined && it.cantidad_aprobada !== null
                           ? Number(it.cantidad_aprobada)
@@ -377,13 +441,49 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
                         return (
                           <div key={idx} style={{ fontSize: '11.5px', color: 'var(--text-main, #334155)' }}>
                             • <strong style={{ color: cant === 0 ? '#ef4444' : '#0284c7' }}>
-                              {cant} {it.unidad_medida}
+                              {cant} {it.unidad_medida || 'UNIDAD'}
                               {cant === 0 ? ' (No entregado)' : ''}
                             </strong> - {it.nombre_material}
                           </div>
                         );
                       })}
                     </div>
+                    {/* Nota/Comentario del técnico */}
+                    {(req.comentario_tecnico || (req.observaciones && !req.observaciones.startsWith('[RECHAZO:'))) && (
+                      <div style={{
+                        marginTop: '8px',
+                        padding: '6px 10px',
+                        background: '#fef3c7',
+                        borderLeft: '3px solid #f59e0b',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        color: '#92400e',
+                        lineHeight: '1.35',
+                        wordBreak: 'break-word'
+                      }}>
+                        <strong>💬 Nota:</strong>{' '}
+                        <span style={{ fontStyle: 'italic', fontWeight: 600 }}>
+                          {req.comentario_tecnico || req.observaciones.replace(/\[RECHAZO:\s*.*?\]/g, '').trim()}
+                        </span>
+                      </div>
+                    )}
+                    {/* Motivo de Rechazo de Bodega */}
+                    {(req.motivo_rechazo || (req.observaciones && req.observaciones.includes('[RECHAZO:'))) && (
+                      <div style={{
+                        marginTop: '6px',
+                        padding: '6px 10px',
+                        background: '#fee2e2',
+                        borderLeft: '3px solid #ef4444',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        color: '#991b1b',
+                        lineHeight: '1.35',
+                        wordBreak: 'break-word'
+                      }}>
+                        <strong>✕ Rechazo:</strong>{' '}
+                        {req.motivo_rechazo || req.observaciones.match(/\[RECHAZO:\s*(.*?)\]/)?.[1]}
+                      </div>
+                    )}
                   </td>
 
                   <td style={{ padding: '14px 16px', textAlign: 'center' }}>
@@ -542,6 +642,42 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
                 </div>
               </div>
 
+              {/* Opción Hojas de comodato en Creación */}
+              <div
+                onClick={() => setNuevoRequiereComodato(!nuevoRequiereComodato)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  background: nuevoRequiereComodato ? '#ecfdf5' : '#f8fafc',
+                  border: nuevoRequiereComodato ? '2px solid #10b981' : '1px solid #cbd5e1',
+                  cursor: 'pointer',
+                  marginBottom: '18px',
+                  transition: 'all 0.2s',
+                  userSelect: 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '1.3rem' }}>📄</span>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '12.5px', color: nuevoRequiereComodato ? '#065f46' : '#1e293b' }}>
+                      Hojas de comodato
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748b' }}>
+                      {nuevoRequiereComodato ? '✓ Marcado para entregar Hojas de comodato' : 'Marcar si esta entrega requiere Hojas de comodato'}
+                    </div>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={nuevoRequiereComodato}
+                  onChange={() => {}}
+                  style={{ width: '18px', height: '18px', accentColor: '#10b981', cursor: 'pointer' }}
+                />
+              </div>
+
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '6px' }}>Observaciones (Opcional)</label>
                 <textarea
@@ -591,6 +727,51 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
               <button onClick={() => setShowAprobarModal(false)} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
             </div>
 
+            {/* Aviso distintivo de Hojas de comodato */}
+            {selectedReq.requiere_comodato && (
+              <div style={{
+                background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                border: '2px solid #10b981',
+                borderRadius: '12px',
+                padding: '12px 16px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                boxShadow: '0 2px 10px rgba(16, 185, 129, 0.2)'
+              }}>
+                <div style={{ fontSize: '1.8rem' }}>📄</div>
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: '13px', color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                    ¡ATENCIÓN BODEGA! Este pedido requiere Hojas de comodato
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#047857', marginTop: '2px', fontWeight: 600 }}>
+                    Alista y entrega las Hojas de comodato junto con los insumos solicitados.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Comentario del Técnico para Alistamiento en Bodega */}
+            {(selectedReq.comentario_tecnico || (selectedReq.observaciones && !selectedReq.observaciones.startsWith('[RECHAZO:'))) && (
+              <div style={{
+                background: '#fef3c7',
+                border: '1px solid #f59e0b',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                marginBottom: '16px',
+                color: '#92400e',
+                fontSize: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, marginBottom: '4px' }}>
+                  💬 Comentario / Observación del Técnico:
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.7)', padding: '8px 10px', borderRadius: '6px', border: '1px solid #fde68a', whiteSpace: 'pre-wrap', lineHeight: '1.4', fontWeight: 600 }}>
+                  {selectedReq.comentario_tecnico || selectedReq.observaciones.replace(/\[RECHAZO:\s*.*?\]/g, '').trim()}
+                </div>
+              </div>
+            )}
+
             <div style={{ marginBottom: '20px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                 <thead>
@@ -608,17 +789,17 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
                         <div style={{ fontWeight: 'bold' }}>{it.nombre_material}</div>
                         <div style={{ fontSize: '10px', color: '#64748b' }}>{it.codigo_material}</div>
                       </td>
-                      <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold', color: it.stock_bodega < it.cantidad_solicitada ? '#ef4444' : '#10b981' }}>
-                        {it.stock_bodega} {it.unidad_medida}
+                      <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold', color: (it.stock_bodega !== null && it.stock_bodega !== undefined && it.stock_bodega < it.cantidad_solicitada) ? '#ef4444' : '#10b981' }}>
+                        {it.stock_bodega !== undefined && it.stock_bodega !== null ? `${it.stock_bodega} ${it.unidad_medida}` : 'Equipo Serializado'}
                       </td>
                       <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                        {it.cantidad_solicitada} {it.unidad_medida}
+                        {it.cantidad_solicitada} {it.unidad_medida || 'UNIDAD'}
                       </td>
                       <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                         <input
                           type="number"
                           min="0"
-                          max={it.stock_bodega}
+                          max={it.stock_bodega !== undefined && it.stock_bodega !== null ? it.stock_bodega : 999}
                           value={it.cantidad_aprobada}
                           onChange={(e) => {
                             const next = [...itemsAprobando];
@@ -660,7 +841,7 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
         onClose={() => setShowFirmaModal(false)}
         onSave={handleGuardarFirmaYEntregar}
         titulo={`Firma de Entrega: ${selectedReq?.numero_solicitud}`}
-        subtitulo={`El técnico de la placa ${selectedReq?.placa_vehiculo} debe firmar para recibir los materiales.`}
+        subtitulo={`El técnico de la placa ${selectedReq?.placa_vehiculo} debe firmar para recibir los materiales.${(selectedReq?.comentario_tecnico || selectedReq?.observaciones) ? ` | Nota: ${selectedReq?.comentario_tecnico || selectedReq?.observaciones?.replace(/\[RECHAZO:\s*.*?\]/g, '').trim()}` : ''}`}
       />
 
       {/* MODAL COMPROBANTE DE ENTREGA CON FIRMA */}
@@ -715,6 +896,36 @@ export default function RequisicionesBodegaTab({ token: tokenProp, placas: placa
                 </tbody>
               </table>
             </div>
+
+            {/* Entrega de Hojas de comodato en Comprobante */}
+            {selectedReq.requiere_comodato && (
+              <div style={{
+                margin: '12px 0',
+                padding: '10px 14px',
+                background: '#ecfdf5',
+                border: '1.5px solid #10b981',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                color: '#065f46',
+                fontWeight: 800,
+                fontSize: '12px'
+              }}>
+                <span style={{ fontSize: '1.2rem' }}>📄</span>
+                <span>Entrega de Hojas de comodato incluida</span>
+              </div>
+            )}
+
+            {/* Observaciones del Pedido en Comprobante */}
+            {(selectedReq.comentario_tecnico || (selectedReq.observaciones && !selectedReq.observaciones.startsWith('[RECHAZO:'))) && (
+              <div style={{ margin: '14px 0', padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '11.5px', color: '#475569' }}>
+                <strong style={{ color: '#1e293b' }}>💬 Nota / Observaciones del Pedido:</strong>
+                <div style={{ marginTop: '3px', whiteSpace: 'pre-wrap', color: '#0f172a' }}>
+                  {selectedReq.comentario_tecnico || selectedReq.observaciones.replace(/\[RECHAZO:\s*.*?\]/g, '').trim()}
+                </div>
+              </div>
+            )}
 
             {/* Firma Incrustada */}
             <div style={{ textAlign: 'center', marginTop: '20px', borderTop: '1px dashed #cbd5e1', paddingTop: '16px' }}>

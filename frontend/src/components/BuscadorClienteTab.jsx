@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ConsultaBaseCentralModal from './ConsultaBaseCentralModal';
 
 function BuscadorClienteTab({ token }) {
   const [query, setQuery] = useState('');
@@ -29,6 +30,13 @@ function BuscadorClienteTab({ token }) {
     tipo_mesh: '',
     cantidad_routers: 1,
     modo_acceso: ''
+  });
+
+  // Central Database Modal state
+  const [centralModal, setCentralModal] = useState({
+    isOpen: false,
+    initialCedula: '',
+    initialContrato: ''
   });
 
   const searchTimeoutRef = useRef(null);
@@ -211,18 +219,44 @@ function BuscadorClienteTab({ token }) {
     <div id="tab-buscar-cliente" className="tab-content active" style={{ display: 'block', padding: '25px', overflowY: 'auto', flexGrow: 1 }}>
 
       {/* Hero Header */}
-      <div style={{ background: 'var(--card-bg)', padding: '24px 30px', borderRadius: '20px', marginBottom: '25px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: 'var(--shadow-sm)' }}>
-        <div style={{ background: 'rgba(2, 132, 199, 0.12)', color: '#0284c7', width: '52px', height: '52px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyCenter: 'center', justifyContent: 'center', fontSize: '1.6rem', flexShrink: 0 }}>
-          <i className="fa-solid fa-users-gear"></i>
+      <div style={{ background: 'var(--card-bg)', padding: '24px 30px', borderRadius: '20px', marginBottom: '25px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', boxShadow: 'var(--shadow-sm)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ background: 'rgba(2, 132, 199, 0.12)', color: '#0284c7', width: '52px', height: '52px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyCenter: 'center', justifyContent: 'center', fontSize: '1.6rem', flexShrink: 0 }}>
+            <i className="fa-solid fa-users-gear"></i>
+          </div>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '1.75rem', color: 'var(--text-main)', fontWeight: 800, letterSpacing: '-0.02em' }}>
+              Buscador y Diagnóstico de Clientes
+            </h1>
+            <p style={{ margin: '4px 0 0 0', color: 'var(--sidebar-text)', fontSize: '0.9rem', fontWeight: 500 }}>
+              Busca fichas comerciales de clientes y realiza diagnósticos de señal óptica en tiempo real en la OLT.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '1.75rem', color: 'var(--text-main)', fontWeight: 800, letterSpacing: '-0.02em' }}>
-            Buscador y Diagnóstico de Clientes
-          </h1>
-          <p style={{ margin: '4px 0 0 0', color: 'var(--sidebar-text)', fontSize: '0.9rem', fontWeight: 500 }}>
-            Busca fichas comerciales de clientes y realiza diagnósticos de señal óptica en tiempo real en la OLT.
-          </p>
-        </div>
+
+        <button
+          type="button"
+          onClick={() => setCentralModal({ isOpen: true, initialCedula: '', initialContrato: '' })}
+          style={{
+            padding: '10px 18px',
+            borderRadius: '12px',
+            border: 'none',
+            background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+            color: '#ffffff',
+            fontWeight: 800,
+            fontSize: '0.88rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 4px 14px rgba(2, 132, 199, 0.25)',
+            transition: 'all 0.15s ease'
+          }}
+          title="Buscar cliente directamente en el sistema central por Cédula"
+        >
+          <i className="fa-solid fa-cloud-arrow-down"></i>
+          <span>Consultar Base Central</span>
+        </button>
       </div>
 
       {/* Buscador Principal Interactivo */}
@@ -268,8 +302,39 @@ function BuscadorClienteTab({ token }) {
                 </div>
               ))
             ) : (
-              <div style={{ padding: '16px', textAlign: 'center', color: 'var(--sidebar-text)', fontSize: '0.9rem', fontWeight: 600 }}>
-                No se encontraron coincidencias.
+              <div style={{ padding: '20px', textAlign: 'center', color: 'var(--sidebar-text)', fontSize: '0.9rem' }}>
+                <div style={{ marginBottom: '10px', fontWeight: 600 }}>No se encontraron coincidencias en la base local.</div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDropdown(false);
+                    const cleanQ = query.trim();
+                    const isContrato = /^\d{1,6}[Ff]?$/i.test(cleanQ);
+                    const isCed = !isContrato && cleanQ.length >= 4;
+                    setCentralModal({
+                      isOpen: true,
+                      initialCedula: isCed ? cleanQ : '',
+                      initialContrato: isCed ? '' : cleanQ
+                    });
+                  }}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '0.84rem',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 12px rgba(2, 132, 199, 0.25)'
+                  }}
+                >
+                  <i className="fa-solid fa-cloud-arrow-down"></i>
+                  <span>Consultar "{query}" en Base Central</span>
+                </button>
               </div>
             )}
           </div>
@@ -326,6 +391,35 @@ function BuscadorClienteTab({ token }) {
                   >
                     <i className="fa-solid fa-pen-to-square"></i>
                     <span>✏️ Editar Datos Técnicos</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCentralModal({
+                        isOpen: true,
+                        initialCedula: selectedClient.cedula || '',
+                        initialContrato: selectedClient.contrato || ''
+                      });
+                    }}
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.25) 100%)',
+                      border: '1px solid rgba(16, 185, 129, 0.4)',
+                      color: '#059669',
+                      fontWeight: 800,
+                      fontSize: '0.82rem',
+                      padding: '6px 14px',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.15)'
+                    }}
+                    title="Consultar y actualizar con la Base Central en tiempo real"
+                  >
+                    <i className="fa-solid fa-cloud-arrow-down"></i>
+                    <span>🔄 Sincronizar Base Central</span>
                   </button>
                 </div>
               </div>
@@ -957,6 +1051,18 @@ function BuscadorClienteTab({ token }) {
           </div>
         </div>
       )}
+
+      {/* Modal Consulta e Importación Base Central */}
+      <ConsultaBaseCentralModal
+        isOpen={centralModal.isOpen}
+        onClose={() => setCentralModal({ isOpen: false, initialCedula: '', initialContrato: '' })}
+        initialCedula={centralModal.initialCedula}
+        initialContrato={centralModal.initialContrato}
+        token={token}
+        onClientImported={(importedClient) => {
+          handleSelectClient(importedClient);
+        }}
+      />
     </div>
   );
 }

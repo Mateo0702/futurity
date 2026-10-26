@@ -124,6 +124,9 @@ function App() {
         if (parsedUser.rol === 'CALIDAD' || parsedUser.role === 'CALIDAD') {
           setActiveArea('INSTALACIONES');
         }
+        if (!initialTabFromUrl && (parsedUser.rol === 'SUPERVISOR_ATC' || parsedUser.role === 'SUPERVISOR_ATC')) {
+          setActiveTab('auditoria-atc');
+        }
       }
     } else {
       setToken(null);
@@ -164,6 +167,9 @@ function App() {
     if (newUser?.rol === 'CALIDAD' || newUser?.role === 'CALIDAD') {
       setActiveArea('INSTALACIONES');
     }
+    if (!initialTabFromUrl && (newUser?.rol === 'SUPERVISOR_ATC' || newUser?.role === 'SUPERVISOR_ATC')) {
+      setActiveTab('auditoria-atc');
+    }
   };
 
   const handleLogout = async () => {
@@ -191,6 +197,17 @@ function App() {
       }
     }
     window.location.href = '/';
+  };
+
+  const handleSwitchToTecnico = (nombre) => {
+    if (nombre) {
+      setTecnicoNombre(nombre);
+    }
+    setActiveTab('tecnico-panel');
+  };
+
+  const handleSwitchToAdmin = () => {
+    setActiveTab('visitas');
   };
 
   if (!initialized) {
@@ -314,7 +331,14 @@ function App() {
       <ToastContainer />
       {token && user && ((user.rol === 'TECNICO' || user.role === 'TECNICO' || user.user_role === 'TECNICO') || activeTab === 'tecnico-panel') ? (
         <div className="tecnico-panel-wrapper">
-          <TecnicoPanel token={token} user={user} tecnicoNombreParam={tecnicoNombre} onLogout={handleLogout} />
+          <TecnicoPanel
+            token={token}
+            user={user}
+            tecnicoNombreParam={tecnicoNombre}
+            onLogout={handleLogout}
+            onSwitchToAdmin={handleSwitchToAdmin}
+            canSwitchToAdmin={Boolean(user && ((user.rol || user.role || '').toUpperCase().includes('ADMIN') || (user.rol || user.role || '').toUpperCase().includes('SUPERVISOR')))}
+          />
         </div>
       ) : token && user ? (
         <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
@@ -326,6 +350,7 @@ function App() {
             activeArea={activeArea}
             onAreaChange={setActiveArea}
             onLogout={handleLogout}
+            onSwitchToTecnico={handleSwitchToTecnico}
           />
           
           {/* Contenido Principal (Main Area) */}

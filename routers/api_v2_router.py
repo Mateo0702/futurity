@@ -108,6 +108,28 @@ def api_v2_login():
                 except Exception as e_tec:
                     print(f"Error actualizando estado del técnico en login v2: {e_tec}")
 
+            # Detectar si este usuario también existe como técnico activo en la tabla tecnicos
+            es_tecnico_mixto = False
+            tecnico_nombre_asociado = None
+            try:
+                c_chk = conexion.cursor(dictionary=True)
+                c_chk.execute("""
+                    SELECT id_tecnico, nombre FROM tecnicos 
+                    WHERE activo = 1 AND (
+                        UPPER(nombre) = %s 
+                        OR UPPER(nombre) LIKE %s 
+                        OR %s LIKE CONCAT('%%', UPPER(nombre), '%%')
+                    )
+                    LIMIT 1
+                """, (usuario['nombre'].upper(), f"%{usuario['nombre'].upper()}%", usuario['nombre'].upper()))
+                tec_match = c_chk.fetchone()
+                c_chk.close()
+                if tec_match:
+                    es_tecnico_mixto = True
+                    tecnico_nombre_asociado = tec_match['nombre']
+            except Exception as e_chk:
+                print(f"Error verificando rol técnico mixto: {e_chk}")
+
             return jsonify({
                 "status": "success",
                 "message": "Autenticación exitosa",
@@ -116,7 +138,9 @@ def api_v2_login():
                     "id": usuario['id_usuario'],
                     "nombre": usuario['nombre'],
                     "rol": usuario['rol'],
-                    "primer_ingreso": usuario.get('primer_ingreso', 0)
+                    "primer_ingreso": usuario.get('primer_ingreso', 0),
+                    "es_tecnico_mixto": es_tecnico_mixto,
+                    "tecnico_nombre_asociado": tecnico_nombre_asociado
                 }
             })
         else:
@@ -598,6 +622,25 @@ def api_v2_create_visita():
                         "status": "error", 
                         "message": f"❌ Error: {tecnico_principal} trabaja en la MAÑANA. No puedes asignarle una visita de la TARDE."
                     }), 400
+
+        # Protección contra doble clic / duplicación inmediata (< 30 segundos)
+        cursor.execute("""
+            SELECT id_visita FROM visitas_tecnicas
+            WHERE cliente = %s 
+              AND (contrato = %s OR (contrato IS NULL AND %s IS NULL))
+              AND problema = %s 
+              AND fecha_programada = %s 
+              AND fecha_registro >= DATE_SUB(NOW(), INTERVAL 30 SECOND)
+            ORDER BY id_visita DESC
+            LIMIT 1
+        """, (cliente, contrato, contrato, problema, fecha_programada))
+        duplicado_reciente = cursor.fetchone()
+        if duplicado_reciente:
+            return jsonify({
+                "status": "success",
+                "message": "Visita ya registrada previamente.",
+                "id_visita": duplicado_reciente['id_visita']
+            }), 200
 
         query = """
             INSERT INTO visitas_tecnicas 

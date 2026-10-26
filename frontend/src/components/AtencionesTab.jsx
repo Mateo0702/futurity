@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ConsultaBaseCentralModal from './ConsultaBaseCentralModal';
 
 function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
   // Today's Local Date helper
@@ -35,6 +36,13 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
   const [multiContratosList, setMultiContratosList] = useState([]);
   const [showMultiContratoModal, setShowMultiContratoModal] = useState(false);
   const [clientPlanInfo, setClientPlanInfo] = useState(null);
+
+  // Central Database Modal state
+  const [centralModal, setCentralModal] = useState({
+    isOpen: false,
+    initialCedula: '',
+    initialContrato: ''
+  });
 
   // Right-side card states (Client history by contract)
   const [historialCliente, setHistorialCliente] = useState([]);
@@ -199,6 +207,16 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
         setShowMultiContratoModal(true);
       } else if (data.status === 'success' && data.cliente) {
         aplicarDatosCliente(data.cliente);
+      } else {
+        // No encontrado en base local -> Abrir consulta a Base Central
+        const val = contrato.trim();
+        const isContrato = /^\d{1,6}[Ff]?$/i.test(val);
+        const isCed = !isContrato && val.length >= 4;
+        setCentralModal({
+          isOpen: true,
+          initialCedula: isCed ? val : '',
+          initialContrato: isCed ? '' : val
+        });
       }
     } catch (e) {
       console.error("Error de búsqueda de contrato:", e);
@@ -420,9 +438,38 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
             {/* Fila 1: Cédula o Contrato + Cliente */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '16px', marginBottom: '14px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>
-                  Cédula o Contrato: <span style={{ color: 'var(--primary)' }}>*</span>
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ margin: 0, fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)' }}>
+                    Cédula o Contrato: <span style={{ color: 'var(--primary)' }}>*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const val = contrato.trim();
+                      const isContrato = /^\d{1,6}[Ff]?$/i.test(val);
+                      const isCed = !isContrato && val.length >= 4;
+                      setCentralModal({
+                        isOpen: true,
+                        initialCedula: isCed ? val : '',
+                        initialContrato: isCed ? '' : val
+                      });
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#0284c7',
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                    title="Consultar e importar desde la Base Central"
+                  >
+                    <i className="fa-solid fa-cloud-arrow-down"></i> Base Central
+                  </button>
+                </div>
                 <div style={{ position: 'relative' }}>
                   <input
                     type="text"
@@ -1299,9 +1346,9 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
             {multiContratosList.length > 0 && (
               <div style={{ background: 'var(--profile-bg)', padding: '10px 14px', borderRadius: '12px', marginBottom: '16px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                  👤 {multiContratosList[0].cliente}
+                  👤 {multiContratosList.every(c => (c.cedula && c.cedula === multiContratosList[0].cedula) || c.cliente === multiContratosList[0].cliente) ? multiContratosList[0].cliente : 'Servicios Encontrados'}
                 </span>
-                {multiContratosList[0].cedula && (
+                {multiContratosList.every(c => c.cedula && c.cedula === multiContratosList[0].cedula) && multiContratosList[0].cedula && (
                   <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--sidebar-text)' }}>
                     🪪 Cédula: <strong>{multiContratosList[0].cedula}</strong>
                   </span>
@@ -1368,6 +1415,13 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                     </button>
                   </div>
 
+                  {/* Titular del contrato individual */}
+                  {item.cliente && (
+                    <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>
+                      👤 {item.cliente} {item.cedula && <span style={{ fontSize: '0.78rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>(🪪 {item.cedula})</span>}
+                    </div>
+                  )}
+
                   <div style={{ fontSize: '0.84rem', color: 'var(--text-main)', display: 'grid', gridTemplateColumns: '1fr', gap: '4px', marginTop: '4px' }}>
                     <div>
                       <strong style={{ color: 'var(--sidebar-text)' }}>📍 Dirección: </strong>
@@ -1411,6 +1465,18 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
           </div>
         </div>
       )}
+
+      {/* Modal Consulta e Importación Base Central */}
+      <ConsultaBaseCentralModal
+        isOpen={centralModal.isOpen}
+        onClose={() => setCentralModal({ isOpen: false, initialCedula: '', initialContrato: '' })}
+        initialCedula={centralModal.initialCedula}
+        initialContrato={centralModal.initialContrato}
+        token={token}
+        onClientImported={(importedClient) => {
+          aplicarDatosCliente(importedClient);
+        }}
+      />
     </div>
   );
 }

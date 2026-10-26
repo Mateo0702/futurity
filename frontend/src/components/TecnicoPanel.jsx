@@ -3,7 +3,7 @@ import { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } from '@zxing/
 import { createWorker } from 'tesseract.js';
 import FirmaCanvasModal from './FirmaCanvasModal';
 
-function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
+function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout, onSwitchToAdmin, canSwitchToAdmin }) {
   const tecnicoName = tecnicoNombreParam || user?.nombre || '';
   const tecnicoUrlName = tecnicoName.replace(/ /g, '_');
   
@@ -20,7 +20,9 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   const [mensajePanico, setMensajePanico] = useState('');
   const [numeroGrua, setNumeroGrua] = useState('0958672088');
   
-  // Catalogs
+  // Offline Mode & App Update State
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState({ available: false, newVersion: '', releaseNotes: '', apkUrl: '' });
   const [soluciones, setSoluciones] = useState([]);
   const [catalogoMateriales, setCatalogoMateriales] = useState([]);
   const [catalogoOnt, setCatalogoOnt] = useState([]);
@@ -59,6 +61,40 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
   // Main Navigation Tab State ('agenda' | 'pedidos' | 'vehiculo')
   const [activeMainTab, setActiveMainTab] = useState('agenda');
+
+  // Filtro en Agenda de Visitas ('PENDIENTES' | 'FINALIZADAS' | 'TODAS')
+  const [filtroAgenda, setFiltroAgenda] = useState('PENDIENTES');
+
+  // Helper functions for visit summary
+  const formatHoraVisita = (dateStr) => {
+    if (!dateStr) return '--:--';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) {
+        return dateStr.substring(11, 16) || dateStr.substring(0, 5);
+      }
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
+  const calcularDuracionVisita = (startStr, endStr) => {
+    if (!startStr || !endStr) return null;
+    try {
+      const s = new Date(startStr);
+      const e = new Date(endStr);
+      const diffMs = e - s;
+      if (diffMs <= 0 || isNaN(diffMs)) return null;
+      const totalMins = Math.round(diffMs / (1000 * 60));
+      if (totalMins < 60) return `${totalMins} min`;
+      const hrs = Math.floor(totalMins / 60);
+      const mins = totalMins % 60;
+      return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+    } catch (e) {
+      return null;
+    }
+  };
 
   // Inventario Móvil / Vehículo State
   const [showInventarioVehiculoModal, setShowInventarioVehiculoModal] = useState(false);
@@ -167,6 +203,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
   const [showSolicitudBodegaModal, setShowSolicitudBodegaModal] = useState(false);
   const [solicitudBodegaItems, setSolicitudBodegaItems] = useState([{ id_material: '', cantidad_solicitada: 1 }]);
   const [solicitudBodegaObs, setSolicitudBodegaObs] = useState('');
+  const [solicitudBodegaComodato, setSolicitudBodegaComodato] = useState(false);
   const [enviandoSolicitudBodega, setEnviandoSolicitudBodega] = useState(false);
 
   const handleAddItemSolicitudBodega = () => {
@@ -208,7 +245,8 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
           placa_vehiculo: placaActual,
           nombre_tecnico: tecnicoRealName,
           items: validItems,
-          observaciones: solicitudBodegaObs
+          observaciones: solicitudBodegaObs,
+          requiere_comodato: solicitudBodegaComodato
         })
       });
       const data = await res.json();
@@ -224,6 +262,95 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
       alert("Error de conexión al enviar la solicitud.");
     } finally {
       setEnviandoSolicitudBodega(false);
+    }
+  };
+
+  // Solicitud de Equipos Modal State
+  const [showSolicitudEquiposModal, setShowSolicitudEquiposModal] = useState(false);
+  const [solicitudEquiposItems, setSolicitudEquiposItems] = useState([{ equipo: '', cantidad: 1 }]);
+  const [solicitudEquiposObs, setSolicitudEquiposObs] = useState('');
+  const [solicitudEquiposComodato, setSolicitudEquiposComodato] = useState(false);
+  const [enviandoSolicitudEquipos, setEnviandoSolicitudEquipos] = useState(false);
+
+  const handleAddItemSolicitudEquipos = () => {
+    setSolicitudEquiposItems(prev => [...prev, { equipo: '', cantidad: 1 }]);
+  };
+
+  const handleRemoveItemSolicitudEquipos = (idx) => {
+    setSolicitudEquiposItems(solicitudEquiposItems.filter((_, i) => i !== idx));
+  };
+
+  const handleItemChangeSolicitudEquipos = (idx, field, val) => {
+    const next = [...solicitudEquiposItems];
+    next[idx][field] = val;
+    setSolicitudEquiposItems(next);
+  };
+
+  const handleEnviarSolicitudEquiposSubmit = async (e) => {
+    if (e) e.preventDefault();
+    const placaActual = inventarioVehiculoData.placa;
+    if (!placaActual || placaActual === 'S/P') {
+      alert("No tienes una placa asignada para solicitar equipos. Contacta al administrador.");
+      return;
+    }
+    const validItems = solicitudEquiposItems.filter(it => it.equipo && Number(it.cantidad) > 0);
+    if (validItems.length === 0) {
+      alert("Por favor selecciona al menos un equipo del listado con cantidad válida.");
+      return;
+    }
+
+    setEnviandoSolicitudEquipos(true);
+    try {
+      const itemsPayload = validItems.map(it => {
+        let tipo_equipo = 'EQUIPO';
+        let modelo = it.equipo;
+
+        if (it.equipo.startsWith('ONU_ROUTER:')) {
+          tipo_equipo = 'ONU-ROUTER';
+          modelo = it.equipo.replace('ONU_ROUTER:', '').trim();
+        } else if (it.equipo.startsWith('ROUTER:')) {
+          tipo_equipo = 'ROUTER';
+          modelo = it.equipo.replace('ROUTER:', '').trim();
+        } else if (it.equipo.startsWith('SOLO_ONU:')) {
+          tipo_equipo = 'SOLO ONU';
+          modelo = it.equipo.replace('SOLO_ONU:', '').trim();
+        }
+
+        return {
+          tipo_equipo,
+          modelo,
+          cantidad_solicitada: parseInt(it.cantidad) || 1
+        };
+      });
+
+      const res = await fetch('/api/admin/requisiciones/crear', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          tipo_requisicion: 'EQUIPOS',
+          placa_vehiculo: placaActual,
+          nombre_tecnico: tecnicoRealName,
+          items: itemsPayload,
+          observaciones: solicitudEquiposObs,
+          requiere_comodato: solicitudEquiposComodato
+        })
+      });
+      const data = await res.json();
+      if (data?.status === 'ok') {
+        alert(data.message || "¡Solicitud de equipos enviada a bodega exitosamente!");
+        setShowSolicitudEquiposModal(false);
+        await cargarMisRequisiciones();
+      } else {
+        alert(data?.message || "Error al enviar solicitud de equipos.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error de conexión al enviar la solicitud de equipos.");
+    } finally {
+      setEnviandoSolicitudEquipos(false);
     }
   };
 
@@ -400,6 +527,11 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
       });
       const data = await res.json();
       if (res.ok && data.status === 'ok') {
+        setIsOfflineMode(false);
+        try {
+          localStorage.setItem(`futurity_offline_panel_${tecnicoUrlName}`, JSON.stringify(data));
+        } catch (e) {}
+
         const freshVisitas = data.visitas || [];
         setVisitas(freshVisitas);
         setTecnicoRealName(data.tecnico);
@@ -471,7 +603,28 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
         setError(data.message || 'Error al obtener información de visitas.');
       }
     } catch (err) {
-      console.error(err);
+      console.warn("Falla de red en panel técnico, comprobando caché offline:", err);
+      try {
+        const cachedRaw = localStorage.getItem(`futurity_offline_panel_${tecnicoUrlName}`);
+        if (cachedRaw) {
+          const cachedData = JSON.parse(cachedRaw);
+          const cachedVisitas = cachedData.visitas || [];
+          setVisitas(cachedVisitas);
+          setTecnicoRealName(cachedData.tecnico || tecnicoName);
+          setFotoPerfil(cachedData.foto_perfil || '');
+          setEstadoActividad(cachedData.estado_actividad || 'Disponible');
+          setAreaTrabajo(cachedData.area_trabajo || 'SOPORTE');
+          setSoluciones(cachedData.soluciones || []);
+          setCatalogoMateriales(cachedData.catalogo || []);
+          setCatalogoOnt(cachedData.catalogo_ont || []);
+          setCatalogoRouter(cachedData.catalogo_router || []);
+          setIsOfflineMode(true);
+          setError('');
+          return;
+        }
+      } catch (cacheErr) {
+        console.error("Error al cargar caché offline:", cacheErr);
+      }
       setError('Error al conectar con la API del panel técnico.');
     } finally {
       setLoading(false);
@@ -628,16 +781,74 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     // Ping inmediato al abrir
     enviarPingGeolocalizacion();
 
-    // Notificar al servicio nativo de Android para rastreo global continuo si existe
+    // Notificar al servicio nativo de Android para rastreo global continuo si existe (enviando token para evitar 401 en segundo plano)
     if (window.AndroidBridge) {
       try {
         if (typeof window.AndroidBridge.startGlobalTracking === 'function') {
-          window.AndroidBridge.startGlobalTracking(tecnicoRealName, window.location.origin);
+          window.AndroidBridge.startGlobalTracking(tecnicoRealName, window.location.origin, token);
         }
       } catch (e) {
         console.warn("startGlobalTracking nativo:", e);
       }
     }
+
+    // Verificar si hay nueva versión de la app móvil (Solo si está corriendo dentro de la app Android)
+    const checkAppVersion = async () => {
+      try {
+        const isAndroidApp = !!window.AndroidBridge || navigator.userAgent.includes('FuturityAtlas');
+        if (!isAndroidApp) {
+          // Si el usuario está usando Chrome, Edge o navegador web común, NO mostrar banner de APK
+          setUpdateInfo({ available: false });
+          return;
+        }
+
+        const res = await fetch('/api/app/version');
+        const vData = await res.json();
+        if (vData && vData.status === 'ok') {
+          let installedVersionCode = 0;
+
+          // 1. Extraer del User-Agent de la WebView
+          const uaMatch = navigator.userAgent.match(/versionCode:(\d+)/);
+          if (uaMatch && uaMatch[1]) {
+            installedVersionCode = parseInt(uaMatch[1]);
+          }
+
+          // 2. Extraer de AndroidBridge si está disponible
+          if (window.AndroidBridge && typeof window.AndroidBridge.getDeviceInfo === 'function') {
+            try {
+              const devInfo = JSON.parse(window.AndroidBridge.getDeviceInfo() || '{}');
+              if (devInfo.version_code) {
+                installedVersionCode = Math.max(installedVersionCode, parseInt(devInfo.version_code));
+              }
+            } catch (e) {}
+          }
+
+          // Si la versión instalada ya es igual o mayor a la del servidor, NO mostrar banner
+          if (installedVersionCode >= vData.version_code) {
+            setUpdateInfo({ available: false });
+            return;
+          }
+
+          // Verificar si el técnico ya cerró el aviso en esta sesión
+          if (sessionStorage.getItem('dismiss_apk_update_' + vData.version_code) === '1') {
+            setUpdateInfo({ available: false });
+            return;
+          }
+
+          setUpdateInfo({
+            available: true,
+            newVersion: vData.version_name,
+            releaseNotes: vData.release_notes,
+            apkUrl: vData.apk_url,
+            forceUpdate: vData.force_update,
+            versionCode: vData.version_code
+          });
+        }
+      } catch (e) {
+        console.warn("No se pudo verificar actualización de app:", e);
+      }
+    };
+    checkAppVersion();
 
     const pingTimer = setInterval(() => {
       enviarPingGeolocalizacion();
@@ -937,7 +1148,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
       if (res.ok && data.status === 'ok') {
         if (window.AndroidBridge) {
           try {
-            window.AndroidBridge.startTracking(idVisita.toString(), window.location.origin);
+            window.AndroidBridge.startTracking(idVisita.toString(), window.location.origin, token, tecnicoRealName);
           } catch (e) {
             console.error("Error al iniciar tracking AndroidBridge:", e);
           }
@@ -1052,6 +1263,8 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
     let motivoFinal = motivoPosponer;
     if (motivoPosponer === 'Cliente solicita reagendar para otra fecha') {
       motivoFinal = `Cliente solicita reagendar: ${motivoPosponerOtro ? motivoPosponerOtro.trim() : 'Sin fecha detallada'}`;
+    } else if (motivoPosponer === 'Cliente no desea la visita / Desiste del soporte') {
+      motivoFinal = `Cliente no desea la visita / Desiste: ${motivoPosponerOtro ? motivoPosponerOtro.trim() : 'Confirmado por cliente'}`;
     } else if (motivoPosponer === 'Otro motivo') {
       motivoFinal = motivoPosponerOtro;
     }
@@ -1873,10 +2086,16 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
   // --- Dynamic Materials List ---
   const addMaterialRow = (visitaId) => {
-    if (catalogoMateriales.length === 0) return;
+    // Solo permitir materiales que el técnico tiene asignados físicamente en su buseta
+    const materialesBusetaDisponibles = (inventarioVehiculoData.materiales || []).filter(m => (m.cantidad_disponible || 0) > 0);
+    if (materialesBusetaDisponibles.length === 0) {
+      alert("⚠️ No tienes materiales con stock disponible en tu buseta. Si necesitas insumos, solicítalos a Bodega desde la sección de 'Pedir Material'.");
+      return;
+    }
+    const primerMat = materialesBusetaDisponibles[0];
     const form = getFormState(visitaId);
     const item = {
-      id_material: catalogoMateriales[0].id_material.toString(),
+      id_material: primerMat.id_material.toString(),
       cantidad: '1'
     };
     updateFormState(visitaId, {
@@ -1962,6 +2181,26 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
       return;
     }
 
+    // Validar que los materiales provengan exclusivamente de la buseta y no excedan el stock disponible
+    if (form.materiales && form.materiales.length > 0) {
+      for (const m of form.materiales) {
+        const matVeh = (inventarioVehiculoData.materiales || []).find(it => String(it.id_material) === String(m.id_material));
+        if (!matVeh) {
+          alert(`⚠️ El material seleccionado no está asignado a tu buseta.`);
+          return;
+        }
+        const cantRequerida = Number(m.cantidad || 0);
+        if (cantRequerida <= 0) {
+          alert(`⚠️ La cantidad para ${matVeh.nombre_material} debe ser mayor a 0.`);
+          return;
+        }
+        if (cantRequerida > Number(matVeh.cantidad_disponible || 0)) {
+          alert(`⚠️ La cantidad ingresada (${cantRequerida}) para ${matVeh.nombre_material} supera el stock disponible en tu buseta (${matVeh.cantidad_disponible} ${matVeh.unidad_medida}).`);
+          return;
+        }
+      }
+    }
+
     setIsFinalizing(true);
     try {
       const payload = {
@@ -2034,6 +2273,130 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
     <div className="panel-container tecnico-scroll-container" style={{ padding: '16px 16px 90px 16px', maxWidth: '800px', margin: '0 auto', width: '100%', minHeight: '100%', boxSizing: 'border-box', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}>
       
+      {/* Banner de Actualización In-App Automática */}
+      {updateInfo.available && (
+        <div style={{
+          background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)',
+          color: '#ffffff',
+          borderRadius: '16px',
+          padding: '14px 16px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          boxShadow: '0 6px 18px rgba(37, 99, 235, 0.35)',
+          border: '1px solid rgba(255, 255, 255, 0.25)',
+          position: 'relative'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+            <span style={{ fontSize: '1.6rem', flexShrink: 0 }}>🚀</span>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '0.92rem', letterSpacing: '-0.3px' }}>
+                Nueva Versión {updateInfo.newVersion} Disponible
+              </div>
+              <div style={{ fontSize: '0.76rem', opacity: 0.9, lineHeight: '1.25', marginTop: '2px' }}>
+                {updateInfo.releaseNotes || 'Mejoras en rastreo con pantalla apagada y telemetría de batería.'}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.AndroidBridge && typeof window.AndroidBridge.downloadAndInstallUpdate === 'function') {
+                  window.AndroidBridge.downloadAndInstallUpdate(updateInfo.apkUrl);
+                } else {
+                  window.location.href = updateInfo.apkUrl;
+                }
+              }}
+              style={{
+                background: '#ffffff',
+                color: '#1d4ed8',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '10px 16px',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                boxShadow: '0 3px 8px rgba(0,0,0,0.18)'
+              }}
+            >
+              Actualizar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                sessionStorage.setItem('dismiss_apk_update_' + updateInfo.versionCode, '1');
+                setUpdateInfo(prev => ({ ...prev, available: false }));
+              }}
+              style={{
+                background: 'rgba(255,255,255,0.2)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '50%',
+                width: '28px',
+                height: '28px',
+                fontSize: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
+              }}
+              title="Cerrar aviso"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Banner de Modo Sin Conexión (Offline) */}
+      {isOfflineMode && (
+        <div style={{
+          background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+          color: '#ffffff',
+          borderRadius: '14px',
+          padding: '12px 16px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '10px',
+          fontSize: '0.84rem',
+          fontWeight: 700,
+          boxShadow: '0 4px 12px rgba(217, 119, 6, 0.3)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.2rem' }}>📡</span>
+            <div>
+              <div>Modo Sin Conexión</div>
+              <div style={{ fontSize: '0.74rem', opacity: 0.9, fontWeight: 500 }}>
+                Mostrando tus visitas guardadas en el equipo. Puedes revisar direcciones y detalles.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => cargarDatosPanel(true)}
+            style={{
+              background: 'rgba(255,255,255,0.25)',
+              color: '#ffffff',
+              border: '1px solid rgba(255,255,255,0.5)',
+              borderRadius: '10px',
+              padding: '6px 12px',
+              fontSize: '0.76rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Reconectar
+          </button>
+        </div>
+      )}
+      
       {/* Clean Top Header (100% Mobile Responsive) */}
       <div style={{
         background: 'var(--card-bg)',
@@ -2099,6 +2462,33 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
               </span>
             </div>
           </div>
+
+          {/* Volver a Admin Button (Si es usuario mixto o Admin) */}
+          {canSwitchToAdmin && (
+            <button
+              type="button"
+              onClick={onSwitchToAdmin}
+              title="Volver a Panel de Administración"
+              style={{
+                padding: '8px 12px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #1f497d 0%, #17365d 100%)',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,0.2)',
+                fontWeight: 800,
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 8px rgba(31, 73, 125, 0.35)',
+                flexShrink: 0
+              }}
+            >
+              <i className="fa-solid fa-gauge-high"></i>
+              <span>Panel Admin</span>
+            </button>
+          )}
 
           {/* Menu Button (Top Right Icon/Badge) */}
           <button
@@ -2318,67 +2708,207 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
             ) : visitas.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
                 <i className="fa-solid fa-calendar-check" style={{ fontSize: '3rem', color: 'var(--sidebar-text)', marginBottom: '15px', opacity: 0.4 }}></i>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)', fontWeight: 800 }}>No hay visitas pendientes</h3>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)', fontWeight: 800 }}>No hay visitas asignadas</h3>
                 <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: 'var(--sidebar-text)', fontWeight: 500 }}>
                   {areaTrabajo === 'INSTALACIONES' ? 'No tienes instalaciones asignadas para hoy.' : 'No tienes visitas de soporte técnico asignadas para hoy.'} ¡Buen trabajo!
                 </p>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                {visitas.map((v) => {
-                  const borderLeftColor = 
-                    v.estado === 'EN_RUTA' ? '#f59e0b' : 
-                    v.estado === 'EN_PROGRESO' ? '#3b82f6' : 
-                    v.estado === 'FINALIZADA' ? '#10b981' : '#94a3b8';
-                  
+              <div>
+                {/* Pestañas de filtrado: Pendientes | Finalizadas | Todas */}
+                <div style={{
+                  display: 'flex',
+                  gap: '6px',
+                  marginBottom: '14px',
+                  background: 'rgba(15, 23, 42, 0.65)',
+                  padding: '5px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255, 255, 255, 0.08)'
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroAgenda('PENDIENTES')}
+                    style={{
+                      flex: 1,
+                      padding: '8px 8px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: filtroAgenda === 'PENDIENTES' ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)' : 'transparent',
+                      color: filtroAgenda === 'PENDIENTES' ? '#ffffff' : '#94a3b8',
+                      fontWeight: 800,
+                      fontSize: '0.78rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                      transition: 'all 0.2s ease',
+                      boxShadow: filtroAgenda === 'PENDIENTES' ? '0 2px 8px rgba(2, 132, 199, 0.35)' : 'none'
+                    }}
+                  >
+                    <span>📋 Pendientes</span>
+                    <span style={{
+                      background: filtroAgenda === 'PENDIENTES' ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.08)',
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      fontSize: '0.72rem',
+                      fontWeight: 900
+                    }}>
+                      {visitas.filter(v => v.estado !== 'FINALIZADA').length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFiltroAgenda('FINALIZADAS')}
+                    style={{
+                      flex: 1,
+                      padding: '8px 8px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: filtroAgenda === 'FINALIZADAS' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'transparent',
+                      color: filtroAgenda === 'FINALIZADAS' ? '#ffffff' : '#94a3b8',
+                      fontWeight: 800,
+                      fontSize: '0.78rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                      transition: 'all 0.2s ease',
+                      boxShadow: filtroAgenda === 'FINALIZADAS' ? '0 2px 8px rgba(16, 185, 129, 0.35)' : 'none'
+                    }}
+                  >
+                    <span>✅ Finalizadas</span>
+                    <span style={{
+                      background: filtroAgenda === 'FINALIZADAS' ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.08)',
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      fontSize: '0.72rem',
+                      fontWeight: 900
+                    }}>
+                      {visitas.filter(v => v.estado === 'FINALIZADA').length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFiltroAgenda('TODAS')}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: filtroAgenda === 'TODAS' ? '#475569' : 'transparent',
+                      color: filtroAgenda === 'TODAS' ? '#ffffff' : '#94a3b8',
+                      fontWeight: 800,
+                      fontSize: '0.78rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <span>Todas</span>
+                    <span style={{
+                      background: filtroAgenda === 'TODAS' ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.08)',
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      fontSize: '0.72rem',
+                      fontWeight: 900
+                    }}>
+                      {visitas.length}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Contenido filtrado */}
+                {(() => {
+                  const visitasPendientes = visitas.filter(v => v.estado !== 'FINALIZADA');
+                  const visitasFinalizadas = visitas.filter(v => v.estado === 'FINALIZADA');
+                  const visitasFiltradas = 
+                    filtroAgenda === 'PENDIENTES' ? visitasPendientes :
+                    filtroAgenda === 'FINALIZADAS' ? visitasFinalizadas :
+                    visitas;
+
+                  if (visitasFiltradas.length === 0) {
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '50px 20px', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                        <i className={filtroAgenda === 'PENDIENTES' ? "fa-solid fa-circle-check" : filtroAgenda === 'FINALIZADAS' ? "fa-solid fa-clock-rotate-left" : "fa-solid fa-calendar-check"} style={{ fontSize: '2.8rem', color: filtroAgenda === 'PENDIENTES' ? '#10b981' : 'var(--sidebar-text)', marginBottom: '14px', opacity: filtroAgenda === 'PENDIENTES' ? 0.9 : 0.4 }}></i>
+                        <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-main)', fontWeight: 800 }}>
+                          {filtroAgenda === 'PENDIENTES' ? '¡Excelente trabajo! No tienes visitas pendientes' :
+                           filtroAgenda === 'FINALIZADAS' ? 'Aún no has completado ninguna visita hoy' :
+                           'No hay visitas en esta categoría'}
+                        </h3>
+                        <p style={{ margin: '8px 0 0 0', fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 500 }}>
+                          {filtroAgenda === 'PENDIENTES' ? 'Has terminado todas tus visitas programadas o las puedes consultar en la pestaña Finalizadas.' :
+                           filtroAgenda === 'FINALIZADAS' ? 'Al registrar y finalizar cada visita, podrás ver aquí el resumen detallado de tu trabajo.' :
+                           'No se encontraron registros para el filtro seleccionado.'}
+                        </p>
+                      </div>
+                    );
+                  }
+
                   return (
-                    <div 
-                      key={v.id_visita} 
-                      onClick={() => {
-                        setActiveVisita(v);
-                        setActiveSubTab('tab-cliente');
-                        setOltResult(null);
-                      }}
-                      style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderLeft: `6px solid ${borderLeftColor}`, borderRadius: '14px', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px', cursor: 'pointer', boxShadow: 'var(--shadow-sm)', transition: 'transform 0.15s ease', position: 'relative' }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingRight: '25px' }}>
-                        <div>
-                          <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 850, color: 'var(--text-main)' }}>
-                            {v.es_instalacion === 1 ? `🔌 Instalación #${v.numero_parada}` : `🎫 Ticket #${v.numero_parada}`}
-                          </h4>
-                          <small style={{ color: 'var(--sidebar-text)', fontWeight: 600 }}>Ref: #VT-{v.id_visita}</small>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                          <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: v.estado === 'FINALIZADA' ? 'rgba(16, 185, 129, 0.15)' : v.estado === 'EN_PROGRESO' ? 'rgba(59, 130, 246, 0.15)' : v.estado === 'EN_RUTA' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(148, 163, 184, 0.15)', color: v.estado === 'FINALIZADA' ? '#10b981' : v.estado === 'EN_PROGRESO' ? '#3b82f6' : v.estado === 'EN_RUTA' ? '#f59e0b' : '#64748b' }}>
-                            {v.estado.replace(/_/g, ' ')}
-                          </span>
-                          {v.prioridad === 'ALTA' && (
-                            <span style={{ fontSize: '0.65rem', fontWeight: 900, color: '#ef4444', background: 'rgba(239, 68, 68, 0.12)', padding: '2px 6px', borderRadius: '4px' }}>🔴 URGENTE</span>
-                          )}
-                        </div>
-                      </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                      {visitasFiltradas.map((v) => {
+                        const borderLeftColor = 
+                          v.estado === 'EN_RUTA' ? '#f59e0b' : 
+                          v.estado === 'EN_PROGRESO' ? '#3b82f6' : 
+                          v.estado === 'FINALIZADA' ? '#10b981' : '#94a3b8';
+                        
+                        return (
+                          <div 
+                            key={v.id_visita} 
+                            onClick={() => {
+                              setActiveVisita(v);
+                              setActiveSubTab(v.estado === 'FINALIZADA' ? 'tab-acciones' : 'tab-cliente');
+                              setOltResult(null);
+                            }}
+                            style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderLeft: `6px solid ${borderLeftColor}`, borderRadius: '14px', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px', cursor: 'pointer', boxShadow: 'var(--shadow-sm)', transition: 'transform 0.15s ease', position: 'relative' }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingRight: '25px' }}>
+                              <div>
+                                <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 850, color: 'var(--text-main)' }}>
+                                  {v.es_instalacion === 1 ? `🔌 Instalación #${v.numero_parada}` : `🎫 Ticket #${v.numero_parada}`}
+                                </h4>
+                                <small style={{ color: 'var(--sidebar-text)', fontWeight: 600 }}>Ref: #VT-{v.id_visita}</small>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                                <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: v.estado === 'FINALIZADA' ? 'rgba(16, 185, 129, 0.15)' : v.estado === 'EN_PROGRESO' ? 'rgba(59, 130, 246, 0.15)' : v.estado === 'EN_RUTA' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(148, 163, 184, 0.15)', color: v.estado === 'FINALIZADA' ? '#10b981' : v.estado === 'EN_PROGRESO' ? '#3b82f6' : v.estado === 'EN_RUTA' ? '#f59e0b' : '#64748b' }}>
+                                  {v.estado.replace(/_/g, ' ')}
+                                </span>
+                                {v.prioridad === 'ALTA' && (
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 900, color: '#ef4444', background: 'rgba(239, 68, 68, 0.12)', padding: '2px 6px', borderRadius: '4px' }}>🔴 URGENTE</span>
+                                )}
+                              </div>
+                            </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <small style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Cliente</small>
-                        <span style={{ fontSize: '0.95rem', fontWeight: 750, color: 'var(--text-main)' }}>{v.cliente}</span>
-                      </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <small style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Cliente</small>
+                              <span style={{ fontSize: '0.95rem', fontWeight: 750, color: 'var(--text-main)' }}>{v.cliente}</span>
+                            </div>
 
-                      <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <small style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Motivo</small>
-                          <span style={{ fontSize: '0.88rem', fontWeight: 800, color: v.es_instalacion === 1 ? '#3b82f6' : '#dc2626' }}>
-                            {v.es_instalacion === 1 ? `🔌 ${v.servicio}` : `🛠️ ${v.problema}`}
-                          </span>
-                        </div>
-                      </div>
+                            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div>
+                                <small style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Motivo</small>
+                                <span style={{ fontSize: '0.88rem', fontWeight: 800, color: v.es_instalacion === 1 ? '#3b82f6' : '#dc2626' }}>
+                                  {v.es_instalacion === 1 ? `🔌 ${v.servicio}` : `🛠️ ${v.problema}`}
+                                </span>
+                              </div>
+                            </div>
 
-                      {/* Right indicator arrow */}
-                      <div style={{ position: 'absolute', right: '18px', top: '50%', transform: 'translateY(-50%)', color: 'var(--sidebar-text)', fontSize: '0.95rem' }}>
-                        <i className="fa-solid fa-chevron-right"></i>
-                      </div>
+                            {/* Right indicator arrow */}
+                            <div style={{ position: 'absolute', right: '18px', top: '50%', transform: 'translateY(-50%)', color: 'var(--sidebar-text)', fontSize: '0.95rem' }}>
+                              <i className="fa-solid fa-chevron-right"></i>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
-                })}
+                })()}
               </div>
             )}
           </div>
@@ -2399,26 +2929,59 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                 </span>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowSolicitudBodegaModal(true)}
-                style={{
-                  padding: '10px 18px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                  color: 'white',
-                  fontWeight: 900,
-                  fontSize: '0.84rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 4px 12px rgba(37,99,235,0.4)'
-                }}
-              >
-                <i className="fa-solid fa-plus-circle"></i> + Solicitar Insumos a Bodega
-              </button>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSolicitudBodegaItems([{ id_material: '', cantidad_solicitada: 1 }]);
+                    setSolicitudBodegaObs('');
+                    setSolicitudBodegaComodato(false);
+                    setShowSolicitudBodegaModal(true);
+                  }}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                    color: 'white',
+                    fontWeight: 900,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 4px 12px rgba(37,99,235,0.4)'
+                  }}
+                >
+                  <i className="fa-solid fa-boxes-packing"></i> + Pedir Materiales
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSolicitudEquiposItems([{ equipo: '', cantidad: 1 }]);
+                    setSolicitudEquiposObs('');
+                    setSolicitudEquiposComodato(false);
+                    setShowSolicitudEquiposModal(true);
+                  }}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+                    color: 'white',
+                    fontWeight: 900,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 4px 12px rgba(124,58,237,0.4)'
+                  }}
+                >
+                  <i className="fa-solid fa-satellite-dish"></i> + Pedir Equipos (ONT / Router)
+                </button>
+              </div>
             </div>
 
             {/* Listado de Pedidos */}
@@ -2457,7 +3020,23 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                     {/* Encabezado del Pedido */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
                       <div>
-                        <span style={{ fontSize: '0.95rem', fontWeight: 900, color: '#38bdf8' }}>{req.numero_solicitud}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '0.95rem', fontWeight: 900, color: '#38bdf8' }}>{req.numero_solicitud}</span>
+                          {req.tipo_requisicion === 'EQUIPOS' ? (
+                            <span style={{ padding: '2px 8px', borderRadius: '6px', background: 'rgba(139, 92, 246, 0.25)', color: '#c084fc', fontSize: '0.72rem', fontWeight: 900 }}>
+                              <i className="fa-solid fa-satellite-dish" style={{ marginRight: '4px' }}></i> EQUIPOS
+                            </span>
+                          ) : (
+                            <span style={{ padding: '2px 8px', borderRadius: '6px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontSize: '0.72rem', fontWeight: 900 }}>
+                              <i className="fa-solid fa-boxes-packing" style={{ marginRight: '4px' }}></i> MATERIALES
+                            </span>
+                          )}
+                          {req.requiere_comodato && (
+                            <span style={{ padding: '2px 8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontSize: '0.72rem', fontWeight: 900 }}>
+                              📄 Hojas de comodato
+                            </span>
+                          )}
+                        </div>
                         <small style={{ color: 'var(--sidebar-text)', fontSize: '0.74rem', display: 'block', marginTop: '2px' }}>
                           📅 Solicitado: {req.fecha_solicitud_fmt || req.fecha_solicitud}
                         </small>
@@ -2489,7 +3068,9 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
 
                     {/* Lista de Insumos */}
                     <div style={{ background: 'rgba(15, 23, 42, 0.5)', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase' }}>Materiales:</span>
+                      <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase' }}>
+                        {req.tipo_requisicion === 'EQUIPOS' ? 'Equipos Solicitados:' : 'Materiales:'}
+                      </span>
                       {(req.items || []).map((it, idx) => {
                         const cant = it.cantidad_aprobada !== undefined && it.cantidad_aprobada !== null
                           ? Number(it.cantidad_aprobada)
@@ -2500,17 +3081,40 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                               • {it.nombre_material}
                             </span>
                             <strong style={{ color: cant === 0 ? '#f87171' : (req.estado === 'LISTO_ENTREGA' ? '#34d399' : '#38bdf8') }}>
-                              {cant > 0 ? `${cant} ${it.unidad_medida}` : `0 ${it.unidad_medida} (No entregado)`}
+                              {cant > 0 ? `${cant} ${it.unidad_medida || 'UNIDAD'}` : `0 (No entregado)`}
                             </strong>
                           </div>
                         );
                       })}
+                      {req.requiere_comodato && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', color: '#34d399', fontWeight: 700, borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '6px', marginTop: '2px' }}>
+                          <span>• 📄 Hojas de comodato</span>
+                          <span style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 800 }}>Incluido</span>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Observaciones o Motivo de Rechazo */}
-                    {req.motivo_rechazo && (
-                      <div style={{ padding: '10px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', fontSize: '0.78rem' }}>
-                        <strong>Motivo de Rechazo:</strong> {req.motivo_rechazo}
+                    {/* Mi Comentario / Observación enviada */}
+                    {(req.comentario_tecnico || (req.observaciones && !req.observaciones.startsWith('[RECHAZO:'))) && (
+                      <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', color: '#bae6fd', fontSize: '0.78rem' }}>
+                        <strong style={{ color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+                          <i className="fa-solid fa-comment-dots"></i> Mi Nota / Observación enviada:
+                        </strong>
+                        <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.3' }}>
+                          {req.comentario_tecnico || req.observaciones.replace(/\[RECHAZO:\s*.*?\]/g, '').trim()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Observaciones o Motivo de Rechazo por Bodega */}
+                    {(req.motivo_rechazo || (req.observaciones && req.observaciones.includes('[RECHAZO:'))) && (
+                      <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', fontSize: '0.78rem' }}>
+                        <strong style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+                          <i className="fa-solid fa-circle-exclamation"></i> Motivo de Rechazo por Bodega:
+                        </strong>
+                        <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.3' }}>
+                          {req.motivo_rechazo || req.observaciones.match(/\[RECHAZO:\s*(.*?)\]/)?.[1] || 'Rechazado por bodega'}
+                        </div>
                       </div>
                     )}
 
@@ -3321,7 +3925,11 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                           soluciones
                             .filter(s => {
                               const n = (s?.nombre || '').toUpperCase();
-                              return !n.includes('REAGENDAD') && !n.includes('SATURACI');
+                              return !n.includes('REAGENDAD') && 
+                                     !n.includes('SATURACI') && 
+                                     !n.includes('NO DESEA') && 
+                                     !n.includes('SIN RESPUESTA') && 
+                                     !n.includes('CANCELAD');
                             })
                             .map((s, idx) => <option key={idx} value={s.nombre}>{s.nombre}</option>)
                         )}
@@ -3800,31 +4408,55 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                         {activeFormState.materiales.length === 0 ? (
                           <p style={{ margin: 0, fontSize: '0.78rem', color: '#94a3b8', textAlign: 'center' }}>Ningún material utilizado.</p>
                         ) : (
-                          activeFormState.materiales.map((mat, idx) => (
-                            <div key={idx} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                              <select 
-                                value={mat.id_material} 
-                                onChange={(e) => updateMaterialRow(activeVisita.id_visita, idx, { id_material: e.target.value })} 
-                                style={{ flex: 1, padding: '6px', borderRadius: '6px', background: '#0f172a', color: 'white', border: '1px solid #475569', fontSize: '0.78rem' }}
-                              >
-                                {catalogoMateriales.map((cm, i) => <option key={i} value={cm.id_material}>{cm.nombre_material} ({cm.unidad_medida})</option>)}
-                              </select>
-                              <input 
-                                type="number" 
-                                value={mat.cantidad} 
-                                onChange={(e) => updateMaterialRow(activeVisita.id_visita, idx, { cantidad: e.target.value })} 
-                                min="1" 
-                                style={{ width: '60px', padding: '6px', borderRadius: '6px', background: '#0f172a', color: 'white', border: '1px solid #475569', fontSize: '0.78rem', textAlign: 'center' }} 
-                              />
-                              <button 
-                                type="button" 
-                                onClick={() => removeMaterialRow(activeVisita.id_visita, idx)} 
-                                style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', padding: '0 4px' }}
-                              >
-                                &times;
-                              </button>
-                            </div>
-                          ))
+                          activeFormState.materiales.map((mat, idx) => {
+                            const matEnBuseta = (inventarioVehiculoData.materiales || []).find(m => String(m.id_material) === String(mat.id_material));
+                            const maxDisp = matEnBuseta ? (matEnBuseta.cantidad_disponible || 0) : 0;
+                            const superaStock = maxDisp > 0 && Number(mat.cantidad) > maxDisp;
+                            return (
+                              <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '4px', background: 'rgba(15, 23, 42, 0.45)', padding: '6px 8px', borderRadius: '8px', border: superaStock ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.06)' }}>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                  <select 
+                                    value={mat.id_material} 
+                                    onChange={(e) => updateMaterialRow(activeVisita.id_visita, idx, { id_material: e.target.value })} 
+                                    style={{ flex: 1, padding: '7px 8px', borderRadius: '6px', background: '#0f172a', color: 'white', border: '1px solid #475569', fontSize: '0.78rem' }}
+                                  >
+                                    {(inventarioVehiculoData.materiales || []).filter(m => (m.cantidad_disponible || 0) > 0).length > 0 ? (
+                                      (inventarioVehiculoData.materiales || [])
+                                        .filter(m => (m.cantidad_disponible || 0) > 0 || String(m.id_material) === String(mat.id_material))
+                                        .map((m) => (
+                                          <option key={`veh-${m.id_material}`} value={m.id_material}>
+                                            🚐 {m.nombre_material} (En buseta: {m.cantidad_disponible} {m.unidad_medida})
+                                          </option>
+                                        ))
+                                    ) : (
+                                      <option value="">⚠️ Sin materiales asignados en tu buseta</option>
+                                    )}
+                                  </select>
+                                  <input 
+                                    type="number" 
+                                    value={mat.cantidad} 
+                                    onChange={(e) => updateMaterialRow(activeVisita.id_visita, idx, { cantidad: e.target.value })} 
+                                    min="1" 
+                                    max={maxDisp > 0 ? maxDisp : undefined}
+                                    style={{ width: '60px', padding: '7px 4px', borderRadius: '6px', background: '#0f172a', color: superaStock ? '#ef4444' : 'white', border: superaStock ? '1px solid #ef4444' : '1px solid #475569', fontSize: '0.78rem', textAlign: 'center', fontWeight: 'bold' }} 
+                                  />
+                                  <button 
+                                    type="button" 
+                                    onClick={() => removeMaterialRow(activeVisita.id_visita, idx)} 
+                                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.1rem', padding: '0 4px' }}
+                                    title="Quitar material"
+                                  >
+                                    &times;
+                                  </button>
+                                </div>
+                                {superaStock && (
+                                  <div style={{ color: '#f87171', fontSize: '0.72rem', fontWeight: 700 }}>
+                                    ⚠️ Cantidad ({mat.cantidad}) supera el stock en tu buseta ({maxDisp})
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
                         )}
                       </div>
                     </div>
@@ -4103,10 +4735,258 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                   </form>
                 )}
 
-                {/* 4. FINALIZADA STATE BANNER */}
+                {/* 4. FINALIZADA STATE: RESUMEN COMPLETO DE LA VISITA */}
                 {activeVisita.estado === 'FINALIZADA' && (
-                  <div style={{ background: 'rgba(16, 185, 129, 0.12)', border: '1px solid #10b981', color: '#10b981', padding: '16px', borderRadius: '12px', fontWeight: 800, fontSize: '0.98rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                    <i className="fa-solid fa-circle-check fa-lg"></i> Trabajo completado y registrado.
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    
+                    {/* Header Banner */}
+                    <div style={{ 
+                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.25) 100%)', 
+                      border: '1px solid #10b981', 
+                      borderRadius: '14px', 
+                      padding: '16px', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      gap: '8px',
+                      boxShadow: '0 4px 14px rgba(16, 185, 129, 0.15)'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                        <span style={{ color: '#10b981', fontWeight: 900, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <i className="fa-solid fa-circle-check fa-lg"></i> Visita Finalizada y Registrada
+                        </span>
+                        {calcularDuracionVisita(activeVisita.hora_inicio_visita, activeVisita.hora_fin_visita) && (
+                          <span style={{ background: 'rgba(16, 185, 129, 0.25)', color: '#34d399', fontWeight: 800, fontSize: '0.78rem', padding: '3px 10px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
+                            ⏱️ Duración: {calcularDuracionVisita(activeVisita.hora_inicio_visita, activeVisita.hora_fin_visita)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px', fontSize: '0.76rem', color: '#94a3b8' }}>
+                        <span>Ref: <strong style={{ color: '#e2e8f0' }}>#VT-{activeVisita.id_visita}</strong></span>
+                        {activeVisita.tecnico_cierre && (
+                          <span>Cerró: <strong style={{ color: '#e2e8f0' }}>{activeVisita.tecnico_cierre}</strong></span>
+                        )}
+                        {activeVisita.placa_cierre && (
+                          <span>Buseta: <strong style={{ color: '#38bdf8' }}>{activeVisita.placa_cierre}</strong></span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Card 1: Tiempos de Visita */}
+                    <div style={{ background: 'rgba(15, 23, 42, 0.55)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px' }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                        <i className="fa-solid fa-stopwatch"></i> Tiempos de Atención en Sitio
+                      </span>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                        <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', padding: '8px 10px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                          <small style={{ color: '#94a3b8', fontSize: '0.7rem', display: 'block' }}>Inicio / Llegada</small>
+                          <strong style={{ color: '#f8fafc', fontSize: '0.85rem' }}>
+                            {formatHoraVisita(activeVisita.hora_inicio_visita)}
+                          </strong>
+                        </div>
+                        <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', padding: '8px 10px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                          <small style={{ color: '#94a3b8', fontSize: '0.7rem', display: 'block' }}>Fin / Cierre</small>
+                          <strong style={{ color: '#f8fafc', fontSize: '0.85rem' }}>
+                            {formatHoraVisita(activeVisita.hora_fin_visita)}
+                          </strong>
+                        </div>
+                        <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', padding: '8px 10px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                          <small style={{ color: '#94a3b8', fontSize: '0.7rem', display: 'block' }}>Tiempo Real</small>
+                          <strong style={{ color: '#34d399', fontSize: '0.85rem' }}>
+                            {calcularDuracionVisita(activeVisita.hora_inicio_visita, activeVisita.hora_fin_visita) || '--'}
+                          </strong>
+                        </div>
+                      </div>
+                      {activeVisita.coordenadas_tecnico && (
+                        <div style={{ marginTop: '8px', fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <i className="fa-solid fa-location-dot"></i> GPS Cierre: {activeVisita.coordenadas_tecnico}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card 2: Solución y Observaciones */}
+                    <div style={{ background: 'rgba(15, 23, 42, 0.55)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px' }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                        <i className="fa-solid fa-wrench"></i> Solución Técnica Aplicada
+                      </span>
+                      <div style={{ marginBottom: '10px' }}>
+                        <span style={{ 
+                          display: 'inline-block',
+                          background: 'rgba(56, 189, 248, 0.15)', 
+                          color: '#38bdf8', 
+                          border: '1px solid rgba(56, 189, 248, 0.3)', 
+                          padding: '4px 10px', 
+                          borderRadius: '6px', 
+                          fontWeight: 800, 
+                          fontSize: '0.82rem' 
+                        }}>
+                          {activeVisita.solucion_tecnico || 'Solución no especificada'}
+                        </span>
+                      </div>
+                      <div>
+                        <small style={{ color: '#94a3b8', fontSize: '0.7rem', display: 'block', marginBottom: '4px' }}>Observación Detallada del Técnico:</small>
+                        <div style={{ 
+                          background: 'rgba(255, 255, 255, 0.02)', 
+                          border: '1px solid rgba(255, 255, 255, 0.06)', 
+                          borderLeft: '4px solid #38bdf8',
+                          borderRadius: '8px', 
+                          padding: '10px 12px', 
+                          color: '#e2e8f0', 
+                          fontSize: '0.82rem',
+                          lineHeight: '1.4',
+                          whiteSpace: 'pre-wrap'
+                        }}>
+                          {activeVisita.observacion_tecnico || 'Sin observaciones registradas.'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card 3: Equipos Dejados / Instalados */}
+                    <div style={{ background: 'rgba(15, 23, 42, 0.55)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px' }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                        <i className="fa-solid fa-boxes-stacked"></i> Equipos Dejados en Domicilio
+                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {/* ONT */}
+                        <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '8px', padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                          <div>
+                            <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 800, display: 'block' }}>🟢 ONT / ONU GPON:</span>
+                            <strong style={{ fontSize: '0.82rem', color: '#f8fafc' }}>{activeVisita.modelo_onu || activeVisita.modelo_ont || 'No registrado'}</strong>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{ fontSize: '0.68rem', color: '#94a3b8', display: 'block' }}>Serie GPON (SN)</span>
+                            <span style={{ fontSize: '0.82rem', color: '#38bdf8', fontWeight: 800, fontFamily: 'monospace' }}>
+                              {activeVisita.numero_serie_onu || activeVisita.numero_serie || 'SIN_SERIE'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Router Principal */}
+                        <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '8px', padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                          <div>
+                            <span style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 800, display: 'block' }}>🔵 Router Principal:</span>
+                            <strong style={{ fontSize: '0.82rem', color: '#f8fafc' }}>{activeVisita.modelo_router || activeVisita.router_principal || 'No registrado'}</strong>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{ fontSize: '0.68rem', color: '#94a3b8', display: 'block' }}>Serie Router (SN)</span>
+                            <span style={{ fontSize: '0.82rem', color: '#38bdf8', fontWeight: 800, fontFamily: 'monospace' }}>
+                              {activeVisita.numero_serie_router || 'SIN_SERIE'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Router Secundario / Mesh si aplica */}
+                        {(activeVisita.router_secundario || activeVisita.numero_serie_router_secundario || activeVisita.tipo_mesh) && (
+                          <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '8px', padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                            <div>
+                              <span style={{ fontSize: '0.7rem', color: '#a855f7', fontWeight: 800, display: 'block' }}>🟣 Router Secundario / Mesh:</span>
+                              <strong style={{ fontSize: '0.82rem', color: '#f8fafc' }}>{activeVisita.router_secundario || 'Router Mesh'}</strong>
+                              {activeVisita.tipo_mesh && (
+                                <small style={{ display: 'block', color: '#c084fc', fontSize: '0.68rem' }}>Enlace: {activeVisita.tipo_mesh}</small>
+                              )}
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <span style={{ fontSize: '0.68rem', color: '#94a3b8', display: 'block' }}>Serie Secundario</span>
+                              <span style={{ fontSize: '0.82rem', color: '#c084fc', fontWeight: 800, fontFamily: 'monospace' }}>
+                                {activeVisita.numero_serie_router_secundario || 'SIN_SERIE'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Card 4: Equipos Retirados del Cliente */}
+                    <div style={{ background: 'rgba(15, 23, 42, 0.55)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px' }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                        <i className="fa-solid fa-arrow-right-arrow-left"></i> Equipos Retirados del Cliente
+                      </span>
+                      {(!activeVisita.equipos_retirados || activeVisita.equipos_retirados.length === 0) ? (
+                        <div style={{ textAlign: 'center', padding: '12px', color: '#94a3b8', fontSize: '0.78rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '8px' }}>
+                          No se registraron equipos retirados en esta visita.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {activeVisita.equipos_retirados.map((eq, i) => (
+                            <div key={i} style={{ background: 'rgba(245, 158, 11, 0.06)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: '8px', padding: '10px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                <span style={{ fontWeight: 800, fontSize: '0.8rem', color: '#fbbf24' }}>
+                                  {eq.tipo_equipo} {eq.modelo ? `- ${eq.modelo}` : ''}
+                                </span>
+                                <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', fontWeight: 700 }}>
+                                  {eq.motivo_retiro || 'RETIRADO'}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
+                                <strong style={{ color: '#94a3b8' }}>SN Retirado: </strong> 
+                                <span style={{ fontFamily: 'monospace', color: '#f8fafc', fontWeight: 700 }}>{eq.numero_serie}</span>
+                              </div>
+                              {eq.observacion_retiro && (
+                                <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '4px', fontStyle: 'italic' }}>
+                                  "{eq.observacion_retiro}"
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card 5: Materiales Ocupados */}
+                    <div style={{ background: 'rgba(15, 23, 42, 0.55)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px' }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                        <i className="fa-solid fa-boxes-packing"></i> Materiales Ocupados en Sitio
+                      </span>
+                      {(!activeVisita.materiales_usados || activeVisita.materiales_usados.length === 0) ? (
+                        <div style={{ textAlign: 'center', padding: '12px', color: '#94a3b8', fontSize: '0.78rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '8px' }}>
+                          No se registraron materiales ocupados en esta visita.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {activeVisita.materiales_usados.map((m, i) => (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '8px', padding: '8px 12px' }}>
+                              <span style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: 700 }}>
+                                {m.nombre_material}
+                              </span>
+                              <span style={{ fontSize: '0.82rem', color: '#a5b4fc', fontWeight: 850 }}>
+                                {m.cantidad_usada} {m.unidad_medida || 'U'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card 6: Firma de Conformidad (Sin fotos) */}
+                    <div style={{ background: 'rgba(15, 23, 42, 0.55)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px' }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                        <i className="fa-solid fa-signature"></i> Firma de Conformidad
+                      </span>
+                      {activeVisita.firma_cliente ? (
+                        activeVisita.firma_cliente.startsWith('SIN_FIRMA') ? (
+                          <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: '8px', padding: '10px', color: '#fbbf24', fontSize: '0.78rem', fontWeight: 700, textAlign: 'center' }}>
+                            <i className="fa-solid fa-circle-exclamation"></i> Cierre sin firma: {activeVisita.firma_cliente.replace('SIN_FIRMA:', '').trim()}
+                          </div>
+                        ) : (
+                          <div style={{ textAlign: 'center', padding: '8px' }}>
+                            <div style={{ display: 'inline-block', background: '#ffffff', borderRadius: '10px', padding: '8px', border: '1px solid #cbd5e1', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
+                              <img 
+                                src={activeVisita.firma_cliente.startsWith('data:image') ? activeVisita.firma_cliente : `/static/uploads/${activeVisita.firma_cliente}`} 
+                                alt="Firma del Cliente" 
+                                style={{ maxHeight: '80px', maxWidth: '240px', display: 'block' }} 
+                              />
+                            </div>
+                            <small style={{ display: 'block', color: '#10b981', fontWeight: 800, marginTop: '6px', fontSize: '0.74rem' }}>
+                              ✓ Firma de conformidad del abonado capturada
+                            </small>
+                          </div>
+                        )
+                      ) : (
+                        <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.78rem', padding: '10px' }}>
+                          Sin registro de firma disponible.
+                        </div>
+                      )}
+                    </div>
+
                   </div>
                 )}
 
@@ -4226,8 +5106,9 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                     onChange={(e) => setMotivoPosponer(e.target.value)} 
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white', fontSize: '0.85rem' }}
                   >
-                    <option value="Cliente solicita reagendar para otra fecha">📅 Cliente solicita reagendar para otra fecha</option>
                     <option value="Cliente ausente">👤 Cliente ausente / No se encuentra</option>
+                    <option value="Cliente no desea la visita / Desiste del soporte">🚫 Cliente no desea la visita / Desiste del soporte</option>
+                    <option value="Cliente solicita reagendar para otra fecha">📅 Cliente solicita reagendar para otra fecha</option>
                     <option value="Saturación del día / Fin de jornada">⏳ Saturación del día / Fin de jornada</option>
                     <option value="Dirección incorrecta / Difícil acceso">📍 Dirección incorrecta / Difícil acceso</option>
                     <option value="Falta de materiales o herramientas">🛠️ Falta de materiales o herramientas</option>
@@ -4235,6 +5116,25 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                     <option value="Otro motivo">❓ Otro motivo (especificar)</option>
                   </select>
                 </div>
+
+                {motivoPosponer === 'Cliente no desea la visita / Desiste del soporte' && (
+                  <div>
+                    <label style={{ fontWeight: 700, color: '#f87171', fontSize: '0.75rem', display: 'block', marginBottom: '6px' }}>
+                      Indique por qué no desea la visita (ej: confirma señal OK, cancela servicio):
+                    </label>
+                    <input 
+                      type="text" 
+                      value={motivoPosponerOtro} 
+                      onChange={(e) => setMotivoPosponerOtro(e.target.value)} 
+                      placeholder="Ej: Confirma señal OK, no desea que ingresen a revisar..." 
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #f87171', background: '#0f172a', color: 'white', fontSize: '0.85rem', boxSizing: 'border-box' }} 
+                      required
+                    />
+                    <small style={{ color: '#94a3b8', fontSize: '0.72rem', display: 'block', marginTop: '4px' }}>
+                      Call Center / Operaciones revisará este motivo para cancelar la visita.
+                    </small>
+                  </div>
+                )}
 
                 {motivoPosponer === 'Cliente solicita reagendar para otra fecha' && (
                   <div>
@@ -4500,6 +5400,35 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                 </button>
               </div>
 
+              {/* Volver a Admin (Si es usuario mixto o Admin) */}
+              {canSwitchToAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProfileModal(false);
+                    if (onSwitchToAdmin) onSwitchToAdmin();
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #1f497d 0%, #17365d 100%)',
+                    color: 'white',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 14px rgba(31, 73, 125, 0.4)'
+                  }}
+                >
+                  <i className="fa-solid fa-gauge-high"></i> 🏢 Cambiar a Panel Admin
+                </button>
+              )}
+
               {/* Logout Button */}
               <button
                 type="button"
@@ -4549,45 +5478,100 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '220px', overflowY: 'auto' }}>
-                  {solicitudBodegaItems.map((it, idx) => (
-                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 32px', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.6)', padding: '8px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <select
-                        required
-                        value={it.id_material}
-                        onChange={(e) => handleItemChangeSolicitudBodega(idx, 'id_material', e.target.value)}
-                        style={{ padding: '8px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#f8fafc', fontSize: '0.8rem' }}
-                      >
-                        <option value="">-- Elegir Material --</option>
-                        {(catalogoMateriales || []).map((m) => (
-                          <option key={m.id_material} value={m.id_material}>
-                            {m.nombre_material} ({m.unidad_medida})
-                          </option>
-                        ))}
-                      </select>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto' }}>
+                  {solicitudBodegaItems.map((it, idx) => {
+                    const matInfo = (catalogoMateriales || []).find(m => String(m.id_material) === String(it.id_material));
+                    const stockBodega = matInfo ? Number(matInfo.stock_bodega || 0) : 0;
+                    return (
+                      <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '4px', background: 'rgba(15, 23, 42, 0.6)', padding: '10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 32px', gap: '8px', alignItems: 'center' }}>
+                          <select
+                            required
+                            value={it.id_material}
+                            onChange={(e) => handleItemChangeSolicitudBodega(idx, 'id_material', e.target.value)}
+                            style={{ padding: '8px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#f8fafc', fontSize: '0.8rem' }}
+                          >
+                            <option value="">-- Elegir Material de Bodega Central --</option>
+                            {(catalogoMateriales || [])
+                              .map((m) => (
+                                <option key={m.id_material} value={m.id_material}>
+                                  {m.nombre_material} — Stock Bodega: {m.stock_bodega || 0} {m.unidad_medida}
+                                </option>
+                              ))}
+                          </select>
 
-                      <input
-                        type="number"
-                        min="1"
-                        required
-                        placeholder="Cant"
-                        value={it.cantidad_solicitada}
-                        onChange={(e) => handleItemChangeSolicitudBodega(idx, 'cantidad_solicitada', e.target.value)}
-                        style={{ padding: '8px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#f8fafc', fontSize: '0.8rem', textAlign: 'center', fontWeight: 'bold' }}
-                      />
+                          <input
+                            type="number"
+                            min="1"
+                            required
+                            placeholder="Cant"
+                            value={it.cantidad_solicitada}
+                            onChange={(e) => handleItemChangeSolicitudBodega(idx, 'cantidad_solicitada', e.target.value)}
+                            style={{ padding: '8px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: '#f8fafc', fontSize: '0.8rem', textAlign: 'center', fontWeight: 'bold' }}
+                          />
 
-                      {solicitudBodegaItems.length > 1 ? (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItemSolicitudBodega(idx)}
-                          style={{ background: 'transparent', border: 'none', color: '#f87171', fontSize: '1rem', cursor: 'pointer' }}
-                        >
-                          &times;
-                        </button>
-                      ) : <div></div>}
-                    </div>
-                  ))}
+                          {solicitudBodegaItems.length > 1 ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItemSolicitudBodega(idx)}
+                              style={{ background: 'transparent', border: 'none', color: '#f87171', fontSize: '1rem', cursor: 'pointer' }}
+                            >
+                              &times;
+                            </button>
+                          ) : <div></div>}
+                        </div>
+
+                        {it.id_material && matInfo && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', padding: '0 2px' }}>
+                            <span style={{ color: stockBodega > 0 ? '#34d399' : '#f87171', fontWeight: 800 }}>
+                              📦 Stock en Bodega Central: {stockBodega} {matInfo.unidad_medida}
+                            </span>
+                            {Number(it.cantidad_solicitada) > stockBodega && stockBodega > 0 && (
+                              <span style={{ color: '#fbbf24', fontWeight: 700 }}>
+                                ⚠️ Solicitas más de lo disponible en bodega
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
+              </div>
+
+              {/* Opción Hojas de comodato */}
+              <div
+                onClick={() => setSolicitudBodegaComodato(!solicitudBodegaComodato)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 14px',
+                  borderRadius: '12px',
+                  background: solicitudBodegaComodato ? 'rgba(16, 185, 129, 0.15)' : 'rgba(15, 23, 42, 0.6)',
+                  border: solicitudBodegaComodato ? '1.5px solid #10b981' : '1px solid rgba(255,255,255,0.08)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  userSelect: 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '1.3rem' }}>📄</span>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '0.85rem', color: solicitudBodegaComodato ? '#34d399' : '#f8fafc' }}>
+                      Hojas de comodato
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                      {solicitudBodegaComodato ? '✓ Se incluirán Hojas de comodato en este pedido' : 'Toca aquí si necesitas Hojas de comodato'}
+                    </div>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={solicitudBodegaComodato}
+                  onChange={() => {}}
+                  style={{ width: '18px', height: '18px', accentColor: '#10b981', cursor: 'pointer' }}
+                />
               </div>
 
               <div>
@@ -4617,6 +5601,179 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                   style={{ padding: '10px 20px', borderRadius: '10px', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', border: 'none', color: 'white', fontWeight: 800, fontSize: '0.84rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,99,235,0.4)' }}
                 >
                   {enviandoSolicitudBodega ? 'Enviando...' : 'Enviar Pedido a Bodega 🚀'}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: SOLICITUD DE EQUIPOS A BODEGA */}
+      {showSolicitudEquiposModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: 200000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px', boxSizing: 'border-box' }}>
+          <div style={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '24px', width: '100%', maxWidth: '520px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 40px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
+            
+            <div style={{ padding: '18px 22px', background: 'linear-gradient(135deg, #4c1d95 0%, #1e1b4b 100%)', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c084fc', fontSize: '1.2rem' }}>
+                  <i className="fa-solid fa-satellite-dish"></i>
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, color: 'white', fontSize: '1.05rem', fontWeight: 900 }}>Solicitud de Equipos a Bodega</h4>
+                  <span style={{ fontSize: '0.72rem', color: '#cbd5e1', fontWeight: 700 }}>
+                    Para buseta: <strong style={{ color: '#38bdf8' }}>{inventarioVehiculoData.placa || 'S/P'}</strong>
+                  </span>
+                </div>
+              </div>
+              <button onClick={() => setShowSolicitudEquiposModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.4rem', cursor: 'pointer', padding: '4px' }}>&times;</button>
+            </div>
+
+            <form onSubmit={handleEnviarSolicitudEquiposSubmit} style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase' }}>Equipos Requeridos:</label>
+                  <button
+                    type="button"
+                    onClick={handleAddItemSolicitudEquipos}
+                    style={{ background: 'rgba(124, 58, 237, 0.2)', border: '1px solid #7c3aed', color: '#c084fc', padding: '4px 10px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer' }}
+                  >
+                    + Agregar Equipo
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {solicitudEquiposItems.map((it, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.65)', padding: '10px 12px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      
+                      {/* Combo Box único de Equipos */}
+                      <select
+                        required
+                        value={it.equipo}
+                        onChange={(e) => handleItemChangeSolicitudEquipos(idx, 'equipo', e.target.value)}
+                        style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid #475569', background: '#0f172a', color: '#f8fafc', fontSize: '0.84rem', fontWeight: 600, outline: 'none', minWidth: 0 }}
+                      >
+                        <option value="">-- Seleccionar Equipo --</option>
+
+                        <optgroup label="📡 ONU-Routers (Con Wi-Fi integrado)">
+                          <option value="ONU_ROUTER:XX231v">ONU-Router XX231v</option>
+                          <option value="ONU_ROUTER:XX530v">ONU-Router XX530v</option>
+                          <option value="ONU_ROUTER:XPON">ONU-Router XPON</option>
+                          {(catalogoOnt || [])
+                            .map(o => (o.nombre || o))
+                            .filter(m => !['XX231v', 'XX530v', 'XPON'].includes(m))
+                            .map((m, i) => (
+                              <option key={`ont-${i}`} value={`ONU_ROUTER:${m}`}>ONU-Router {m}</option>
+                            ))}
+                        </optgroup>
+
+                        <optgroup label="📶 Routers">
+                          <option value="ROUTER:Router TPLink EX511">Router TPLink EX511 (Wi-Fi 6)</option>
+                          <option value="ROUTER:Router Huawei AX3">Router Huawei AX3</option>
+                          <option value="ROUTER:Router Huawei AX2">Router Huawei AX2</option>
+                          {(catalogoRouter || [])
+                            .map(r => (r.nombre || r))
+                            .filter(m => !['Router TPLink EX511', 'Router Huawei AX3', 'Router Huawei AX2', 'EX511', 'AX3', 'AX2'].some(k => m.includes(k)))
+                            .map((m, i) => (
+                              <option key={`router-${i}`} value={`ROUTER:${m}`}>{m.startsWith('Router') ? m : `Router ${m}`}</option>
+                            ))}
+                        </optgroup>
+
+                        <optgroup label="🔌 Solo ONU (Sin función de router: Huawei / Kingtype / C-Data)">
+                          <option value="SOLO_ONU:ONU Inter">ONU Inter (Solo ONU)</option>
+                          <option value="SOLO_ONU:ONU Combo">ONU Combo (Solo ONU)</option>
+                        </optgroup>
+                      </select>
+
+                      {/* Input Cantidad */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                        <input
+                          type="number"
+                          min="1"
+                          required
+                          placeholder="Cant"
+                          value={it.cantidad}
+                          onChange={(e) => handleItemChangeSolicitudEquipos(idx, 'cantidad', e.target.value)}
+                          style={{ width: '55px', padding: '10px 4px', borderRadius: '10px', border: '1px solid #475569', background: '#0f172a', color: '#38bdf8', fontSize: '0.9rem', textAlign: 'center', fontWeight: 900 }}
+                        />
+                      </div>
+
+                      {solicitudEquiposItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItemSolicitudEquipos(idx)}
+                          style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', width: '32px', height: '34px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}
+                          title="Quitar equipo"
+                        >
+                          &times;
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Opción Hojas de comodato */}
+              <div
+                onClick={() => setSolicitudEquiposComodato(!solicitudEquiposComodato)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 14px',
+                  borderRadius: '12px',
+                  background: solicitudEquiposComodato ? 'rgba(16, 185, 129, 0.15)' : 'rgba(15, 23, 42, 0.6)',
+                  border: solicitudEquiposComodato ? '1.5px solid #10b981' : '1px solid rgba(255,255,255,0.08)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  userSelect: 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '1.3rem' }}>📄</span>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '0.85rem', color: solicitudEquiposComodato ? '#34d399' : '#f8fafc' }}>
+                      Hojas de comodato
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                      {solicitudEquiposComodato ? '✓ Se incluirán Hojas de comodato en este pedido' : 'Toca aquí si necesitas Hojas de comodato'}
+                    </div>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={solicitudEquiposComodato}
+                  onChange={() => {}}
+                  style={{ width: '18px', height: '18px', accentColor: '#10b981', cursor: 'pointer' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>Motivo / Observación:</label>
+                <textarea
+                  rows="2"
+                  placeholder="Ej: Reposición de equipos para instalaciones del día..."
+                  value={solicitudEquiposObs}
+                  onChange={(e) => setSolicitudEquiposObs(e.target.value)}
+                  style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #475569', background: '#0f172a', color: '#f8fafc', fontSize: '0.8rem', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowSolicitudEquiposModal(false)}
+                  style={{ padding: '10px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#cbd5e1', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={enviandoSolicitudEquipos}
+                  style={{ padding: '10px 20px', borderRadius: '10px', background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', border: 'none', color: 'white', fontWeight: 800, fontSize: '0.84rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(124,58,237,0.4)' }}
+                >
+                  {enviandoSolicitudEquipos ? 'Enviando...' : 'Enviar Pedido de Equipos 🚀'}
                 </button>
               </div>
 
@@ -4664,9 +5821,23 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout }) {
                   required
                 >
                   <option value="">-- Seleccione Material --</option>
-                  {catalogoMateriales.map((m, i) => (
-                    <option key={i} value={m.id_material}>{m.nombre_material} ({m.unidad_medida})</option>
-                  ))}
+                  {inventarioVehiculoData.materiales && inventarioVehiculoData.materiales.length > 0 ? (
+                    <optgroup label="Materiales en mi Buseta (Disponibles)">
+                      {inventarioVehiculoData.materiales.map((m, i) => (
+                        <option key={i} value={m.id_material}>
+                          {m.nombre_material} (En buseta: {m.cantidad_disponible} {m.unidad_medida})
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : (
+                    <optgroup label="Disponibles en Bodega">
+                      {catalogoMateriales.map((m, i) => (
+                        <option key={i} value={m.id_material}>
+                          {m.nombre_material} (Disp: {m.stock_bodega} {m.unidad_medida})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
 
