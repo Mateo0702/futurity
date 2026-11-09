@@ -7431,7 +7431,7 @@ def api_admin_calidad_visitas_exportar_excel():
 
 
 # =========================================================================
-# PLAN DE MODERNIZACIÓN DE EQUIPOS (PLAN RENOVE / HARDWARE TRACKER)
+# PLAN DE MODERNIZACIÓN DE EQUIPOS
 # =========================================================================
 
 HOMOLOGADOS_KEYWORDS = ['511', '530', '231', 'AX3', 'AX3S', 'AX2S']
