@@ -166,27 +166,30 @@ def homologar_gpon_solucion(solucion):
         return None
     if 'TICKET AL NOC' in s or 'SOLUCIÓN PARCIAL' in s or 'SOLUCION PARCIAL' in s:
         return None
+    if 'CAMBIO DE CABLE' in s:
+        return None
+    if 'RG6' in s:
+        return None
 
     # 1. Revisión en/de daño de fibra + cambio de conectores -> CAMBIO DE CONECTORES APC/UPC
     if ('DAÑO' in s or 'DANO' in s) and 'CONECTOR' in s:
         return 'CAMBIO DE CONECTORES APC/UPC'
 
-    # 2. Colocación de unión -> CAMBIO DE CONECTORES APC/UPC (según instrucción del usuario para el archivo de excel)
-    if 'UNI' in s:
+    # 2. Colocación de unión / fusión -> CAMBIO DE CONECTORES APC/UPC (según instrucción del usuario para el archivo de excel)
+    if 'UNI' in s or 'FUSI' in s:
         return 'CAMBIO DE CONECTORES APC/UPC'
 
-    # 3. Conectores APC/UPC / Conector roto -> CAMBIO DE CONECTORES APC/UPC
-    if 'APC' in s or 'UPC' in s or 'CONECTOR ROTO' in s or 'CONECTORES' in s or 'CONECTOR' in s:
-        if 'RJ45' in s and 'APC' not in s and 'UPC' not in s:
-            return 'CAMBIO DE CONECTORES RJ45'
-        return 'CAMBIO DE CONECTORES APC/UPC'
-
-    # 4. Conectores RJ45
+    # 3. Conectores RJ45 / UTP -> CAMBIO DE CONECTORES RJ45
     if 'RJ45' in s or 'UTP' in s or 'CABLE RED' in s:
-        return 'CAMBIO DE CONECTORES RJ45'
+        if 'APC' not in s and 'UPC' not in s:
+            return 'CAMBIO DE CONECTORES RJ45'
 
-    # 5. ONT
-    if 'ONT' in s or 'CAMBIO DE EQUIPO' in s:
+    # 4. Conectores APC/UPC / Conector roto -> CAMBIO DE CONECTORES APC/UPC
+    if 'APC' in s or 'UPC' in s or 'CONECTOR ROTO' in s or 'CONECTORES' in s or 'CONECTOR' in s:
+        return 'CAMBIO DE CONECTORES APC/UPC'
+
+    # 5. ONT / ONU
+    if 'ONT' in s or 'ONU' in s or 'CAMBIO DE EQUIPO' in s:
         return 'CAMBIO DE EQUIPO ONT'
 
     return None
@@ -243,9 +246,11 @@ def homologar_velocidad_solucion(solucion):
     Nada más.
     """
     s = (solucion or '').upper().strip()
+    if 'CAMBIO DE CABLE' in s:
+        return None
     if 'RJ45' in s or 'UTP' in s:
         return 'CAMBIO DE CONECTORES RJ45'
-    if 'ONT' in s or 'CAMBIO DE EQUIPO ONT' in s:
+    if 'ONT' in s or 'ONU' in s or 'CAMBIO DE EQUIPO ONT' in s:
         return 'CAMBIO DE ONT'
     return None
 
