@@ -697,6 +697,28 @@ def _extraer_velocidad_mbps(servicios_str):
             pass
     return None
 
+def _extraer_servicios_concatenados(detalles):
+    if not detalles:
+        return ''
+    if isinstance(detalles, str):
+        return detalles.strip()
+    if isinstance(detalles, dict):
+        detalles = [detalles]
+    if not isinstance(detalles, list):
+        return ''
+    servs = []
+    for d in detalles:
+        if isinstance(d, dict):
+            s = d.get('servicios') or d.get('servicio') or d.get('descripcion') or d.get('nombre') or d.get('producto') or ''
+            s = str(s).strip()
+            if s and s not in servs:
+                servs.append(s)
+        elif isinstance(d, str):
+            s = d.strip()
+            if s and s not in servs:
+                servs.append(s)
+    return " + ".join(servs)
+
 def _consultar_api_central(cedula):
     cedula_clean = re.sub(r'[^a-zA-Z0-9]', '', str(cedula or '').strip())
     if not cedula_clean or len(cedula_clean) < 3:
@@ -814,7 +836,9 @@ def _mapear_contrato_central(contrato_item, cliente_nombres, cliente_cedula, con
     tel_clean = _normalizar_telefono_ec(tel_raw)
     
     detalles = contrato_item.get('detalles') or []
-    servicios = detalles[0].get('servicios') if detalles else ''
+    servicios = _extraer_servicios_concatenados(detalles)
+    if not servicios:
+        servicios = str(contrato_item.get('servicios') or contrato_item.get('servicio') or contrato_item.get('producto') or '').strip()
     vel_mbps = _extraer_velocidad_mbps(servicios)
     
     local_info = None
@@ -980,7 +1004,9 @@ def api_importar_base_central():
     tel_raw = target_item.get('telefonolocal') or ''
     tel_clean = _normalizar_telefono_ec(tel_raw)
     detalles = target_item.get('detalles') or []
-    servicios = detalles[0].get('servicios') if detalles else ''
+    servicios = _extraer_servicios_concatenados(detalles)
+    if not servicios:
+        servicios = str(target_item.get('servicios') or target_item.get('servicio') or target_item.get('producto') or '').strip()
     vel_mbps = _extraer_velocidad_mbps(servicios)
 
     try:
