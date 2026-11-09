@@ -171,8 +171,8 @@ def registrar_atencion():
     # Obtener parámetros del JSON o del formulario
     data = request.get_json() if request.is_json else request.form
     
-    contrato = data.get('contrato', '').strip() or None
-    cliente = data.get('cliente', '').strip().upper()
+    contrato = str(data.get('contrato') or '').strip() or None
+    cliente = str(data.get('cliente') or '').strip().upper()
     
     if not cliente:
         return jsonify({"status": "error", "message": "El nombre del cliente es obligatorio"}), 400
@@ -199,20 +199,20 @@ def registrar_atencion():
     else:
         fecha_instalacion = None
         
-    sector = data.get('sector', '').strip().upper() or None
-    tipo_atencion = data.get('tipo_atencion', '').strip().upper() or None
-    tipo_solicitud = data.get('tipo_solicitud', '').strip().upper() or None
-    medio_contacto = data.get('medio_contacto', '').strip().upper() or None
-    telefono1 = data.get('telefono1', '').strip() or None
-    telefono2 = data.get('telefono2', '').strip() or None
-    accion = data.get('accion', '').strip().upper() or None
-    motivo = data.get('motivo', '').strip().upper() or None
+    sector = str(data.get('sector') or '').strip().upper() or None
+    tipo_atencion = str(data.get('tipo_atencion') or '').strip().upper() or None
+    tipo_solicitud = str(data.get('tipo_solicitud') or '').strip().upper() or None
+    medio_contacto = str(data.get('medio_contacto') or '').strip().upper() or None
+    telefono1 = str(data.get('telefono1') or '').strip() or None
+    telefono2 = str(data.get('telefono2') or '').strip() or None
+    accion = str(data.get('accion') or '').strip().upper() or None
+    motivo = str(data.get('motivo') or '').strip().upper() or None
     
     # El agente responsable es el Call Center logueado
     agente = str(user.get('nombre') or 'Call Center').strip()
     
-    observacion = data.get('observacion', '').strip() or None
-    olt = data.get('olt', '').strip().upper() or None
+    observacion = str(data.get('observacion') or '').strip() or None
+    olt = str(data.get('olt') or '').strip().upper() or None
     ont = None
     router = None
     
@@ -529,6 +529,146 @@ def atenciones_recientes_contrato():
         cursor.close()
         conn.close()
 
+@atenciones_bp.route('/api/cliente/historial_unificado', methods=['GET'])
+def historial_unificado():
+    contrato = request.args.get('contrato', '').strip()
+    cliente = request.args.get('cliente', '').strip()
+    
+    if not contrato and not cliente:
+        return jsonify({"status": "error", "message": "Contrato o cliente requerido"}), 400
+        
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de conexión a la base de datos"}), 500
+        
+    cursor = conn.cursor(dictionary=True)
+    try:
+        historial = []
+        contrato_clean = contrato.rstrip('Ff')
+        
+        # 1. Atenciones del último año
+        cond_at = "contrato = %s OR contrato = %s"
+        params_at = [contrato, contrato_clean]
+        
+        q_at = f"""
+            SELECT id_atencion, fecha, hora, tipo_atencion, tipo_solicitud, medio_contacto, accion, motivo, agente, observacion, fecha_hora
+            FROM atenciones
+            WHERE ({cond_at})
+              AND fecha >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)
+            ORDER BY fecha_hora DESC, id_atencion DESC
+            LIMIT 50
+        """
+        cursor.execute(q_at, tuple(params_at))
+        atenciones = cursor.fetchall()
+        for at in atenciones:
+            f_str = at['fecha'].isoformat() if isinstance(at['fecha'], (datetime, date)) else str(at['fecha'] or '')
+            h_str = ""
+            if isinstance(at['hora'], timedelta):
+                tot = int(at['hora'].total_seconds())
+                h_str = f"{tot//3600:02d}:{(tot%3600)//60:02d}"
+            elif at.get('hora'):
+                h_str = str(at['hora'])[:5]
+                
+            historial.append({
+                "id": f"at_{at['id_atencion']}",
+                "tipo_registro": "ATENCION",
+                "fecha": f_str,
+                "hora": h_str,
+                "titulo": at.get('motivo') or at.get('tipo_solicitud') or "Atención Telefónica / Mensajes",
+                "subtitulo": f"{at.get('tipo_atencion') or ''} • {at.get('medio_contacto') or ''}".strip(' •'),
+                "detalle": at.get('observacion') or at.get('accion') or "",
+                "responsable": at.get('agente') or "Call Center",
+                "estado": at.get('accion') or "REGISTRADA",
+                "raw_timestamp": f"{f_str} {h_str}"
+            })
+            
+        # 2. Visitas técnicas del último año
+        cond_vis = "(contrato = %s OR contrato = %s)"
+        params_vis = [contrato, contrato_clean]
+        if cliente:
+            cond_vis += " OR cliente = %s"
+            params_vis.append(cliente)
+            
+        q_vis = f"""
+            SELECT id_visita, fecha_programada, horario_estimado, problema, observacion_callcenter, 
+                   solucion_tecnico, observacion_tecnico, tecnico_principal, tecnico_apoyo, estado, servicio
+            FROM visitas_tecnicas
+            WHERE ({cond_vis})
+              AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)
+            ORDER BY fecha_programada DESC, id_visita DESC
+            LIMIT 50
+        """
+        cursor.execute(q_vis, tuple(params_vis))
+        visitas = cursor.fetchall()
+        for v in visitas:
+            f_str = v['fecha_programada'].isoformat() if isinstance(v['fecha_programada'], (datetime, date)) else str(v['fecha_programada'] or '')
+            h_str = v.get('horario_estimado') or ""
+            
+            historial.append({
+                "id": f"vis_{v['id_visita']}",
+                "id_visita": v['id_visita'],
+                "tipo_registro": "VISITA",
+                "fecha": f_str,
+                "hora": h_str,
+                "titulo": v.get('problema') or v.get('servicio') or "Visita Técnica",
+                "subtitulo": f"Técnico: {v.get('tecnico_principal') or 'Por Asignar'}" + (f" + {v.get('tecnico_apoyo')}" if v.get('tecnico_apoyo') else ""),
+                "detalle": v.get('solucion_tecnico') or v.get('observacion_tecnico') or v.get('observacion_callcenter') or "",
+                "responsable": v.get('tecnico_principal') or "Técnico",
+                "estado": v.get('estado') or "PROGRAMADA",
+                "raw_timestamp": f"{f_str} {h_str}"
+            })
+            
+        # Ordenar cronológicamente descendente
+        historial.sort(key=lambda x: x['raw_timestamp'], reverse=True)
+        return jsonify({"status": "success", "historial": historial})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@atenciones_bp.route('/api/cliente/kpis_estado', methods=['GET'])
+def kpis_estado_clientes():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"status": "error", "message": "Error de conexión a BD"}), 500
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT 
+                COALESCE(UPPER(TRIM(estado)), 'ACTIVO') AS estado_norm,
+                COUNT(*) AS total
+            FROM directorio_clientes
+            GROUP BY estado_norm
+        """)
+        rows = cursor.fetchall()
+        
+        totales = {
+            'activo': 0,
+            'cortado': 0,
+            'cancelado': 0,
+            'total': 0
+        }
+        for r in rows:
+            st = r['estado_norm']
+            cnt = int(r['total'])
+            totales['total'] += cnt
+            if 'ACTIVO' in st:
+                totales['activo'] += cnt
+            elif 'CORT' in st or 'SUSP' in st or 'MOR' in st:
+                totales['cortado'] += cnt
+            elif 'CANC' in st or 'RETIR' in st or 'INACT' in st:
+                totales['cancelado'] += cnt
+            else:
+                totales['activo'] += cnt
+                
+        return jsonify({"status": "success", "kpis": totales})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 @atenciones_bp.route('/api/admin/atenciones/masivo', methods=['POST'])
 def registrar_atenciones_masivo():
     user = obtener_usuario_actual(request)
@@ -728,7 +868,7 @@ def buscar_completo_json():
                    total_mensual, antiguedad, numero_serie, producto, direccion, forma_pago,
                    velocidad_mbps, ip_cliente, ip_nodo, vendedor, email,
                    modelo_ont, router_principal, numero_serie_router, router_secundario, numero_serie_router_secundario, tipo_mesh,
-                   cantidad_routers, modo_acceso
+                   cantidad_routers, modo_acceso, estado
             FROM directorio_clientes 
             WHERE contrato LIKE %s 
                OR cedula LIKE %s
@@ -791,7 +931,8 @@ def buscar_completo_json():
                 "cantidad_routers": row.get('cantidad_routers') or 1,
                 "modo_acceso": row.get('modo_acceso'),
                 "vendedor": row.get('vendedor') or "",
-                "forma_pago": row.get('forma_pago') or "N/D"
+                "forma_pago": row.get('forma_pago') or "N/D",
+                "estado": row.get('estado') or "ACTIVO"
             })
 
             
@@ -888,7 +1029,7 @@ def actualizar_datos_tecnicos_cliente():
                    total_mensual, antiguedad, numero_serie, producto, direccion, forma_pago,
                    velocidad_mbps, ip_cliente, ip_nodo, vendedor, email,
                    modelo_ont, router_principal, numero_serie_router, router_secundario, numero_serie_router_secundario, tipo_mesh,
-                   cantidad_routers, modo_acceso
+                   cantidad_routers, modo_acceso, estado
             FROM directorio_clientes 
             WHERE UPPER(contrato) = %s OR UPPER(contrato) = %s
             LIMIT 1
@@ -974,31 +1115,93 @@ def diagnostico_smartolt(sn):
             pass
         return None
 
-    # Consulta en paralelo
-    found_result = None
+    # Consulta en paralelo a todas las SmartOLTs
+    all_results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(SMARTOLT_CREDENTIALS)) as executor:
-        futures = [executor.submit(check_single_smartolt, cred) for cred in SMARTOLT_CREDENTIALS]
+        futures = {executor.submit(check_single_smartolt, cred): cred for cred in SMARTOLT_CREDENTIALS}
         for future in concurrent.futures.as_completed(futures):
-            res = future.result()
-            if res is not None:
-                found_result = res
-                break
+            try:
+                res = future.result()
+                if res is not None:
+                    cred_info = futures[future]
+                    res["api_key"] = cred_info["api_key"]
+                    all_results.append(res)
+            except Exception:
+                pass
                 
-    if not found_result:
+    if not all_results:
         return jsonify({
             "status": "error", 
             "message": f"El equipo con serie {clean_sn} no se encuentra registrado en ninguna central de SmartOLT activa."
         }), 404
         
+    # Priorizar inteligentemente: 
+    # 1. El que esté ONLINE
+    # 2. El que tenga señal válida
+    # 3. El que tenga la fecha de cambio de estado más reciente
+    def score_result(item):
+        d = item.get("data", {}).get("onu_details", {})
+        st = str(d.get("status", "")).lower()
+        is_online = 100 if st == "online" else 0
+        sig_candidate = d.get("signal_1490") or d.get("onu_signal_1490") or d.get("rx_power")
+        has_signal = 50 if (sig_candidate and str(sig_candidate).strip() not in ["-", "", "None", "N/D"]) else 0
+        
+        recency = 0
+        lsc = str(d.get("last_status_change") or "")
+        if lsc and lsc not in ["None", "N/D"]:
+            try:
+                clean_str = lsc.split(".")[0]
+                dt = datetime.strptime(clean_str, "%Y-%m-%d %H:%M:%S")
+                recency = dt.timestamp()
+            except Exception:
+                recency = 0
+                
+        return (is_online + has_signal, recency)
+
+    all_results.sort(key=score_result, reverse=True)
+    found_result = all_results[0]
+        
     data = found_result["data"]
     details = data["onu_details"]
+    dom = found_result["domain"]
+    api_key = found_result.get("api_key")
     
     # Formatear potencias
-    rx_val = details.get("signal_1490")
-    tx_val = details.get("signal_1310")
+    rx_val = details.get("signal_1490") or details.get("onu_signal_1490") or details.get("rx_power") or details.get("signal")
+    tx_val = details.get("signal_1310") or details.get("onu_signal_1310") or details.get("tx_power") or details.get("olt_rx_signal")
+
+    # Si la potencia viene vacía o con "-" y el equipo está online, consultar señal en vivo a SmartOLT
+    if (rx_val is None or str(rx_val).strip() in ["-", "", "N/D"]) and str(details.get("status", "")).lower() == "online" and api_key:
+        try:
+            ctx_live = ssl.create_default_context()
+            ctx_live.check_hostname = False
+            ctx_live.verify_mode = ssl.CERT_NONE
+            url_sig = f"https://{dom}/api/onu/get_onu_signal/{clean_sn}"
+            req_sig = urllib.request.Request(url_sig)
+            req_sig.add_header("X-Token", api_key)
+            req_sig.add_header("User-Agent", "FuturityAtlas/1.0")
+            with urllib.request.urlopen(req_sig, timeout=4, context=ctx_live) as resp_sig:
+                if resp_sig.status == 200:
+                    raw_sig = resp_sig.read().decode('utf-8')
+                    data_sig = json.loads(raw_sig)
+                    if data_sig.get("status") == True:
+                        rx_cand = data_sig.get("onu_signal_1490") or data_sig.get("signal_1490") or data_sig.get("rx_signal")
+                        if rx_cand:
+                            rx_val = str(rx_cand).replace("dBm", "").strip()
+                        tx_cand = data_sig.get("onu_signal_1310") or data_sig.get("olt_rx_signal") or data_sig.get("signal_1310") or data_sig.get("olt_signal_1310") or data_sig.get("tx_signal")
+                        if tx_cand:
+                            tx_val = str(tx_cand).replace("dBm", "").strip()
+        except Exception as e_sig:
+            print("Error consultando señal en vivo get_onu_signal:", e_sig)
     
-    rx_power = f"{rx_val} dBm" if rx_val is not None and str(rx_val) != "-" else "N/D"
-    tx_power = f"{tx_val} dBm" if tx_val is not None and str(tx_val) != "-" else "N/D"
+    def format_power(val):
+        if val is None or str(val).strip() in ["-", "", "N/D"]:
+            return "N/D"
+        val_str = str(val).strip()
+        return val_str if "dBm" in val_str else f"{val_str} dBm"
+
+    rx_power = format_power(rx_val)
+    tx_power = format_power(tx_val)
     
     # Formatear OLT y puerto PON
     olt_name = details.get("olt_name", "N/D")

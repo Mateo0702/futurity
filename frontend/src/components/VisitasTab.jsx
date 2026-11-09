@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import CronogramaTimeline from './cronograma/CronogramaTimeline';
+import HorarioSelector from './HorarioSelector';
 
 function VisitasTab({ token, user, activeAreaProp }) {
   const isCalidadUser = (user?.rol === 'CALIDAD' || user?.role === 'CALIDAD');
@@ -23,6 +25,15 @@ function VisitasTab({ token, user, activeAreaProp }) {
   const [visitas, setVisitas] = useState([]);
   const [stats, setStats] = useState({ pendientes: 0, finalizadas: 0, reagendadas: 0, canceladas: 0 });
   const [cantPendientesAtrasadas, setCantPendientesAtrasadas] = useState(0);
+
+  // Modo de vista: 'tabla' o 'cronograma'
+  const [vistaModo, setVistaModo] = useState(() => {
+    return localStorage.getItem('visitas_vista_modo') || 'tabla';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('visitas_vista_modo', vistaModo);
+  }, [vistaModo]);
   const [ayerFecha, setAyerFecha] = useState('');
   const [recordatorios, setRecordatorios] = useState([]);
   const [tecnicos, setTecnicos] = useState([]);
@@ -442,11 +453,16 @@ function VisitasTab({ token, user, activeAreaProp }) {
     }
 
     const placa = visita.placa_vehiculo_principal ? ` (Vehículo: ${visita.placa_vehiculo_principal})` : '';
+    const tokenSeguimiento = visita.token_rastreo || visita.token;
+    const trackingLink = tokenSeguimiento 
+      ? `\n📲 *Seguimiento y Datos del Técnico en Vivo:*\nPuede consultar los datos del técnico y seguir su llegada en tiempo real aquí:\n${window.location.origin}/seguimiento/${tokenSeguimiento}\n`
+      : '';
 
     const msg = `Estimado/a *${visita.cliente}*,\nLe saludamos de *Futurity*.\n\n` +
       `Le informamos que su *${tipoVisita}* se encuentra programada para el día *${visita.fecha_programada}*.\n` +
       `⏰ Horario estimado: *${horarioPref}*\n` +
-      `👤 Técnico asignado: *${tecnicoDisplay}*${placa}\n\n` +
+      `👤 Técnico asignado: *${tecnicoDisplay}*${placa}\n` +
+      `${trackingLink}\n` +
       `Por favor, asegúrese de estar en el domicilio para recibir al personal técnico. ¡Gracias por preferirnos!`;
 
     const waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`;
@@ -502,6 +518,53 @@ function VisitasTab({ token, user, activeAreaProp }) {
         {/* Controles de Filtros & Área */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           
+          {/* Selector de Modo de Vista (Tabla vs Cronograma Gantt) */}
+          <div style={{ background: 'var(--profile-bg)', padding: '4px', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', gap: '3px' }}>
+            <button
+              type="button"
+              onClick={() => setVistaModo('tabla')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '8px',
+                border: 'none',
+                fontWeight: 800,
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                background: vistaModo === 'tabla' ? 'var(--text-main)' : 'transparent',
+                color: vistaModo === 'tabla' ? 'var(--card-bg)' : 'var(--sidebar-text)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all 0.2s'
+              }}
+            >
+              <i className="fa-solid fa-table-list"></i>
+              <span>Tabla</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setVistaModo('cronograma')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '8px',
+                border: 'none',
+                fontWeight: 800,
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                background: vistaModo === 'cronograma' ? '#6366f1' : 'transparent',
+                color: vistaModo === 'cronograma' ? '#ffffff' : 'var(--sidebar-text)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all 0.2s'
+              }}
+            >
+              <i className="fa-solid fa-chart-gantt"></i>
+              <span>Cronograma Gantt</span>
+              <span style={{ background: 'rgba(255,255,255,0.25)', fontSize: '0.62rem', padding: '1px 5px', borderRadius: '4px', fontWeight: 800 }}>BETA</span>
+            </button>
+          </div>
+
           {/* Selector de Área (Soporte vs Instalaciones vs Todas - Oculto para CALIDAD) */}
           {!isCalidadUser && (
             <div style={{ background: 'var(--profile-bg)', padding: '4px', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', gap: '3px' }}>
@@ -850,8 +913,28 @@ function VisitasTab({ token, user, activeAreaProp }) {
         </div>
       </div>
 
-      {/* Tabla Pro Data Table de Visitas */}
-      <div className="card" style={{ padding: '25px', background: 'var(--card-bg)', borderRadius: '20px', border: '1px solid var(--border-color)' }}>
+      {/* Vista Alternada: Cronograma Gantt o Tabla Pro Data Table */}
+      {vistaModo === 'cronograma' ? (
+        <div style={{ marginBottom: '25px' }}>
+          <CronogramaTimeline
+            visitas={visitas}
+            tecnicos={tecnicos}
+            fechaFiltro={fechaFiltro}
+            setFechaFiltro={setFechaFiltro}
+            stats={stats}
+            token={token}
+            user={user}
+            activeArea={activeArea}
+            onRefresh={fetchVisitas}
+            loading={loading}
+            vistaModo={vistaModo}
+            setVistaModo={setVistaModo}
+            onOpenEditModal={abrirModalEditar}
+          />
+        </div>
+      ) : (
+        /* Tabla Pro Data Table de Visitas */
+        <div className="card" style={{ padding: '25px', background: 'var(--card-bg)', borderRadius: '20px', border: '1px solid var(--border-color)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '15px', marginBottom: '20px' }}>
           <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i className="fa-solid fa-list" style={{ color: 'var(--primary)' }}></i> Lista de Visitas ({visitas.length})
@@ -1542,6 +1625,7 @@ function VisitasTab({ token, user, activeAreaProp }) {
           </table>
         </div>
       </div>
+      )}
 
       {/* Modal Programar Cambio de FO */}
       {modalFO.isOpen && (
@@ -1742,13 +1826,14 @@ function VisitasTab({ token, user, activeAreaProp }) {
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
                   />
                 </div>
-                <div>
-                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Turno / Horario:</label>
-                  <input 
-                    type="text" 
-                    value={modalEditar.preferenciaHoraria} 
-                    onChange={e => setModalEditar(prev => ({ ...prev, preferenciaHoraria: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)', display: 'block', marginBottom: '5px' }}>Turno / Horario de la Visita:</label>
+                  <HorarioSelector
+                    value={modalEditar.preferenciaHoraria}
+                    onChange={val => setModalEditar(prev => ({ ...prev, preferenciaHoraria: val }))}
+                    servicio={modalEditar.servicio}
+                    problema={modalEditar.problema}
+                    activeArea={activeArea}
                   />
                 </div>
                 <div>

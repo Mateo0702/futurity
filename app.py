@@ -473,8 +473,12 @@ def descargar_app():
 # --- 1. RUTA PRINCIPAL: El Dashboard ---
 @app.route('/')
 def dashboard():
-    from flask import send_from_directory
-    return send_from_directory('frontend/dist', 'index.html')
+    from flask import send_from_directory, make_response
+    resp = make_response(send_from_directory('frontend/dist', 'index.html'))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 
@@ -601,7 +605,12 @@ def serve_react_root_files(path):
 
     # If it is not a backend API/public request, fallback to index.html for React Router
     if not path.startswith('api/') and not path.startswith('static/') and not path.startswith('publico/'):
-        return send_from_directory(dist_dir, 'index.html')
+        from flask import make_response
+        resp = make_response(send_from_directory(dist_dir, 'index.html'))
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        resp.headers['Pragma'] = 'no-cache'
+        resp.headers['Expires'] = '0'
+        return resp
         
     return "Not Found", 404
 

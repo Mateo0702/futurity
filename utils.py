@@ -58,7 +58,38 @@ def normalizar_horario_texto(texto_preferencia):
     if "medio dia" in texto or "medio día" in texto:
         return 720, 840  # 12:00 PM a 02:00 PM
 
-    # 2. Búsqueda de horas exactas con formato de dos puntos (Ej: "8:30" o "15:00")
+    # 2. Búsqueda de RANGOS horarios explícitos (Ej: "11:30 - 14:00", "08:00 a 10:30", "11h30 - 14h00", "2pm a 5pm", "11:30 hasta 14:00")
+    rango_regex = re.search(
+        r'(\d{1,2})(?:[:hH](\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?\s*(?:-|a|hasta|\/)\s*(\d{1,2})(?:[:hH](\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?',
+        texto,
+        re.IGNORECASE
+    )
+    if rango_regex:
+        h1 = int(rango_regex.group(1))
+        m1 = int(rango_regex.group(2)) if rango_regex.group(2) else 0
+        p1 = (rango_regex.group(3) or '').lower().replace('.', '')
+        
+        h2 = int(rango_regex.group(4))
+        m2 = int(rango_regex.group(5)) if rango_regex.group(5) else 0
+        p2 = (rango_regex.group(6) or '').lower().replace('.', '')
+
+        # Ajuste AM/PM
+        if p1 == 'pm' and h1 < 12:
+            h1 += 12
+        elif (p2 == 'pm' or 'tarde' in texto) and h1 < 12 and h1 < 8:
+            h1 += 12
+
+        if p2 == 'pm' and h2 < 12:
+            h2 += 12
+        elif (h2 < h1 or (h2 >= 1 and h2 <= 7 and h1 >= 8)) and h2 < 12:
+            h2 += 12
+
+        inicio_min = h1 * 60 + m1
+        fin_min = h2 * 60 + m2
+        if fin_min > inicio_min:
+            return inicio_min, fin_min
+
+    # 3. Búsqueda de horas exactas con formato de dos puntos (Ej: "8:30" o "15:00")
     coincidencia_colon = re.search(r'(\d{1,2}):(\d{2})', texto)
     if coincidencia_colon:
         horas = int(coincidencia_colon.group(1))

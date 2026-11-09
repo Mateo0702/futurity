@@ -77,6 +77,18 @@ body {
   overscroll-behavior-y: contain;
 }
 
+/* Contenedor de Seguimiento y Portal del Cliente con scroll vertical asegurado */
+.seguimiento-cliente-wrapper {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
+}
+
 /* Permitir scroll fluido en todos los contenedores móviles del técnico */
 .tecnico-scroll-container {
   overflow-y: auto !important;

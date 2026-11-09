@@ -14,6 +14,7 @@ export default function EncuestaCliente({ token }) {
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
 
   // Form state oficial ARCOTEL (escala 1 a 5)
   const [p1, setP1] = useState(null); // Trato o actitud
@@ -51,8 +52,9 @@ export default function EncuestaCliente({ token }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setFormError('');
     if (!p1 || !p2 || !p3 || !p4 || !p5) {
-      alert('Por favor califique las 5 preguntas antes de enviar la encuesta.');
+      setFormError(`Por favor califique las 5 preguntas antes de enviar (ha calificado ${respondidasCount} de 5).`);
       return;
     }
 
@@ -75,12 +77,17 @@ export default function EncuestaCliente({ token }) {
       const data = await res.json();
       if (res.ok && data.status === 'ok') {
         setSubmitted(true);
+        try {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          const scrollWrapper = document.querySelector('.seguimiento-cliente-wrapper');
+          if (scrollWrapper) scrollWrapper.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch (err) {}
       } else {
-        alert(data.message || 'Error al guardar la encuesta.');
+        setFormError(data.message || 'Error al guardar la encuesta. Intente nuevamente.');
       }
     } catch (err) {
       console.error(err);
-      alert('Ocurrió un error al enviar las respuestas. Por favor intente de nuevo.');
+      setFormError('Error de conexión al enviar la encuesta. Por favor intente nuevamente.');
     } finally {
       setSubmitting(false);
     }
@@ -277,26 +284,38 @@ export default function EncuestaCliente({ token }) {
               </div>
 
               {/* BARRA DE PROGRESO Y BOTÓN ENVIAR */}
-              <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', color: '#64748b', fontWeight: 700 }}>
+              <div style={{ marginTop: '18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>
                   <span>Progreso de la encuesta:</span>
-                  <span style={{ color: respondidasCount === 5 ? '#10b981' : '#f59e0b' }}>
-                    {respondidasCount} de 5 preguntas calificadas
+                  <span style={{ color: respondidasCount === 5 ? '#10b981' : '#f59e0b', fontWeight: 800 }}>
+                    {respondidasCount === 5 ? '✓ 5 de 5 completadas' : `${respondidasCount} de 5 preguntas calificadas`}
                   </span>
                 </div>
 
+                {formError && (
+                  <div style={{ background: '#fef2f2', border: '1px solid #f87171', borderRadius: '12px', padding: '12px 14px', color: '#991b1b', fontSize: '0.84rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}>
+                    <i className="fa-solid fa-circle-exclamation" style={{ fontSize: '1.2rem', color: '#dc2626', flexShrink: 0 }}></i>
+                    <span>{formError}</span>
+                  </div>
+                )}
+
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || respondidasCount < 5}
                   style={{
                     ...styles.btnSubmit,
-                    opacity: respondidasCount === 5 ? 1 : 0.85
+                    background: submitting ? '#64748b' : respondidasCount === 5 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : '#94a3b8',
+                    cursor: submitting || respondidasCount < 5 ? 'not-allowed' : 'pointer',
+                    boxShadow: respondidasCount === 5 && !submitting ? '0 10px 25px rgba(16, 185, 129, 0.4)' : 'none',
+                    opacity: 1
                   }}
                 >
                   {submitting ? (
-                    <><i className="fa-solid fa-spinner fa-spin"></i> Enviando calificación...</>
+                    <><i className="fa-solid fa-spinner fa-spin" style={{ marginRight: '8px' }}></i> Guardando tu calificación...</>
+                  ) : respondidasCount < 5 ? (
+                    <><i className="fa-solid fa-lock" style={{ marginRight: '8px' }}></i> Completa las 5 preguntas para enviar</>
                   ) : (
-                    <><i className="fa-solid fa-paper-plane"></i> Enviar Encuesta</>
+                    <><i className="fa-solid fa-paper-plane" style={{ marginRight: '8px' }}></i> Enviar Calificación</>
                   )}
                 </button>
               </div>
@@ -324,13 +343,13 @@ export default function EncuestaCliente({ token }) {
 
 const styles = {
   bodyBg: {
-    backgroundColor: '#0f172a',
-    minHeight: '100vh',
+    backgroundColor: 'transparent',
+    width: '100%',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    padding: '20px 14px 40px 14px',
+    padding: '16px 12px 80px 12px',
     boxSizing: 'border-box',
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
   },

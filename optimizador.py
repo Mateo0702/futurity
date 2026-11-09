@@ -52,105 +52,75 @@ def interpretar_preferencia_horaria(texto):
     return 9999
 
 
+def obtener_minuto_inicio_visita(v):
+    pref = str(v.get('preferencia_horaria') or '').strip()
+    pref_upper = pref.upper()
+    
+    # Si explícitamente es "Por coordinar" o "Flexible", no tiene horario fijo asignado
+    if 'COORDINAR' in pref_upper or pref_upper == 'FLEXIBLE':
+        return None
+        
+    v_start = v.get('ventana_inicio_min')
+    if v_start is not None and str(v_start).strip().isdigit():
+        return int(v_start)
+        
+    # Si tiene texto de rango o frase horaria, intentar extraer minutos
+    if pref:
+        m = re.search(r'(\d{1,2})(?:[:hH](\d{2}))?', pref)
+        if m:
+            hora = int(m.group(1))
+            minuto = int(m.group(2) or 0)
+            if 1 <= hora <= 7:
+                hora += 12
+            return hora * 60 + minuto
+            
+    return None
+
+
 def optimizar_ruta_tecnico(visitas, starting_lat=None, starting_lon=None):
     if not visitas:
         return []
         
-    # Default office starting point
-    if starting_lat is None or starting_lon is None:
-        starting_lat = -2.896829
-        starting_lon = -78.975419
-        
-    # Segregate visits by state
+    # Segregar visitas por estado
     active = []
-    pending = []
+    pending_con_hora = []
+    pending_por_coordinar = []
     finished = []
     
     for v in visitas:
-        if v.get('estado') in ['EN_PROGRESO', 'EN_RUTA']:
+        estado = (v.get('estado') or '').upper()
+        if estado in ['EN_PROGRESO', 'EN_RUTA', 'EN_SITIO']:
             active.append(v)
-        elif v.get('estado') in ['FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA']:
+        elif estado in ['FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA']:
             finished.append(v)
         else:
-            pending.append(v)
-            
-    # Start point for optimizing pending visits
-    current_lat = starting_lat
-    current_lon = starting_lon
-    
-    # If there are active visits, the optimization start point should be the location of the last active visit (if coordinates are present)
-    if active:
-        for act_v in reversed(active):
-            v_lat = act_v.get('latitud')
-            v_lon = act_v.get('longitud')
-            if v_lat is not None and v_lon is not None:
-                try:
-                    current_lat = float(v_lat)
-                    current_lon = float(v_lon)
-                    break
-                except (ValueError, TypeError):
-                    pass
-                 
-    # Separate pending visits with valid coordinates from those without
-    pending_with_coords = []
-    pending_without_coords = []
-    for p in pending:
-        p_lat = p.get('latitud')
-        p_lon = p.get('longitud')
-        if p_lat is not None and p_lon is not None:
-            try:
-                # Store coordinates as floats for calculation
-                p['lat_float'] = float(p_lat)
-                p['lon_float'] = float(p_lon)
-                pending_with_coords.append(p)
-            except (ValueError, TypeError):
-                pending_without_coords.append(p)
-        else:
-            pending_without_coords.append(p)
-            
-    # Nearest Neighbor sequencing
-    sequenced_pending = []
-    current_pt = (current_lat, current_lon)
-    
-    while pending_with_coords:
-        best_idx = 0
-        best_score = 99999999.0
-        for idx, v in enumerate(pending_with_coords):
-            dist = calcular_distancia(current_pt[0], current_pt[1], v['lat_float'], v['lon_float'])
-            
-            v_start = v.get('ventana_inicio_min')
-            if v_start is None:
-                v_start = 480
+            min_inicio = obtener_minuto_inicio_visita(v)
+            if min_inicio is not None:
+                v['_min_inicio_sort'] = min_inicio
+                pending_con_hora.append(v)
+            else:
+                pending_por_coordinar.append(v)
                 
-            score = (v_start * 10) + dist
-            if score < best_score:
-                best_score = score
-                best_idx = idx
-                 
-        next_visit = pending_with_coords.pop(best_idx)
-        # Clean temporary float keys
-        if 'lat_float' in next_visit: del next_visit['lat_float']
-        if 'lon_float' in next_visit: del next_visit['lon_float']
-        sequenced_pending.append(next_visit)
-        current_pt = (float(next_visit['latitud']), float(next_visit['longitud']))
-        
-    # Clean temporary keys for any other items
-    for p in pending_without_coords:
-        if 'lat_float' in p: del p['lat_float']
-        if 'lon_float' in p: del p['lon_float']
-        
-    # Sort pending without coordinates by time window start
-    pending_without_coords.sort(key=lambda x: x.get('ventana_inicio_min') if x.get('ventana_inicio_min') is not None else 480)
+    # 1. Ordenar pendientes con hora 100% estricto por hora de inicio del cronograma
+    pending_con_hora.sort(key=lambda x: (
+        x.get('_min_inicio_sort', 9999),
+        x.get('ventana_fin_min') if x.get('ventana_fin_min') is not None else 9999,
+        x.get('id_visita') or 0
+    ))
+    for v in pending_con_hora:
+        if '_min_inicio_sort' in v:
+            del v['_min_inicio_sort']
+            
+    # 2. Pendientes por coordinar van al final de las pendientes
+    pending_por_coordinar.sort(key=lambda x: x.get('id_visita') or 0)
     
-    # Append pending without coordinates at the end of pending
-    sequenced_pending.extend(pending_without_coords)
+    # 3. Combinar: Activas -> Pendientes con hora -> Pendientes por coordinar -> Finalizadas
+    sorted_visitas = active + pending_con_hora + pending_por_coordinar + finished
     
-    # Combine all
-    sorted_visitas = active + sequenced_pending + finished
-    
-    # Assign sequential orden_tecnico (technician stop sequence)
+    # 4. Asignar orden de parada secuencial del técnico
     for idx, v in enumerate(sorted_visitas, start=1):
         v['orden_tecnico'] = idx
+        v['numero_parada'] = idx
          
     return sorted_visitas
 

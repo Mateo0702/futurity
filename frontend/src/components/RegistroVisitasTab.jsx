@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ConsultaBaseCentralModal from './ConsultaBaseCentralModal';
+import HorarioSelector from './HorarioSelector';
 
 function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClearInitialData }) {
   const getTodayLocal = (d = new Date()) => {
@@ -938,14 +939,12 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '6px' }}>
               Preferencia Horaria (Cliente):
             </label>
-            <input
-              type="text"
+            <HorarioSelector
               value={preferenciaHoraria}
-              onChange={(e) => setPreferenciaHoraria(e.target.value)}
-              placeholder="Ej. mañana, tarde, de 14:00 a 16:00..."
-              required
-              className="form-control"
-              style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)' }}
+              onChange={(val) => setPreferenciaHoraria(val)}
+              servicio={servicio}
+              problema={problema}
+              activeArea={activeArea}
             />
           </div>
 

@@ -1,3 +1,5 @@
+import os
+import secrets
 from flask import Blueprint, request, redirect, url_for, session, jsonify, flash
 from db_config import get_db_connection
 from utils import normalizar_horario_texto 
@@ -169,7 +171,7 @@ def registrar_visita():
                 "id_visita": duplicado_reciente['id_visita']
             }), 200
 
-        # Añadimos los campos ventana_inicio_min y ventana_fin_min al INSERT
+        token_rastreo_nuevo = secrets.token_hex(16)
         query = """
             INSERT INTO visitas_tecnicas 
             (creado_por, tecnico_principal, tecnico_apoyo, fecha_programada, preferencia_horaria, 
@@ -177,8 +179,8 @@ def registrar_visita():
             servicio, velocidad_mbps, problema, observacion_callcenter, informacion_tecnico, 
             ventana_inicio_min, ventana_fin_min, estado, prioridad,
             es_instalacion, producto, tipo_instalacion, vendedor, recibido_coordinacion,
-            latitud, longitud)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE', %s, %s, %s, %s, %s, %s, %s, %s)
+            latitud, longitud, token_rastreo)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE', %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """ 
         valores = (
             creado_por, tecnico_principal, tecnico_apoyo, fecha_programada, preferencia,
@@ -186,7 +188,7 @@ def registrar_visita():
             servicio, velocidad_mbps, problema, observacion_callcenter, informacion_tecnico,
             ventana_inicio, ventana_fin, prioridad,
             es_instalacion, producto, tipo_instalacion, vendedor, recibido_coordinacion,
-            lat_val, lon_val
+            lat_val, lon_val, token_rastreo_nuevo
         )
         
         cursor.execute(query, valores)
@@ -356,6 +358,7 @@ def reagendar_visita(id_visita):
         # 2. Actualizar la visita original (se queda en el día actual pero con estado REAGENDADA)
         nota_reagenda = f" | REAGENDADO: {observacion_adicional}" if observacion_adicional else " | REAGENDADO"
         obs_call_original = (original['observacion_callcenter'] or "") + nota_reagenda
+        token_heredado = original.get('token_rastreo') or secrets.token_hex(16)
         
         cursor.execute("""
             UPDATE visitas_tecnicas 
@@ -377,15 +380,15 @@ def reagendar_visita(id_visita):
                 servicio, velocidad_mbps, problema, observacion_callcenter, informacion_tecnico, 
                 ventana_inicio_min, ventana_fin_min, estado, prioridad,
                 es_instalacion, producto, tipo_instalacion, vendedor, recibido_coordinacion,
-                latitud, longitud
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE', %s, %s, %s, %s, %s, %s, %s, %s)
+                latitud, longitud, token_rastreo
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE', %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             original['creado_por'], 'NO TECNICO', None, nueva_fecha, original['preferencia_horaria'],
             original['empresa'], original['contrato'], original['cliente'], original['telefonos'], original['sector'], original['direccion'],
             original['servicio'], original['velocidad_mbps'], original['problema'], obs_call_original, original['informacion_tecnico'],
             original['ventana_inicio_min'], original['ventana_fin_min'], prioridad_final,
             original['es_instalacion'], original['producto'], original['tipo_instalacion'], original['vendedor'], original['recibido_coordinacion'],
-            original['latitud'], original['longitud']
+            original['latitud'], original['longitud'], token_heredado
         ))
         
         conexion.commit()
@@ -442,20 +445,68 @@ def reasignar_tecnicos(id_visita):
     
     nuevo_principal = request.form.get('tecnico_principal')
     nuevo_apoyo = request.form.get('tecnico_apoyo') or None # Puede ir vacío
+    preferencia_horaria = request.form.get('preferencia_horaria')
+    ventana_inicio_min = request.form.get('ventana_inicio_min')
+    ventana_fin_min = request.form.get('ventana_fin_min')
     
     conexion = get_db_connection()
     cursor = conexion.cursor()
     try:
-        query = "UPDATE visitas_tecnicas SET tecnico_principal = %s, tecnico_apoyo = %s WHERE id_visita = %s"
-        cursor.execute(query, (nuevo_principal, nuevo_apoyo, id_visita))
+        campos = ["tecnico_principal = %s", "tecnico_apoyo = %s"]
+        valores = [nuevo_principal, nuevo_apoyo]
+
+        if preferencia_horaria is not None and preferencia_horaria.strip():
+            campos.append("preferencia_horaria = %s")
+            valores.append(preferencia_horaria.strip())
+        
+        if ventana_inicio_min is not None and str(ventana_inicio_min).isdigit() and int(ventana_inicio_min) > 0:
+            campos.append("ventana_inicio_min = %s")
+            valores.append(int(ventana_inicio_min))
+        
+        if ventana_fin_min is not None and str(ventana_fin_min).isdigit() and int(ventana_fin_min) > 0:
+            campos.append("ventana_fin_min = %s")
+            valores.append(int(ventana_fin_min))
+
+        valores.append(id_visita)
+        query = f"UPDATE visitas_tecnicas SET {', '.join(campos)} WHERE id_visita = %s"
+        cursor.execute(query, tuple(valores))
         conexion.commit()
-        return jsonify({"status": "success", "message": "Técnicos actualizados exitosamente."})
+        return jsonify({"status": "success", "message": "Visita y técnicos actualizados exitosamente."})
     except Exception as e:
         print(f"Error al reasignar: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         cursor.close()
         conexion.close()
+
+@visitas_bp.route('/api/cronograma/alerta_telegram', methods=['POST'])
+def alerta_telegram_cronograma():
+    usuario = obtener_usuario_visitas()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    
+    data = request.get_json(silent=True) or request.form
+    mensaje = data.get('mensaje') or ''
+    
+    # Preparación para bot de Telegram
+    bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    chat_id = os.environ.get('TELEGRAM_CHAT_ID_OPERACIONES') or os.environ.get('TELEGRAM_CHAT_ID')
+
+    if bot_token and chat_id and mensaje:
+        try:
+            import requests
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            r = requests.post(url, json={"chat_id": chat_id, "text": mensaje, "parse_mode": "Markdown"}, timeout=5)
+            if r.status_code == 200:
+                return jsonify({"status": "success", "message": "Alerta enviada al grupo de Telegram con éxito."})
+            return jsonify({"status": "warning", "message": f"Telegram respondió con código {r.status_code}"})
+        except Exception as e:
+            return jsonify({"status": "warning", "message": f"Error al conectar con Telegram: {e}"})
+
+    return jsonify({
+        "status": "success",
+        "message": "Alerta registrada en Centro de Comando (Modo Prueba: Telegram simulado)."
+    })
 
 @visitas_bp.route('/api/visitas/crear_cambio_fo', methods=['POST'])
 def crear_cambio_fo():
@@ -484,14 +535,15 @@ def crear_cambio_fo():
     conexion = get_db_connection()
     cursor = conexion.cursor()
     try:
+        token_fo = secrets.token_hex(16)
         query_insert = """
             INSERT INTO visitas_tecnicas (
                 creado_por, tecnico_principal, fecha_programada, preferencia_horaria,
                 empresa, contrato, cliente, telefonos, sector, direccion, servicio,
                 velocidad_mbps, problema, observacion_callcenter, estado, prioridad,
-                latitud, longitud
+                latitud, longitud, token_rastreo
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'CAMBIO DE FO', %s, 'PENDIENTE', 'ALTA', %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'CAMBIO DE FO', %s, 'PENDIENTE', 'ALTA', %s, %s, %s
             )
         """
         cursor.execute(query_insert, (
@@ -509,7 +561,8 @@ def crear_cambio_fo():
             velocidad_mbps,
             f"[CAMBIO DE FO PROGRAMADO] {observacion_callcenter}",
             latitud,
-            longitud
+            longitud,
+            token_fo
         ))
         
         if id_visita_origen:

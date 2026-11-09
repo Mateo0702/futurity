@@ -259,17 +259,8 @@ function App() {
 
   // Render content depending on activeTab
   const renderTabContent = () => {
-    if (activeTab === 'registro-atencion') {
-      return (
-        <AtencionesTab 
-          token={token} 
-          user={user} 
-          onNavigateToRegistroVisitas={handleNavigateToRegistroVisitas} 
-        />
-      );
-    }
-    if (activeTab === 'buscar-cliente') {
-      return <BuscadorClienteTab token={token} />;
+    if (activeTab === 'registro-atencion' || activeTab === 'buscar-cliente') {
+      return <BuscadorClienteTab token={token} user={user} />;
     }
     if (activeTab === 'mapa-tecnicos') {
       return <MapaTecnicosTab token={token} activeArea={activeArea} />;

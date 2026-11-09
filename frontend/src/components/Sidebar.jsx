@@ -73,7 +73,7 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
       return ['ADMIN', 'ASESOR', 'CALIDAD'].includes(role);
     }
     if (tab === 'registro-atencion') {
-      return ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR'].includes(role);
+      return false;
     }
     if (tab === 'buscar-cliente') {
       return ['ADMIN', 'ASESOR', 'ATC', 'ATC_AUDITOR', 'SUPERVISOR_ATC', 'AUDITOR', 'CALIDAD', 'BODEGA'].includes(role);
@@ -315,23 +315,13 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
           </div>
         )}
 
-        {isVisible('registro-atencion') && (
-          <div
-            className={`nav-item ${activeTab === 'registro-atencion' ? 'active' : ''}`}
-            onClick={() => onTabChange('registro-atencion')}
-          >
-            <i className="fa-solid fa-headset" style={{ fontSize: '1.1rem', width: '20px' }}></i>
-            <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>Registrar Atención</span>
-          </div>
-        )}
-
         {isVisible('buscar-cliente') && (
           <div
             className={`nav-item ${activeTab === 'buscar-cliente' ? 'active' : ''}`}
             onClick={() => onTabChange('buscar-cliente')}
           >
             <i className="fa-solid fa-magnifying-glass" style={{ fontSize: '1.1rem', width: '20px' }}></i>
-            <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>Buscador de Clientes</span>
+            <span style={{ marginLeft: '10px', display: collapsed ? 'none' : 'inline' }}>Atención y Clientes</span>
           </div>
         )}
 
@@ -412,7 +402,7 @@ function Sidebar({ user, activeTab, onTabChange, activeArea, onAreaChange, onLog
 
       {/* Footer del Sidebar con perfil y controles */}
       <div className="sidebar-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '15px' }}>
-        
+
         {/* Botón exclusivo para Usuario Mixto (Admin/Supervisor + Técnico de Campo) */}
         {tecnicoAsociado && (
           <div style={{ padding: collapsed ? '0 10px 14px 10px' : '0 18px 14px 18px' }}>

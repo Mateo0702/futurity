@@ -1,4 +1,5 @@
 import re
+import secrets
 from flask import Blueprint, request, jsonify, session
 from pydantic import create_model, validator, ValidationError
 from werkzeug.security import check_password_hash
@@ -642,6 +643,7 @@ def api_v2_create_visita():
                 "id_visita": duplicado_reciente['id_visita']
             }), 200
 
+        token_rastreo_nuevo = secrets.token_hex(16)
         query = """
             INSERT INTO visitas_tecnicas 
             (creado_por, tecnico_principal, tecnico_apoyo, fecha_programada, preferencia_horaria, 
@@ -649,8 +651,8 @@ def api_v2_create_visita():
             servicio, velocidad_mbps, problema, observacion_callcenter, informacion_tecnico, 
             ventana_inicio_min, ventana_fin_min, estado, prioridad,
             es_instalacion, producto, tipo_instalacion, vendedor, recibido_coordinacion,
-            latitud, longitud)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE', %s, %s, %s, %s, %s, %s, %s, %s)
+            latitud, longitud, token_rastreo)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE', %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         valores = (
             creado_por, tecnico_principal, tecnico_apoyo, fecha_programada, preferencia,
@@ -658,7 +660,7 @@ def api_v2_create_visita():
             servicio, velocidad_mbps, problema, observacion_callcenter, informacion_tecnico,
             ventana_inicio, ventana_fin, prioridad,
             es_instalacion, producto, tipo_instalacion, vendedor, recibido_coordinacion,
-            lat_val, lon_val
+            lat_val, lon_val, token_rastreo_nuevo
         )
         cursor.execute(query, valores)
         conexion.commit()

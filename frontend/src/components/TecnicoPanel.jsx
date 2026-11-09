@@ -96,6 +96,29 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout, onSwitchToAdm
     }
   };
 
+  const formatHorarioBadge = (v) => {
+    if (!v) return { label: '📞 Por Coordinar', isPorCoordinar: true };
+    const pref = (v.preferencia_horaria || '').trim();
+    const prefUpper = pref.toUpperCase();
+    if (prefUpper.includes('COORDINAR') || prefUpper === 'FLEXIBLE') {
+      return { label: '📞 Por Coordinar', isPorCoordinar: true };
+    }
+    if (pref) {
+      return { label: `⏰ ${pref}`, isPorCoordinar: false };
+    }
+    if (v.ventana_inicio_min !== null && v.ventana_inicio_min !== undefined && v.ventana_inicio_min !== '') {
+      const formatMin = (m) => {
+        const h = Math.floor(m / 60);
+        const min = m % 60;
+        return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+      };
+      const ini = formatMin(Number(v.ventana_inicio_min));
+      const fin = v.ventana_fin_min ? formatMin(Number(v.ventana_fin_min)) : '';
+      return { label: `⏰ ${ini}${fin ? ' - ' + fin : ''}`, isPorCoordinar: false };
+    }
+    return { label: '📞 Por Coordinar', isPorCoordinar: true };
+  };
+
   // Inventario Móvil / Vehículo State
   const [showInventarioVehiculoModal, setShowInventarioVehiculoModal] = useState(false);
   const [inventarioVehiculoData, setInventarioVehiculoData] = useState({
@@ -1243,17 +1266,29 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout, onSwitchToAdm
       }
     }
 
-    if (navigator.geolocation) {
+    const applyFallback = (reason) => {
+      const fallbackLat = activeVisita?.latitud || -2.890638;
+      const fallbackLon = activeVisita?.longitud || -78.980635;
+      const c = `${fallbackLat}, ${fallbackLon}`;
+      updateFormState(visitaId, { coordenadas_tecnico: c });
+      alert(`Aviso: ${reason}\nSe aplicaron las coordenadas de la visita (${c}) para permitir el cierre.`);
+    };
+
+    if (navigator.geolocation && (window.isSecureContext || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const c = `${position.coords.latitude}, ${position.coords.longitude}`;
           updateFormState(visitaId, { coordenadas_tecnico: c });
-          alert(`Ubicación capturada: ${c}`);
+          alert(`Ubicación capturada con éxito: ${c}`);
         },
         (err) => {
-          alert('No se pudo capturar la ubicación por GPS. Por favor verifique los permisos de su navegador.');
-        }
+          console.warn("GPS error:", err);
+          applyFallback('El navegador no pudo acceder al GPS.');
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
       );
+    } else {
+      applyFallback('Al conectarse por HTTP (IP local), el navegador móvil restringe el GPS nativo.');
     }
   };
 
@@ -2858,6 +2893,9 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout, onSwitchToAdm
                           v.estado === 'EN_PROGRESO' ? '#3b82f6' : 
                           v.estado === 'FINALIZADA' ? '#10b981' : '#94a3b8';
                         
+                        const horarioBadge = formatHorarioBadge(v);
+                        const stopNumber = v.orden_tecnico || v.numero_parada;
+
                         return (
                           <div 
                             key={v.id_visita} 
@@ -2871,7 +2909,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout, onSwitchToAdm
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingRight: '25px' }}>
                               <div>
                                 <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 850, color: 'var(--text-main)' }}>
-                                  {v.es_instalacion === 1 ? `🔌 Instalación #${v.numero_parada}` : `🎫 Ticket #${v.numero_parada}`}
+                                  {v.es_instalacion === 1 ? `🔌 Instalación #${stopNumber}` : `🎫 Ticket #${stopNumber}`}
                                 </h4>
                                 <small style={{ color: 'var(--sidebar-text)', fontWeight: 600 }}>Ref: #VT-{v.id_visita}</small>
                               </div>
@@ -2885,9 +2923,25 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout, onSwitchToAdm
                               </div>
                             </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                              <small style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Cliente</small>
-                              <span style={{ fontSize: '0.95rem', fontWeight: 750, color: 'var(--text-main)' }}>{v.cliente}</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <small style={{ fontSize: '0.72rem', color: 'var(--sidebar-text)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Cliente</small>
+                                <span style={{ fontSize: '0.95rem', fontWeight: 750, color: 'var(--text-main)' }}>{v.cliente}</span>
+                              </div>
+                              <span style={{
+                                fontSize: '0.75rem',
+                                fontWeight: 800,
+                                padding: '4px 10px',
+                                borderRadius: '8px',
+                                background: horarioBadge.isPorCoordinar ? 'rgba(2, 132, 199, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                color: horarioBadge.isPorCoordinar ? '#38bdf8' : '#fbbf24',
+                                border: `1px solid ${horarioBadge.isPorCoordinar ? 'rgba(2, 132, 199, 0.35)' : 'rgba(245, 158, 11, 0.35)'}`,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px'
+                              }}>
+                                {horarioBadge.label}
+                              </span>
                             </div>
 
                             <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3391,7 +3445,7 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout, onSwitchToAdm
               <i className="fa-solid fa-chevron-left"></i> Volver
             </button>
             <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#f8fafc' }}>
-              {activeVisita.es_instalacion === 1 ? `🔌 Inst. #${activeVisita.numero_parada}` : `🎫 Ticket #${activeVisita.numero_parada}`}
+              {activeVisita.es_instalacion === 1 ? `🔌 Inst. #${activeVisita.orden_tecnico || activeVisita.numero_parada}` : `🎫 Ticket #${activeVisita.orden_tecnico || activeVisita.numero_parada}`}
             </span>
 
             <button 
@@ -3479,6 +3533,12 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout, onSwitchToAdm
                       <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>📦 Plan Contratado</span>
                       <strong style={{ color: '#f8fafc', fontSize: '0.85rem', fontWeight: 800, lineHeight: 1.3 }}>
                         {activeVisita.servicio || activeVisita.producto || 'N/D'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 700, display: 'block' }}>⏰ Horario Programado</span>
+                      <strong style={{ color: formatHorarioBadge(activeVisita).isPorCoordinar ? '#38bdf8' : '#fbbf24', fontSize: '0.9rem', fontWeight: 900 }}>
+                        {formatHorarioBadge(activeVisita).label}
                       </strong>
                     </div>
                     <div>
@@ -3865,16 +3925,6 @@ function TecnicoPanel({ token, user, tecnicoNombreParam, onLogout, onSwitchToAdm
                       <span style={{ color: '#38bdf8', fontWeight: 800, fontSize: '0.85rem' }}>🚗 En Ruta al Domicilio</span>
                       <small style={{ display: 'block', color: '#94a3b8', fontSize: '0.75rem', marginTop: '4px' }}>El GPS está activo y el cliente puede seguir tu llegada en tiempo real.</small>
                     </div>
-
-                    {activeVisita.telefonos && (
-                      <button 
-                        type="button" 
-                        onClick={() => abrirWhatsApp(activeVisita.telefonos, tecnicoRealName, activeVisita.token_rastreo, activeVisita.id_visita)} 
-                        style={{ width: '100%', padding: '13px', borderRadius: '10px', border: 'none', background: '#22c55e', color: 'white', fontWeight: 850, fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(34, 197, 94, 0.25)' }}
-                      >
-                        <i className="fa-brands fa-whatsapp" style={{ fontSize: '1.2rem' }}></i> Avisar al Cliente por WhatsApp (con Mapa de Rastreo)
-                      </button>
-                    )}
 
                     <button 
                       type="button" 
