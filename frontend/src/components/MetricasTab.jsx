@@ -72,6 +72,11 @@ function MetricasTab({ token, user }) {
   const [dataTiempos, setDataTiempos] = useState(null);
   const [dataModernizacion, setDataModernizacion] = useState(null);
 
+  // Modernización Routers states
+  const [filtroTipoRouter, setFiltroTipoRouter] = useState('todos'); // 'todos', 'OBSOLETO', 'HOMOLOGADO'
+  const [vistaRouters, setVistaRouters] = useState('grafico'); // 'grafico', 'tabla'
+  const [busquedaRouter, setBusquedaRouter] = useState('');
+
   // Audit (Timeline) states
   const [contratoAudit, setContratoAudit] = useState('');
   const [auditDesde, setAuditDesde] = useState('');
@@ -237,14 +242,79 @@ function MetricasTab({ token, user }) {
   };
 
   // Render Modernización de Equipos Charts
-  const renderModernizacionCharts = (data) => {
-    if (!window.Chart || !data) return;
+  const renderModernizacionBarras = (data, filtro = 'todos') => {
+    if (!window.Chart || !canvasModernizacionBarrasRef.current || !data?.modelos_top) return;
+    if (chartsRef.current.modBarras && typeof chartsRef.current.modBarras.destroy === 'function') {
+      chartsRef.current.modBarras.destroy();
+    }
     const isDark = document.body.classList.contains('dark-mode');
     const textColor = isDark ? '#f8fafc' : '#64748b';
     const gridColor = isDark ? '#334155' : '#e2e8f0';
 
+    let modelos = data.modelos_top || [];
+    if (filtro === 'HOMOLOGADO') {
+      modelos = modelos.filter(m => m.tipo === 'HOMOLOGADO');
+    } else if (filtro === 'OBSOLETO') {
+      modelos = modelos.filter(m => m.tipo === 'OBSOLETO');
+    }
+
+    const ctx = canvasModernizacionBarrasRef.current.getContext('2d');
+    chartsRef.current.modBarras = new window.Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: modelos.map(m => m.modelo),
+        datasets: [{
+          label: 'Cantidad de Equipos',
+          data: modelos.map(m => m.cantidad),
+          backgroundColor: modelos.map(m => m.tipo === 'HOMOLOGADO' ? '#10b981' : '#f59e0b'),
+          borderRadius: 6
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const item = modelos[context.dataIndex];
+                const estado = item.tipo === 'HOMOLOGADO' ? '🟢 Vigente (No requiere cambio)' : '🔴 Por Cambiar (Plan Renove)';
+                return [
+                  ` Cantidad: ${context.parsed.x?.toLocaleString()} clientes`,
+                  ` Participación: ${item.porcentaje}% de la red`,
+                  ` Clasificación: ${estado}`
+                ];
+              }
+            }
+          }
+        },
+        scales: {
+          x: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: textColor, font: { family: 'Inter', size: 9 } } },
+          y: { 
+            grid: { display: false }, 
+            ticks: { 
+              color: textColor, 
+              font: { family: 'Inter', size: 9, weight: 600 },
+              autoSkip: false
+            } 
+          }
+        }
+      }
+    });
+  };
+
+  const renderModernizacionCharts = (data) => {
+    if (!window.Chart || !data) return;
+    const isDark = document.body.classList.contains('dark-mode');
+    const textColor = isDark ? '#f8fafc' : '#64748b';
+
     // 1. Doughnut: Homologados vs Obsoletos
     if (canvasModernizacionDoughnutRef.current && data.resumen_global) {
+      if (chartsRef.current.modDoughnut && typeof chartsRef.current.modDoughnut.destroy === 'function') {
+        chartsRef.current.modDoughnut.destroy();
+      }
       const ctx = canvasModernizacionDoughnutRef.current.getContext('2d');
       chartsRef.current.modDoughnut = new window.Chart(ctx, {
         type: 'doughnut',
@@ -273,36 +343,19 @@ function MetricasTab({ token, user }) {
       });
     }
 
-    // 2. Bar Chart: Top 10 Modelos
-    if (canvasModernizacionBarrasRef.current && data.modelos_top) {
-      const ctx = canvasModernizacionBarrasRef.current.getContext('2d');
-      const top10 = data.modelos_top.slice(0, 8);
-      chartsRef.current.modBarras = new window.Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: top10.map(m => m.modelo),
-          datasets: [{
-            label: 'Cantidad de Equipos',
-            data: top10.map(m => m.cantidad),
-            backgroundColor: top10.map(m => m.tipo === 'HOMOLOGADO' ? '#10b981' : '#f59e0b'),
-            borderRadius: 6
-          }]
-        },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false }
-          },
-          scales: {
-            x: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: textColor, font: { family: 'Inter', size: 9 } } },
-            y: { grid: { display: false }, ticks: { color: textColor, font: { family: 'Inter', size: 9, weight: 600 } } }
-          }
-        }
-      });
-    }
+    // 2. Bar Chart
+    renderModernizacionBarras(data, filtroTipoRouter);
   };
+
+  // Re-renderizar barras de routers cuando cambia el filtro o vista
+  useEffect(() => {
+    if (subTab === 'modernizacion' && dataModernizacion && vistaRouters === 'grafico') {
+      const timer = setTimeout(() => {
+        renderModernizacionBarras(dataModernizacion, filtroTipoRouter);
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [filtroTipoRouter, vistaRouters, subTab, dataModernizacion]);
 
   // Render Calidad Call Center (Auditoría ATC) Charts
   const renderCalidadAtcCharts = (data) => {
@@ -1729,24 +1782,246 @@ function MetricasTab({ token, user }) {
               </div>
 
               {/* Charts Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginBottom: '25px' }}>
-                <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
-                  <h4 style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    <i className="fa-solid fa-chart-pie" style={{ marginRight: '8px' }}></i> Proporción de Equipos en Red
-                  </h4>
-                  <div style={{ position: 'relative', height: '230px', flex: 1 }}>
-                    <canvas ref={canvasModernizacionDoughnutRef} id="chartModDoughnut"></canvas>
+              {(() => {
+                const modelosRouters = dataModernizacion.modelos_top || [];
+                const totalModelosHomologados = modelosRouters.filter(m => m.tipo === 'HOMOLOGADO').length;
+                const totalModelosObsoletos = modelosRouters.filter(m => m.tipo === 'OBSOLETO').length;
+                const cantEquiposHomologados = modelosRouters.filter(m => m.tipo === 'HOMOLOGADO').reduce((sum, m) => sum + (m.cantidad || 0), 0);
+                const cantEquiposObsoletos = modelosRouters.filter(m => m.tipo === 'OBSOLETO').reduce((sum, m) => sum + (m.cantidad || 0), 0);
+                const cantTotalEquipos = modelosRouters.reduce((sum, m) => sum + (m.cantidad || 0), 0);
+
+                const modelosFiltrados = modelosRouters.filter(m => {
+                  if (filtroTipoRouter === 'HOMOLOGADO' && m.tipo !== 'HOMOLOGADO') return false;
+                  if (filtroTipoRouter === 'OBSOLETO' && m.tipo !== 'OBSOLETO') return false;
+                  if (busquedaRouter.trim()) {
+                    const q = busquedaRouter.toLowerCase();
+                    return (m.modelo || '').toLowerCase().includes(q);
+                  }
+                  return true;
+                });
+
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginBottom: '25px', alignItems: 'stretch' }}>
+                    {/* Proporción de Equipos */}
+                    <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
+                      <h4 style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        <i className="fa-solid fa-chart-pie" style={{ marginRight: '8px' }}></i> Proporción de Equipos en Red
+                      </h4>
+                      <div style={{ position: 'relative', height: '230px', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <canvas ref={canvasModernizacionDoughnutRef} id="chartModDoughnut"></canvas>
+                      </div>
+                      <div style={{ marginTop: 'auto', paddingTop: '15px', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.82rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#10b981', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }}></span>
+                            Vigentes (No cambiar):
+                          </span>
+                          <span style={{ fontWeight: 800, color: 'var(--text-main)' }}>
+                            {dataModernizacion.resumen_global?.homologados || 0} ({dataModernizacion.resumen_global?.porcentaje_homologados || 0}%)
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#ef4444', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }}></span>
+                            Por Cambiar (Plan Renove):
+                          </span>
+                          <span style={{ fontWeight: 800, color: 'var(--text-main)' }}>
+                            {dataModernizacion.resumen_global?.obsoletos || 0} ({dataModernizacion.resumen_global?.porcentaje_obsoletos || 0}%)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Modelos de Routers Instalados */}
+                    <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
+                        <div>
+                          <h4 style={{ margin: '0 0 4px 0', fontSize: '0.88rem', color: 'var(--text-main)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            <i className="fa-solid fa-server" style={{ marginRight: '8px', color: '#3b82f6' }}></i> Modelos de Routers Instalados
+                          </h4>
+                          <div style={{ display: 'flex', gap: '8px', fontSize: '0.74rem', fontWeight: 600, flexWrap: 'wrap' }}>
+                            <span style={{ color: 'var(--sidebar-text)' }}><b>{modelosRouters.length}</b> modelos ({cantTotalEquipos.toLocaleString()} routers)</span>
+                            <span style={{ color: '#10b981' }}>🟢 Vigentes: <b>{cantEquiposHomologados.toLocaleString()}</b></span>
+                            <span style={{ color: '#ef4444' }}>🔴 Por Cambiar: <b>{cantEquiposObsoletos.toLocaleString()}</b></span>
+                          </div>
+                        </div>
+
+                        {/* View Switcher: Gráfico / Tabla */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--hover-bg, #f1f5f9)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                          <button
+                            type="button"
+                            onClick={() => setVistaRouters('grafico')}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              border: 'none',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              background: vistaRouters === 'grafico' ? '#3b82f6' : 'transparent',
+                              color: vistaRouters === 'grafico' ? '#ffffff' : 'var(--text-muted, #64748b)',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            <i className="fa-solid fa-chart-bar" style={{ marginRight: '5px' }}></i> Gráfico
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setVistaRouters('tabla')}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              border: 'none',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              background: vistaRouters === 'tabla' ? '#3b82f6' : 'transparent',
+                              color: vistaRouters === 'tabla' ? '#ffffff' : 'var(--text-muted, #64748b)',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            <i className="fa-solid fa-table-list" style={{ marginRight: '5px' }}></i> Tabla ({modelosRouters.length})
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Filter Pills and Search */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--sidebar-text)', marginRight: '2px' }}>Filtro:</span>
+                        <button
+                          type="button"
+                          onClick={() => setFiltroTipoRouter('todos')}
+                          style={{
+                            padding: '3px 9px',
+                            borderRadius: '20px',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            border: filtroTipoRouter === 'todos' ? '1px solid #3b82f6' : '1px solid var(--border-color)',
+                            background: filtroTipoRouter === 'todos' ? 'rgba(59, 130, 246, 0.15)' : 'var(--profile-bg)',
+                            color: filtroTipoRouter === 'todos' ? '#2563eb' : 'var(--sidebar-text)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Todos ({modelosRouters.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFiltroTipoRouter('OBSOLETO')}
+                          style={{
+                            padding: '3px 9px',
+                            borderRadius: '20px',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            border: filtroTipoRouter === 'OBSOLETO' ? '1px solid #ef4444' : '1px solid var(--border-color)',
+                            background: filtroTipoRouter === 'OBSOLETO' ? 'rgba(239, 68, 68, 0.15)' : 'var(--profile-bg)',
+                            color: filtroTipoRouter === 'OBSOLETO' ? '#dc2626' : 'var(--sidebar-text)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🔴 Por Cambiar ({totalModelosObsoletos})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFiltroTipoRouter('HOMOLOGADO')}
+                          style={{
+                            padding: '3px 9px',
+                            borderRadius: '20px',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            border: filtroTipoRouter === 'HOMOLOGADO' ? '1px solid #10b981' : '1px solid var(--border-color)',
+                            background: filtroTipoRouter === 'HOMOLOGADO' ? 'rgba(16, 185, 129, 0.15)' : 'var(--profile-bg)',
+                            color: filtroTipoRouter === 'HOMOLOGADO' ? '#059669' : 'var(--sidebar-text)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🟢 Vigentes ({totalModelosHomologados})
+                        </button>
+
+                        {vistaRouters === 'tabla' && (
+                          <input
+                            type="text"
+                            placeholder="Buscar router..."
+                            value={busquedaRouter}
+                            onChange={(e) => setBusquedaRouter(e.target.value)}
+                            style={{
+                              marginLeft: 'auto',
+                              padding: '3px 9px',
+                              borderRadius: '6px',
+                              border: '1px solid var(--border-color)',
+                              background: 'var(--profile-bg)',
+                              fontSize: '0.74rem',
+                              color: 'var(--text-main)',
+                              outline: 'none',
+                              maxWidth: '150px'
+                            }}
+                          />
+                        )}
+                      </div>
+
+                      {/* Body */}
+                      {vistaRouters === 'grafico' ? (
+                        <div style={{ maxHeight: '420px', overflowY: 'auto', paddingRight: '6px', flex: 1 }}>
+                          <div style={{ position: 'relative', height: `${Math.max(260, modelosFiltrados.length * 25)}px` }}>
+                            <canvas ref={canvasModernizacionBarrasRef} id="chartModBarras"></canvas>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ maxHeight: '420px', overflowY: 'auto', flex: 1, border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                            <thead>
+                              <tr style={{ background: 'var(--hover-bg, #f8fafc)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 1 }}>
+                                <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700 }}>Modelo de Router</th>
+                                <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>Estado</th>
+                                <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>Cantidad</th>
+                                <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>% Red</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {modelosFiltrados.length === 0 ? (
+                                <tr>
+                                  <td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: 'var(--sidebar-text)' }}>
+                                    No se encontraron modelos con los filtros seleccionados.
+                                  </td>
+                                </tr>
+                              ) : (
+                                modelosFiltrados.map((m, idx) => {
+                                  const esVigente = m.tipo === 'HOMOLOGADO';
+                                  return (
+                                    <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)', background: idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.015)' }}>
+                                      <td style={{ padding: '7px 10px', fontWeight: 700, color: 'var(--text-main)' }}>
+                                        {m.modelo}
+                                      </td>
+                                      <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                        <span style={{
+                                          padding: '2px 8px',
+                                          borderRadius: '10px',
+                                          fontSize: '0.7rem',
+                                          fontWeight: 800,
+                                          background: esVigente ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                          color: esVigente ? '#059669' : '#dc2626',
+                                          border: esVigente ? '1px solid #10b981' : '1px solid #ef4444'
+                                        }}>
+                                          {esVigente ? '🟢 Vigente' : '🔴 Por Cambiar'}
+                                        </span>
+                                      </td>
+                                      <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: 800, color: 'var(--text-main)' }}>
+                                        {m.cantidad.toLocaleString()}
+                                      </td>
+                                      <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: 600, color: 'var(--sidebar-text)' }}>
+                                        {m.porcentaje}%
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
-                  <h4 style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: 'var(--sidebar-text)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    <i className="fa-solid fa-server" style={{ marginRight: '8px' }}></i> Top Modelos de Routers Instalados
-                  </h4>
-                  <div style={{ position: 'relative', height: '230px', flex: 1 }}>
-                    <canvas ref={canvasModernizacionBarrasRef} id="chartModBarras"></canvas>
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* Table per Node */}
               <div className="card" style={{ padding: '25px' }}>

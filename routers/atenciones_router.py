@@ -983,6 +983,50 @@ def buscar_completo_json():
         conn.close()
 
 
+@atenciones_bp.route('/api/cliente/catalogo_equipos', methods=['GET'])
+def api_cliente_catalogo_equipos():
+    from utils_equipos import CATALOGO_ROUTERS_OFICIAL, CATALOGO_ONTS_OFICIAL
+    conn = get_db_connection()
+    routers_db = []
+    onts_db = []
+    if conn:
+        try:
+            cur = conn.cursor(dictionary=True)
+            cur.execute("""
+                SELECT nombre FROM catalogo_modelos_router 
+                WHERE activo = 1 
+                ORDER BY CASE 
+                    WHEN nombre LIKE '%EX511%' THEN 1 
+                    WHEN nombre LIKE '%AX3%' THEN 2 
+                    WHEN nombre LIKE '%AX2%' THEN 3 
+                    ELSE 4 
+                END, nombre ASC
+            """)
+            routers_db = [r['nombre'] for r in cur.fetchall()]
+            cur.execute("""
+                SELECT nombre FROM catalogo_modelos_ont 
+                WHERE activo = 1 
+                ORDER BY CASE 
+                    WHEN nombre = 'HUAWEI' THEN 1 
+                    WHEN nombre = 'KINGTYPE' THEN 2 
+                    WHEN nombre LIKE '%CDATA%' THEN 3 
+                    ELSE 4 
+                END, nombre ASC
+            """)
+            onts_db = [r['nombre'] for r in cur.fetchall()]
+            cur.close()
+        except Exception:
+            pass
+        finally:
+            conn.close()
+
+    return jsonify({
+        "status": "ok",
+        "routers": routers_db or CATALOGO_ROUTERS_OFICIAL,
+        "onts": onts_db or CATALOGO_ONTS_OFICIAL
+    })
+
+
 @atenciones_bp.route('/api/cliente/actualizar_datos_tecnicos', methods=['POST'])
 def actualizar_datos_tecnicos_cliente():
     token = request.headers.get('Authorization')
@@ -1012,15 +1056,19 @@ def actualizar_datos_tecnicos_cliente():
     cursor = conn.cursor(dictionary=True)
     try:
         from utils import normalizar_gpon_sn, MAPEO_NODOS
+        from utils_equipos import normalizar_modelo_router, normalizar_modelo_ont
         raw_sn = datos.get('numero_serie') or ''
         sn_normalizado = normalizar_gpon_sn(raw_sn) if raw_sn else ''
         
         ip_cliente = str(datos.get('ip_cliente', '')).strip()
         ip_nodo = str(datos.get('ip_nodo', '')).strip()
-        modelo_ont = str(datos.get('modelo_ont', '')).strip()
-        router_principal = str(datos.get('router_principal', '')).strip()
+        raw_ont = str(datos.get('modelo_ont', '')).strip()
+        modelo_ont = normalizar_modelo_ont(raw_ont)
+        raw_r1 = str(datos.get('router_principal', '')).strip()
+        router_principal = normalizar_modelo_router(raw_r1)
         numero_serie_router = str(datos.get('numero_serie_router', '')).strip().upper()
-        router_secundario = str(datos.get('router_secundario', '')).strip()
+        raw_r2 = str(datos.get('router_secundario', '')).strip()
+        router_secundario = normalizar_modelo_router(raw_r2)
         numero_serie_router_secundario = str(datos.get('numero_serie_router_secundario', '')).strip().upper()
         tipo_mesh = str(datos.get('tipo_mesh', '')).strip()
         modo_acceso = str(datos.get('modo_acceso', '')).strip()

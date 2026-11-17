@@ -58,6 +58,43 @@ function BuscadorClienteTab({ token, user }) {
     modo_acceso: ''
   });
 
+  // Catálogos oficiales para selectores
+  const [catalogoRouters, setCatalogoRouters] = useState([
+    "Router TPLink EX511", "Router Huawei AX3", "Router Huawei AX3S", "Router Huawei AX2",
+    "ONT TPLink EXX530v", "ONT TPLink EXX231v", "Router Mercusys MR70X",
+    "Router TPLink Archer AX10", "Router TPLink Archer AX12", "Router TPLink Archer AX53",
+    "TPLINK WIFI 6", "Router TPLink Archer C50", "Router TPLink Archer C64",
+    "Router TPLink Archer C80", "Router TPLink Archer C60", "Router TPLink Archer C20",
+    "Router TPLink Archer C24", "Router TPLink EC225-G5", "Router TPLink EC220-G5",
+    "Router TPLink HC220-G5", "Router Cudy WR1300", "Router Cudy X6", "Router Cudy M4 Mesh",
+    "Deco TPLink M4", "Deco TPLink X50", "Deco TPLink E4", "Deco TPLink XE75",
+    "Router TPLink TL-WR840N", "Router TPLink TL-WR940N", "Router TPLink TL-WR850N",
+    "Router TPLink TL-WR740N", "Router TPLink EX141", "Router TPLink XN020-G3v",
+    "Router Mikrotik", "Router Cisco", "Router Tenda", "Router Ruijie",
+    "Router Reyee RG-EW1200", "Router C-DATA WR525G", "Router Nexxt ARN02304U6",
+    "Repetidor Wi-Fi", "WIFI ONT", "CABLE", "OTROS"
+  ]);
+
+  const [catalogoOnts, setCatalogoOnts] = useState([
+    "HUAWEI", "KINGTYPE", "CDATA INTERNET", "CDATA COMBO", "CDATA-1FE-BRIDGE",
+    "XX530v", "XX231v", "XPON", "VSOL", "ZTE", "TENDA", "ALT", "SUPREME",
+    "XZ000-G7", "XN020-G3v", "ZHIYI", "FD511G-X-F690", "RADIO", "OTROS"
+  ]);
+
+  useEffect(() => {
+    fetch('/api/cliente/catalogo_equipos', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.status === 'ok') {
+          if (data.routers && data.routers.length > 0) setCatalogoRouters(data.routers);
+          if (data.onts && data.onts.length > 0) setCatalogoOnts(data.onts);
+        }
+      })
+      .catch(err => console.error("Error al cargar catalogo de equipos:", err));
+  }, [token]);
+
   // Central Database Modal state
   const [centralModal, setCentralModal] = useState({
     isOpen: false,
@@ -1110,6 +1147,66 @@ function BuscadorClienteTab({ token, user }) {
                       </span>
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                         {(() => {
+                          const est = (selectedClient.estado || '').toUpperCase();
+                          const isCancelado = ['CANCEL', 'INACTIV', 'RETIRAD', 'BAJA', 'ANULAD'].some(k => est.includes(k));
+                          const r1 = (selectedClient.router_principal || '').toUpperCase().trim();
+                          const ont = (selectedClient.modelo_ont || '').toUpperCase().trim();
+                          const prod = (selectedClient.producto || '').toUpperCase();
+                          const sn = (selectedClient.numero_serie || '').toUpperCase().trim();
+
+                          if (isCancelado) {
+                            return (
+                              <span style={{ background: 'rgba(100, 116, 139, 0.15)', color: '#64748b', border: '1px solid rgba(100, 116, 139, 0.3)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                                🚫 Contrato Inactivo / Cancelado
+                              </span>
+                            );
+                          }
+
+                          // 1. Smart Home
+                          if (prod.includes('SMART HOME')) {
+                            return (
+                              <span style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                                🏠 Smart Home (Sin Router)
+                              </span>
+                            );
+                          }
+
+                          // 2. Corporativo especial
+                          if (['HOUSING', 'BAAS', 'IAAS', 'ARRIENDO', 'SERVICIO DE RENTA', 'PROVEEDURIA'].some(k => prod.includes(k))) {
+                            return (
+                              <span style={{ background: 'rgba(107, 114, 128, 0.15)', color: '#9ca3af', border: '1px solid rgba(107, 114, 128, 0.3)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                                🏢 Servidores / Datacenter (Sin Router)
+                              </span>
+                            );
+                          }
+
+                          // 3. Verificar componentes de internet
+                          const hasInternet = ['INTERNET', 'MEGAS', 'MBPS', 'MB', 'COMBO', 'CONECTIVIDAD', 'PLAN HOME', 'CORP', 'ENLACE', 'DEDICADO', 'FIBRA'].some(k => prod.includes(k));
+
+                          if (!hasInternet) {
+                            const isGpon = prod.includes('GPON') || (sn && sn !== 'S/N' && ['CDKT', 'HWTC', 'TPLG', 'DC59'].some(p => sn.startsWith(p)));
+                            if (isGpon) {
+                              return (
+                                <span style={{ background: 'rgba(234, 179, 8, 0.15)', color: '#d97706', border: '1px solid rgba(234, 179, 8, 0.3)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                                  📺 Solo TV GPON (Sin Router)
+                                </span>
+                              );
+                            }
+                            return (
+                              <span style={{ background: 'rgba(249, 115, 22, 0.15)', color: '#f97316', border: '1px solid rgba(249, 115, 22, 0.3)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                                📺 TV Coaxial / HFC (Sin Router)
+                              </span>
+                            );
+                          }
+
+                          if (r1 === 'CABLE' || ont === 'CABLE' || prod.includes('SOLO CABLE')) {
+                            return (
+                              <span style={{ background: 'rgba(249, 115, 22, 0.15)', color: '#f97316', border: '1px solid rgba(249, 115, 22, 0.3)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                                📺 TV Coaxial / HFC (Sin Router)
+                              </span>
+                            );
+                          }
+
                           const txt = `${selectedClient.modelo_ont || ''} ${selectedClient.router_principal || ''} ${selectedClient.router_secundario || ''}`.toUpperCase();
                           const esHomologado = ['511', '530', '231', 'AX3', 'AX3S', 'AX2S'].some(k => txt.includes(k));
                           if (esHomologado) {
@@ -2784,13 +2881,19 @@ function BuscadorClienteTab({ token, user }) {
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
                       🟢 Modelo ONT / ONU:
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={editForm.modelo_ont}
                       onChange={(e) => setEditForm(prev => ({ ...prev, modelo_ont: e.target.value }))}
-                      placeholder="Ej. HUAWEI, TP-LINK XX530V..."
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' }}
-                    />
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700, boxSizing: 'border-box' }}
+                    >
+                      <option value="">-- Sin ONT / Ninguna --</option>
+                      {editForm.modelo_ont && !catalogoOnts.includes(editForm.modelo_ont) && (
+                        <option value={editForm.modelo_ont}>{editForm.modelo_ont} (Actual)</option>
+                      )}
+                      {catalogoOnts.map((ont) => (
+                        <option key={ont} value={ont}>{ont}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -2819,13 +2922,19 @@ function BuscadorClienteTab({ token, user }) {
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
                       📶 Router Principal:
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={editForm.router_principal}
                       onChange={(e) => setEditForm(prev => ({ ...prev, router_principal: e.target.value }))}
-                      placeholder="Ej. Router Huawei AX3 / TP-Link EX511"
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' }}
-                    />
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700, boxSizing: 'border-box' }}
+                    >
+                      <option value="">-- Sin Router Principal / Ninguno --</option>
+                      {editForm.router_principal && !catalogoRouters.includes(editForm.router_principal) && (
+                        <option value={editForm.router_principal}>{editForm.router_principal} (Actual)</option>
+                      )}
+                      {catalogoRouters.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -2845,13 +2954,19 @@ function BuscadorClienteTab({ token, user }) {
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
                       🔁 Router Secundario / Mesh:
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={editForm.router_secundario}
                       onChange={(e) => setEditForm(prev => ({ ...prev, router_secundario: e.target.value }))}
-                      placeholder="Dejar vacío si no tiene"
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' }}
-                    />
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', background: 'var(--profile-bg)', color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700, boxSizing: 'border-box' }}
+                    >
+                      <option value="">-- Sin Router Secundario / Ninguno --</option>
+                      {editForm.router_secundario && !catalogoRouters.includes(editForm.router_secundario) && (
+                        <option value={editForm.router_secundario}>{editForm.router_secundario} (Actual)</option>
+                      )}
+                      {catalogoRouters.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>

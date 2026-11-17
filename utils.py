@@ -345,4 +345,46 @@ def parsear_informacion_tecnica(visitas, cursor=None):
             except Exception:
                 pass
 
-    return visitas
+    return visitas
+
+
+def son_mismo_cliente(nombre1, nombre2):
+    """
+    Determina si dos cadenas de nombres corresponden a la misma persona,
+    manejando orden invertido (Apellidos Nombres vs Nombres Apellidos),
+    espaciado irregular, mayúsculas, notas entre paréntesis y acentos.
+    """
+    if not nombre1 or not nombre2:
+        return True
+    
+    import unicodedata
+    def limpiar_tokens(n):
+        # Quitar paréntesis y notas como (CONSENTIMIENTO)
+        n = re.sub(r'\(.*?\)', '', str(n).upper())
+        # Normalizar acentos
+        n = unicodedata.normalize('NFKD', n).encode('ASCII', 'ignore').decode('utf-8')
+        # Extraer tokens alfanuméricos de al menos 2 caracteres
+        tokens = re.findall(r'[A-Z0-9]{2,}', n)
+        stopwords = {'DE', 'DEL', 'LA', 'LAS', 'LOS', 'EL', 'Y', 'SAN', 'SANTA', 'SR', 'SRA'}
+        return set(t for t in tokens if t not in stopwords)
+    
+    t1 = limpiar_tokens(nombre1)
+    t2 = limpiar_tokens(nombre2)
+    if not t1 or not t2:
+        return True
+    
+    # Exactamente los mismos tokens
+    if t1 == t2:
+        return True
+    
+    # Si comparten al menos 2 nombres/apellidos clave (ej: "CESAR CONDOR" y "CESAR NICEFERO CONDOR DELZO")
+    inter = t1.intersection(t2)
+    if len(inter) >= 2:
+        return True
+    
+    # Si uno es subconjunto estricto del otro (ej: "CONDOR DELZO" y "CESAR NICEFERO CONDOR DELZO")
+    if t1.issubset(t2) or t2.issubset(t1):
+        return True
+        
+    return False
+
