@@ -560,6 +560,8 @@ def get_cliente_audit_records(cursor, contrato, desde=None, hasta=None):
             cliente_dir = cursor.fetchone()
     
     nombre_oficial = cliente_dir['cliente'] if cliente_dir else None
+    if cliente_dir and cliente_dir.get('empresa'):
+        empresa_target = cliente_dir['empresa']
     cliente_sector = (cliente_dir.get('sector') or "-") if cliente_dir else "-"
     cliente_direccion = (cliente_dir.get('direccion') or "-") if cliente_dir else "-"
 
@@ -592,18 +594,18 @@ def get_cliente_audit_records(cursor, contrato, desde=None, hasta=None):
             SELECT id_visita, fecha_programada, cliente, problema, solucion_tecnico, 
                    observacion_tecnico, tecnico_principal, tecnico_apoyo, 
                    estado, calificacion_estrellas, calificacion_comentario,
-                   'visita_tecnica' AS tipo_registro, sector, direccion
+                   'visita_tecnica' AS tipo_registro, sector, direccion, empresa
             FROM visitas_tecnicas 
             WHERE (cliente = %s)
-               OR (contrato IN ({placeholders_visitas}) AND (cliente IS NULL OR cliente = '' OR cliente = %s))
+               OR (contrato IN ({placeholders_visitas}))
         """
-        params_visitas = [nombre_oficial] + list(variants_list) + [nombre_oficial]
+        params_visitas = [nombre_oficial] + list(variants_list)
     else:
         query_visitas = f"""
             SELECT id_visita, fecha_programada, cliente, problema, solucion_tecnico, 
                    observacion_tecnico, tecnico_principal, tecnico_apoyo, 
                    estado, calificacion_estrellas, calificacion_comentario,
-                   'visita_tecnica' AS tipo_registro, sector, direccion
+                   'visita_tecnica' AS tipo_registro, sector, direccion, empresa
             FROM visitas_tecnicas 
             WHERE contrato IN ({placeholders_visitas})
         """
@@ -618,7 +620,7 @@ def get_cliente_audit_records(cursor, contrato, desde=None, hasta=None):
     query_visitas += " ORDER BY fecha_programada DESC"
 
     cursor.execute(query_visitas, tuple(params_visitas))
-    visitas = cursor.fetchall()
+    raw_visitas = cursor.fetchall()
 
     # 4. Consultar Atenciones
     params_atenciones = []
@@ -631,9 +633,9 @@ def get_cliente_audit_records(cursor, contrato, desde=None, hasta=None):
                    'atencion' AS tipo_registro, hora, olt, ont, router, timer_minutos, sector
             FROM atenciones 
             WHERE (cliente = %s)
-               OR (contrato IN ({placeholders_visitas}) AND (cliente IS NULL OR cliente = '' OR cliente = %s))
+               OR (contrato IN ({placeholders_visitas}))
         """
-        params_atenciones = [nombre_oficial] + list(variants_list) + [nombre_oficial]
+        params_atenciones = [nombre_oficial] + list(variants_list)
     else:
         query_atenciones = f"""
             SELECT id_atencion AS id_visita, fecha AS fecha_programada, cliente, tipo_solicitud AS problema, 
@@ -655,7 +657,25 @@ def get_cliente_audit_records(cursor, contrato, desde=None, hasta=None):
     query_atenciones += " ORDER BY fecha DESC, hora DESC"
 
     cursor.execute(query_atenciones, tuple(params_atenciones))
-    atenciones = cursor.fetchall()
+    raw_atenciones = cursor.fetchall()
+
+    # Filtrar con normalización inteligente de nombres (apellidos primero vs nombres primero)
+    from utils import son_mismo_cliente
+
+    def es_registro_valido(reg_cliente, reg_empresa=None):
+        if not nombre_oficial:
+            return True
+        if reg_empresa and empresa_target:
+            e_reg = str(reg_empresa).strip().upper()
+            e_tgt = str(empresa_target).strip().upper()
+            if e_reg in ('FIBRACOM', 'SERVICABLE') and e_tgt in ('FIBRACOM', 'SERVICABLE') and e_reg != e_tgt:
+                return False
+        if not reg_cliente or not str(reg_cliente).strip():
+            return True
+        return son_mismo_cliente(reg_cliente, nombre_oficial)
+
+    visitas = [v for v in raw_visitas if es_registro_valido(v.get('cliente'), v.get('empresa'))]
+    atenciones = [a for a in raw_atenciones if es_registro_valido(a.get('cliente'), None)]
 
     # Fallback si no estaba en directorio
     if not nombre_oficial:
@@ -7440,6 +7460,66 @@ def es_equipo_homologado(ont, r1, r2):
     txt = ((ont or '') + ' ' + (r1 or '') + ' ' + (r2 or '')).upper()
     return any(k in txt for k in HOMOLOGADOS_KEYWORDS)
 
+def clasificar_servicio(c):
+    """
+    Clasifica el tipo de servicio del contrato:
+    - 'INTERNET': Plan con servicio de internet de banda ancha (requiere router Wi-Fi auditado en Plan Renove).
+    - 'TV_HFC': Televisión por cable coaxial / HFC (no tiene router ni ONT GPON).
+    - 'TV_GPON': Televisión sobre fibra GPON solo TV / CATV (tiene ONT pero no router).
+    - 'SMART_HOME': Servicios de domótica / Smart Home (no tiene router).
+    - 'CORPORATIVO_ESPECIAL': Servidores, Housing, BaaS, IaaS o arriendos.
+    - 'TV_STREAMING': Cuentas exclusivas de streaming (Zapping) sin internet.
+    """
+    est = str(c.get('estado') or '').strip().upper()
+    if est != 'ACTIVO':
+        return 'INACTIVO'
+
+    prod = str(c.get('producto') or '').strip().upper()
+    r1 = str(c.get('router_principal') or '').strip().upper()
+    ont = str(c.get('modelo_ont') or '').strip().upper()
+    sn = str(c.get('numero_serie') or '').strip().upper()
+
+    # 1. Smart Home
+    if 'SMART HOME' in prod:
+        return 'SMART_HOME'
+
+    # 2. Servicios Corporativos / Datacenter especiales sin router Wi-Fi
+    if any(k in prod for k in ['HOUSING', 'BAAS', 'IAAS', 'ARRIENDO', 'SERVICIO DE RENTA', 'PROVEEDURIA']):
+        return 'CORPORATIVO_ESPECIAL'
+
+    # 3. Routers o ONTs marcados explícitamente como CABLE
+    if r1 == 'CABLE' or ont == 'CABLE':
+        if 'GPON' in prod or (sn and sn not in ('S/N', 'SN', 'NULL', 'NONE', '') and any(sn.startswith(p) for p in ['CDKT', 'HWTC', 'TPLG', 'DC59'])):
+            return 'TV_GPON'
+        return 'TV_HFC'
+
+    # 4. Verificar si tiene componentes de Internet (Megas, MB, Combo, etc.)
+    INTERNET_KEYWORDS = ['INTERNET', 'MEGAS', 'MBPS', 'MB', 'COMBO', 'CONECTIVIDAD', 'PLAN HOME', 'CORP', 'ENLACE', 'DEDICADO', 'FIBRA']
+    has_internet = any(k in prod for k in INTERNET_KEYWORDS)
+
+    if not has_internet:
+        if 'ZAPPING' in prod:
+            return 'TV_STREAMING'
+        # Diferencia con Cable GPON: tienen SN asignada de ONT GPON o dicen GPON en el producto
+        if 'GPON' in prod or (sn and sn not in ('S/N', 'SN', 'NULL', 'NONE', '') and any(sn.startswith(p) for p in ['CDKT', 'HWTC', 'TPLG', 'DC59'])):
+            return 'TV_GPON'
+        if any(k in prod for k in ['COAXIAL', 'CANALES', 'TV', 'FAMILIAR', 'PREMIUM', 'SUPER PREMIUM', 'CABLE']):
+            return 'TV_HFC'
+        return 'OTRO_SIN_INTERNET'
+
+    if 'SOLO CABLE' in prod:
+        return 'TV_HFC'
+
+    return 'INTERNET'
+
+def es_contrato_excluido_renove(c):
+    """
+    Excluye del Plan Renove:
+    1. Contratos que no estén ACTIVOS.
+    2. Contratos sin Internet (TV HFC, TV GPON, Smart Home, Streaming, Servidores/Housing).
+    """
+    return clasificar_servicio(c) != 'INTERNET'
+
 
 @admin_bp.route('/api/admin/metricas_equipos_modernizacion', methods=['GET'])
 def api_metricas_equipos_modernizacion():
@@ -7453,9 +7533,12 @@ def api_metricas_equipos_modernizacion():
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute("""
-            SELECT contrato, nombre_cliente, ip_nodo, modelo_ont, router_principal, router_secundario
+            SELECT contrato, nombre_cliente, ip_nodo, modelo_ont, router_principal, router_secundario, producto, estado
             FROM directorio_clientes
-            WHERE estado != 'INACTIVO'
+            WHERE UPPER(TRIM(COALESCE(estado, ''))) = 'ACTIVO'
+              AND UPPER(TRIM(COALESCE(router_principal, ''))) != 'CABLE'
+              AND UPPER(TRIM(COALESCE(modelo_ont, ''))) != 'CABLE'
+              AND UPPER(TRIM(COALESCE(producto, ''))) NOT LIKE '%SOLO CABLE%'
         """)
         clientes = cur.fetchall()
 
@@ -7466,8 +7549,14 @@ def api_metricas_equipos_modernizacion():
         onts_counter = Counter()
 
         for c in clientes:
-            r1 = (c.get('router_principal') or 'SIN DATOS').strip()
-            ont = (c.get('modelo_ont') or 'SIN ONT').strip()
+            if es_contrato_excluido_renove(c):
+                continue
+
+            from utils_equipos import normalizar_modelo_router, normalizar_modelo_ont
+            raw_r1 = (c.get('router_principal') or '').strip()
+            raw_ont = (c.get('modelo_ont') or '').strip()
+            r1 = normalizar_modelo_router(raw_r1) or 'SIN DATOS'
+            ont = normalizar_modelo_ont(raw_ont) or 'SIN ONT'
             modelos_counter[r1] += 1
             onts_counter[ont] += 1
 
@@ -7492,7 +7581,7 @@ def api_metricas_equipos_modernizacion():
                 tot_obsoletos += 1
                 por_nodo[nodo_nom]['obsoletos'] += 1
 
-        total_activos = len(clientes)
+        total_activos = tot_homologados + tot_obsoletos
         pct_global = round((tot_homologados / total_activos * 100), 1) if total_activos > 0 else 0.0
 
         nodos_list = []
@@ -7503,10 +7592,16 @@ def api_metricas_equipos_modernizacion():
 
         nodos_list.sort(key=lambda x: x['total'], reverse=True)
 
-        # Top Modelos
+        # Todos los Modelos de Routers Instalados
         modelos_top = []
-        for m, cnt in modelos_counter.most_common(12):
+        tot_routers_homologados = 0
+        tot_routers_obsoletos = 0
+        for m, cnt in modelos_counter.most_common():
             es_h = es_equipo_homologado('', m, '')
+            if es_h:
+                tot_routers_homologados += cnt
+            else:
+                tot_routers_obsoletos += cnt
             modelos_top.append({
                 'modelo': m,
                 'cantidad': cnt,
@@ -7531,6 +7626,14 @@ def api_metricas_equipos_modernizacion():
                 "obsoletos": tot_obsoletos,
                 "porcentaje_homologados": pct_global,
                 "porcentaje_obsoletos": round(100.0 - pct_global, 1)
+            },
+            "resumen_routers": {
+                "total_routers": total_activos,
+                "total_modelos": len(modelos_counter),
+                "homologados": tot_routers_homologados,
+                "obsoletos": tot_routers_obsoletos,
+                "porcentaje_homologados": round((tot_routers_homologados / total_activos * 100), 1) if total_activos > 0 else 0,
+                "porcentaje_obsoletos": round((tot_routers_obsoletos / total_activos * 100), 1) if total_activos > 0 else 0
             },
             "nodos": nodos_list,
             "modelos_top": modelos_top,
@@ -7558,25 +7661,43 @@ def api_exportar_equipos_obsoletos():
     try:
         sql = """
             SELECT contrato, nombre_cliente, cedula, telefono1, telefono2, direccion, zona,
-                   ip_nodo, modelo_ont, router_principal, router_secundario, antiguedad, total_mensual
+                   ip_nodo, modelo_ont, router_principal, router_secundario, antiguedad, total_mensual,
+                   producto, estado
             FROM directorio_clientes
-            WHERE estado != 'INACTIVO'
+            WHERE UPPER(TRIM(COALESCE(estado, ''))) = 'ACTIVO'
+              AND UPPER(TRIM(COALESCE(router_principal, ''))) != 'CABLE'
+              AND UPPER(TRIM(COALESCE(modelo_ont, ''))) != 'CABLE'
+              AND UPPER(TRIM(COALESCE(producto, ''))) NOT LIKE '%SOLO CABLE%'
         """
-        params = []
-        if nodo_filtro:
-            sql += " AND (ip_nodo = %s OR ip_nodo LIKE %s)"
-            params.extend([nodo_filtro, f"%{nodo_filtro}%"])
-
-        cur.execute(sql, tuple(params))
+        cur.execute(sql)
         clientes = cur.fetchall()
 
-        # Filtrar solo los obsoletos
+        # Filtrar solo los obsoletos que no sean excluidos, respetando la agrupación exacta del dashboard
         obsoletos = []
         for c in clientes:
+            if es_contrato_excluido_renove(c):
+                continue
             if not es_equipo_homologado(c.get('modelo_ont'), c.get('router_principal'), c.get('router_secundario')):
-                ip = (c.get('ip_nodo') or '').strip()
-                c['nodo_nombre'] = MAPEO_NODOS.get(ip, ip or 'N/D')
-                obsoletos.append(c)
+                ip = (c.get('ip_nodo') or 'SIN_NODO').strip()
+                if not ip:
+                    ip = 'SIN_NODO'
+                nodo_nom = MAPEO_NODOS.get(ip, ip)
+
+                c_item = dict(c)
+                c_item['nodo_nombre'] = nodo_nom
+                c_item['ip_nodo'] = ip
+
+                # Filtrar por nodo si fue solicitado
+                if nodo_filtro:
+                    f_upper = nodo_filtro.upper()
+                    if f_upper in ('SIN_NODO', 'SIN NODO'):
+                        if nodo_nom != 'SIN_NODO' and ip != 'SIN_NODO':
+                            continue
+                    else:
+                        if f_upper != ip.upper() and f_upper != nodo_nom.upper() and f_upper not in nodo_nom.upper():
+                            continue
+
+                obsoletos.append(c_item)
 
         wb = openpyxl.Workbook()
         ws = wb.active

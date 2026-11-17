@@ -719,76 +719,63 @@ def _consultar_api_central(cedula):
 def _es_contrato_fibracom(num_contrato, ip_maestro='', nombre_zona='', conn=None, cedula=''):
     """
     Determina de manera confiable si un contrato pertenece a FIBRACOM o SERVICABLE.
+    Prioriza IP técnica de OLT y zonas geográficas reales, evitando colisiones
+    entre homónimos de diferentes clientes.
     """
-    if num_contrato and str(num_contrato).strip().upper().endswith('F'):
-        return True
-        
-    num_clean = re.sub(r'[^0-9a-zA-Z]', '', str(num_contrato).strip())
+    ip = str(ip_maestro or '').strip()
+    zona = str(nombre_zona or '').upper()
+    num_clean = re.sub(r'[^0-9a-zA-Z]', '', str(num_contrato or '').strip())
     num_plain = num_clean[:-1] if num_clean.upper().endswith('F') else num_clean
     num_with_f = num_plain + 'F'
 
-    # 1. Si ya existe en la base local este contrato específico para esta cédula o este número exacto
-    if conn:
-        try:
-            cur = conn.cursor(dictionary=True)
-            # Primero: ¿Existe este contrato registrado para esta cédula en específico?
-            if cedula:
-                cur.execute("""
-                    SELECT contrato, empresa FROM directorio_clientes 
-                    WHERE cedula = %s AND (contrato = %s OR contrato = %s)
-                    LIMIT 1
-                """, (cedula, num_plain, num_with_f))
-                row_cli = cur.fetchone()
-                if row_cli:
-                    emp = (row_cli.get('empresa') or '').upper()
-                    cur.close()
-                    if emp == 'SERVICABLE':
-                        return False
-                    if emp == 'FIBRACOM' or row_cli['contrato'].upper().endswith('F'):
-                        return True
-
-            # Segundo: ¿Existe el contrato plano exacto en la base local (ej: '458')?
-            cur.execute("""
-                SELECT contrato, empresa, cedula FROM directorio_clientes 
-                WHERE contrato = %s
-                LIMIT 1
-            """, (num_plain,))
-            row_exact = cur.fetchone()
-            if row_exact:
-                emp = (row_exact.get('empresa') or '').upper()
-                # Si coincide con la cédula o no hay cédula en BD, respetar la empresa local
-                if not cedula or not row_exact.get('cedula') or str(row_exact.get('cedula')).strip() == str(cedula).strip():
-                    cur.close()
-                    if emp == 'SERVICABLE':
-                        return False
-                    elif emp == 'FIBRACOM':
-                        return True
-
-            # Tercero: ¿Existe con sufijo 'F' (ej: '458F') pero EXCLUSIVAMENTE para esta misma cédula?
-            if cedula:
-                cur.execute("""
-                    SELECT contrato, empresa FROM directorio_clientes 
-                    WHERE contrato = %s AND cedula = %s
-                    LIMIT 1
-                """, (num_with_f, cedula))
-                row_f = cur.fetchone()
-                if row_f and ((row_f.get('empresa') or '').upper() == 'FIBRACOM' or row_f['contrato'].upper().endswith('F')):
-                    cur.close()
-                    return True
-
-            cur.close()
-        except Exception:
-            pass
-
-    # 2. Detección por IP del Nodo / OLT Maestro de Fibracom
-    ip = str(ip_maestro or '').strip()
+    # 1. Detección por IP del Nodo / OLT Maestro de Fibracom (Criterio técnico primario e infalible)
     if ip in ('100.64.21.2', '10.64.20.2', '100.64.20.2') or ip.startswith('100.64.') or ip.startswith('10.64.'):
         return True
 
-    # 3. Detección por Zona geográfica de Fibracom
-    zona = str(nombre_zona or '').upper()
-    if any(z in zona for z in ['SANTA ANA', 'VALLE', 'EL VALLE']):
+    # 1.b Detección por IP de OLTs de Servicable (Orquídeas, Monay, Baños, etc.)
+    if ip in ('10.101.1.50', '10.101.1.18', '10.80.80.134', '10.11.99.1', '10.17.11.6', '10.101.100.10') or ip.startswith('10.101.') or ip.startswith('10.120.') or ip.startswith('10.140.') or ip.startswith('10.150.') or ip.startswith('10.160.') or ip.startswith('10.80.'):
+        return False
+
+    # 2. Detección por Zona geográfica exclusiva de Fibracom
+    zonas_fibracom = ['SANTA ANA', 'VALLE', 'EL VALLE', 'CHILCAPAMBA', 'SAN BARTOLOME', 'QUINGEO', 'JADAN', 'TARQUI', 'VICTORIA DEL PORTETE']
+    if any(z in zona for z in zonas_fibracom):
         return True
+
+    # 3. Zonas urbanas de Servicable: Si la zona es claramente Servicable y la IP no es de Fibracom, es SERVICABLE
+    zonas_urbanas_servi = [
+        'UNCOVIA', 'MIRAFLORES', 'TOTORACOCHA', 'RICAURTE', 'CENTRO', 'CENTRO CUENCA',
+        'BAÑOS', 'MONAY', 'BELLAVISTA', 'YANUNCAY', 'SUCRE', 'HUAYNA CAPAC',
+        'EL VECINO', 'MACHANGARA', 'SAN BLAS', 'CAÑARIBAMBA', 'EL PINAR', 'PINAR',
+        'ORQUIDEAS', 'ORQ', 'MISICATA', 'GAPAL', 'CAROLINA', 'TOMEBAMBA', 'TRIGALES',
+        'KENEDY', 'KENNEDY', 'CHECA', 'CHIQUINTAD', 'SAYAUSI', 'SININCAY'
+    ]
+    if any(z in zona for z in zonas_urbanas_servi) and not (ip.startswith('100.64.') or ip.startswith('10.64.')):
+        return False
+
+    # 4. Si el contrato de origen ya termina con 'F' y no es zona Servicable
+    if num_contrato and str(num_contrato).strip().upper().endswith('F'):
+        return True
+
+    # 5. Chequeo en base local: EXCLUSIVAMENTE para la MISMA cédula (nunca cruzar contratos de clientes distintos)
+    if conn and cedula:
+        try:
+            cur = conn.cursor(dictionary=True)
+            cur.execute("""
+                SELECT contrato, empresa FROM directorio_clientes 
+                WHERE cedula = %s AND (contrato = %s OR contrato = %s)
+                ORDER BY (contrato = %s) DESC, (empresa = 'FIBRACOM') DESC
+                LIMIT 1
+            """, (cedula, num_with_f, num_plain, num_with_f))
+            row_cli = cur.fetchone()
+            cur.close()
+            if row_cli:
+                emp = (row_cli.get('empresa') or '').upper()
+                if emp == 'FIBRACOM' or row_cli['contrato'].upper().endswith('F'):
+                    return True
+                if emp == 'SERVICABLE':
+                    return False
+        except Exception:
+            pass
 
     return False
 
@@ -967,7 +954,7 @@ def api_importar_base_central():
     
     # Evaluar si es FIBRACOM
     is_fib = _es_contrato_fibracom(
-        num_contrato=contrato_req or raw_central_num,
+        num_contrato=raw_central_num or contrato_req,
         ip_maestro=target_item.get('ipmaestro', ''),
         nombre_zona=target_item.get('nombrezona', ''),
         conn=conn,
@@ -992,6 +979,14 @@ def api_importar_base_central():
                 DELETE FROM directorio_clientes 
                 WHERE contrato = %s AND cedula = %s AND empresa != 'FIBRACOM'
             """, (raw_plain, cliente_cedula))
+
+        # Si este contrato tiene sufijo derivado (ej: '299D' o '104D'), eliminar el duplicado sin letra si existiera
+        if len(contrato_atlas) > 1 and contrato_atlas[-1].upper() in ('D', 'I') and contrato_atlas[:-1].isdigit():
+            base_plano = contrato_atlas[:-1]
+            cursor.execute("""
+                DELETE FROM directorio_clientes 
+                WHERE contrato = %s AND cedula = %s
+            """, (base_plano, cliente_cedula))
 
         query = """
             INSERT INTO directorio_clientes (

@@ -388,10 +388,21 @@ def en_camino_visita(id_visita):
         if not usuario:
             return jsonify({"status": "error", "message": "No autorizado"}), 401
             
-        cursor.execute("SELECT tecnico_principal FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        cursor.execute("SELECT tecnico_principal, estado, token_rastreo FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
         tec_row = cursor.fetchone()
-        tecnico_nombre = tec_row[0] if tec_row else None
-        
+        if not tec_row:
+            return jsonify({"status": "error", "message": "Visita no encontrada"}), 404
+            
+        tecnico_nombre = tec_row[0]
+        estado_actual = tec_row[1]
+        token_existente = tec_row[2]
+
+        if not tecnico_nombre or tecnico_nombre.strip().upper() == 'NO TECNICO':
+            return jsonify({"status": "error", "message": "No se puede iniciar traslado en una visita sin técnico asignado."}), 400
+
+        if estado_actual in ['REAGENDADA', 'FINALIZADA', 'CANCELADA', 'SOLVENTADA_REMOTA']:
+            return jsonify({"status": "error", "message": f"Esta visita se encuentra {estado_actual.lower()} y no puede iniciarse en ruta."}), 400
+
         if tecnico_nombre:
             cursor.execute("""
                 SELECT id_visita, cliente, estado 
@@ -421,13 +432,8 @@ def en_camino_visita(id_visita):
             """, (tecnico_nombre, tecnico_nombre, id_visita, date.today().isoformat()))
             conexion.commit()
 
-        # Solo actualizar a EN_RUTA si la visita está PENDIENTE/REAGENDADA o si aún no tiene token
-        cursor.execute("SELECT estado, token_rastreo FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
-        row_est = cursor.fetchone()
-        estado_actual = row_est[0] if row_est else None
-        token_existente = row_est[1] if row_est else None
-        
-        if estado_actual in ['PENDIENTE', 'REAGENDADA', None] or not token_existente:
+        # Solo actualizar a EN_RUTA si la visita está PENDIENTE o si aún no tiene token
+        if estado_actual == 'PENDIENTE' or not token_existente:
             query = """
                 UPDATE visitas_tecnicas 
                 SET estado = 'EN_RUTA', 
