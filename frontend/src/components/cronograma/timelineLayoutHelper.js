@@ -170,6 +170,160 @@ export function computeTechLanes(visitas = [], startHour = 7, endHour = 21) {
     visitasConLayout,
     maxLanes,
     rowHeight,
-    conflictCount
+    conflictCount,
+    lunchSlot: computeLunchSlot(list, startHour, endHour),
+    travelSegments: computeTravelSegments(list, computeLunchSlot(list, startHour, endHour), startHour, endHour)
   };
 }
+
+export function formatMinutesToTime(totalMin) {
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/**
+ * Calcula el bloque dinámico de almuerzo (60 min) para un técnico.
+ * Reglas de negocio:
+ * 1. Si el técnico entra al mediodía o tarde (primera visita >= 12:00, ej: Milton Bermeo),
+ *    viene almorzado -> Retorna null (sin bloque de almuerzo a mediodía).
+ * 2. Si el técnico trabaja en la mañana (< 12:00):
+ *    Su almuerzo de 1 hora inicia cuando termina su última visita matutina (la visita que termina entre 11:30 y 14:00).
+ *    Si no hay visitas entre 11:30 y 14:00, se fija después de su última visita de la mañana o por defecto a las 13:00.
+ */
+export function computeLunchSlot(visitas = [], startHour = 7, endHour = 21) {
+  if (!visitas || visitas.length === 0) return null;
+
+  const items = visitas.map(v => computeVisitTimes(v, startHour, endHour));
+  items.sort((a, b) => a.startMin - b.startMin);
+
+  const earliestStart = items[0].startMin;
+  // Si la primera visita del día inicia a las 12:00 (720 min) o más tarde: viene almorzado
+  if (earliestStart >= 12 * 60) {
+    return null;
+  }
+
+  // Buscar la última visita de la mañana (que inicie antes de las 14:00)
+  const morningVisits = items.filter(it => it.startMin < 14 * 60);
+  if (morningVisits.length === 0) {
+    return null;
+  }
+
+  const lastMorning = morningVisits[morningVisits.length - 1];
+  let lunchStartMin = lastMorning.endMin;
+
+  // Ajustes de sentido común: si la visita terminó antes de las 11:30 y la siguiente es en la tarde,
+  // el almuerzo se sitúa en un horario estándar de 12:30 a 13:30.
+  if (lunchStartMin < 11 * 60 + 30) {
+    lunchStartMin = 12 * 60 + 30;
+  }
+
+  const lunchDuration = 60; // 1 hora completa
+  const lunchEndMin = lunchStartMin + lunchDuration;
+
+  const totalMinutes = (endHour - startHour) * 60;
+  const startOffset = Math.max(0, lunchStartMin - startHour * 60);
+  const leftPct = Math.max(0, Math.min((startOffset / totalMinutes) * 100, 96));
+  const widthPct = Math.max(3, Math.min((lunchDuration / totalMinutes) * 100, 100 - leftPct));
+
+  // Buscar la siguiente visita para el recordatorio de salida
+  const nextVisitItem = items.find(it => it.startMin >= lunchEndMin - 15);
+
+  return {
+    startMin: lunchStartMin,
+    endMin: lunchEndMin,
+    durationMin: lunchDuration,
+    leftPct,
+    widthPct,
+    horaInicioStr: formatMinutesToTime(lunchStartMin),
+    horaFinStr: formatMinutesToTime(lunchEndMin),
+    horaStr: `${formatMinutesToTime(lunchStartMin)} - ${formatMinutesToTime(lunchEndMin)}`,
+    nextVisit: nextVisitItem || null
+  };
+}
+
+/**
+ * Detecta espacios entre visitas consecutivas para mostrar tiempos de traslado (🚗 X min)
+ */
+export function computeTravelSegments(visitas = [], lunchSlot = null, startHour = 7, endHour = 21) {
+  if (!visitas || visitas.length < 2) return [];
+
+  const totalMinutes = (endHour - startHour) * 60;
+  const sorted = [...visitas]
+    .map(v => ({ ...v, ...computeVisitTimes(v, startHour, endHour) }))
+    .sort((a, b) => a.startMin - b.startMin);
+
+  const segments = [];
+
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const curr = sorted[i];
+    const next = sorted[i + 1];
+
+    let gapStart = curr.endMin;
+    let gapEnd = next.startMin;
+
+    if (gapEnd <= gapStart) continue; // No hay espacio libre (o están solapadas)
+
+    // Si el almuerzo cae en medio de este hueco
+    if (lunchSlot && lunchSlot.startMin >= gapStart && lunchSlot.endMin <= gapEnd) {
+      if (lunchSlot.startMin - gapStart >= 12) {
+        const dur = lunchSlot.startMin - gapStart;
+        const leftPct = ((gapStart - startHour * 60) / totalMinutes) * 100;
+        const widthPct = (dur / totalMinutes) * 100;
+        segments.push({
+          id: `travel-${curr.id_visita}-pre-lunch`,
+          startMin: gapStart,
+          endMin: lunchSlot.startMin,
+          durationMin: dur,
+          leftPct,
+          widthPct,
+          fromSector: curr.sector || '',
+          toSector: 'Almuerzo',
+          isShort: dur < 25
+        });
+      }
+      if (gapEnd - lunchSlot.endMin >= 10) {
+        const dur = gapEnd - lunchSlot.endMin;
+        const leftPct = ((lunchSlot.endMin - startHour * 60) / totalMinutes) * 100;
+        const widthPct = (dur / totalMinutes) * 100;
+        segments.push({
+          id: `travel-post-lunch-${next.id_visita}`,
+          startMin: lunchSlot.endMin,
+          endMin: gapEnd,
+          durationMin: dur,
+          leftPct,
+          widthPct,
+          fromSector: 'Almuerzo',
+          toSector: next.sector || '',
+          isShort: dur < 25
+        });
+      }
+      continue;
+    }
+
+    const gapMin = gapEnd - gapStart;
+    if (gapMin >= 10) {
+      const leftPct = ((gapStart - startHour * 60) / totalMinutes) * 100;
+      const widthPct = (gapMin / totalMinutes) * 100;
+
+      const sameSector = curr.sector && next.sector && 
+        curr.sector.trim().toLowerCase() === next.sector.trim().toLowerCase();
+
+      segments.push({
+        id: `travel-${curr.id_visita}-${next.id_visita}`,
+        startMin: gapStart,
+        endMin: gapEnd,
+        durationMin: gapMin,
+        leftPct,
+        widthPct,
+        fromSector: curr.sector || 'S/S',
+        toSector: next.sector || 'S/S',
+        sameSector,
+        isShort: gapMin < 25
+      });
+    }
+  }
+
+  return segments;
+}
+

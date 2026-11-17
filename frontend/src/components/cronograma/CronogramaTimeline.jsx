@@ -6,7 +6,7 @@ import TimelineGrid from './TimelineGrid';
 import UnassignedBacklogDrawer from './UnassignedBacklogDrawer';
 import ModalAsignacionDoble from './ModalAsignacionDoble';
 import FichaVisitaDrawer from './FichaVisitaDrawer';
-import { calculateOverdueMinutes, sendTelegramOverdueAlert, formatTelegramOverdueMessage } from './telegramAlertHelper';
+import { calculateOverdueMinutes, sendTelegramOverdueAlert, formatTelegramOverdueMessage, formatTelegramLunchMessage } from './telegramAlertHelper';
 import { computeTechLanes } from './timelineLayoutHelper';
 
 export default function CronogramaTimeline({
@@ -245,15 +245,57 @@ export default function CronogramaTimeline({
     });
   };
 
+  // Disparar Alerta de Almuerzo a Telegram
+  const handleSendTelegramLunch = async (techNombre, lunchSlot) => {
+    const msg = formatTelegramLunchMessage(
+      techNombre,
+      lunchSlot.horaInicioStr,
+      lunchSlot.horaFinStr,
+      lunchSlot.nextVisit
+    );
+    setTelegramAlertModal({
+      isOpen: true,
+      visita: {
+        cliente: `Almuerzo ${techNombre}`,
+        contrato: 'ALMUERZO',
+        tecnico_principal: techNombre,
+        _esAlmuerzo: true
+      },
+      mensaje: msg,
+      status: 'pending'
+    });
+  };
+
   const confirmarEnvioTelegram = async () => {
-    if (!telegramAlertModal.visita) return;
+    if (!telegramAlertModal.mensaje) return;
     setTelegramAlertModal(prev => ({ ...prev, status: 'sending' }));
 
-    const res = await sendTelegramOverdueAlert(
-      telegramAlertModal.visita,
-      telegramAlertModal.visita._overdueMin || 15,
-      token
-    );
+    let res;
+    if (telegramAlertModal.visita && telegramAlertModal.visita._esAlmuerzo) {
+      try {
+        const fetchRes = await fetch('/api/cronograma/alerta_telegram', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            tipo: 'ALMUERZO',
+            tecnico_principal: telegramAlertModal.visita.tecnico_principal,
+            mensaje: telegramAlertModal.mensaje
+          })
+        });
+        res = await fetchRes.json();
+      } catch (err) {
+        res = { status: 'error', message: err.message };
+      }
+    } else {
+      res = await sendTelegramOverdueAlert(
+        telegramAlertModal.visita,
+        telegramAlertModal.visita._overdueMin || 15,
+        token
+      );
+    }
 
     setTelegramAlertModal(prev => ({
       ...prev,
@@ -357,6 +399,7 @@ export default function CronogramaTimeline({
           onDropVisit={handleDropVisit}
           onOpenEdit={(v) => setSelectedVisitForFicha(v)}
           onSendTelegramAlert={handleSendTelegramAlert}
+          onSendTelegramLunch={handleSendTelegramLunch}
         />
       </div>
 

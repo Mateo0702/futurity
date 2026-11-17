@@ -83,3 +83,45 @@ export async function sendTelegramOverdueAlert(visita, overdueMinutes, token) {
     };
   }
 }
+
+export function formatTelegramLunchMessage(tecnicoNombre, horaInicio, horaFin, proximaVisita = null) {
+  const proxStr = proximaVisita
+    ? `\n📍 *Próxima Visita Programada:*\n` +
+      `   • *Cliente:* ${proximaVisita.cliente || 'No especificado'}\n` +
+      `   • *Contrato:* #${proximaVisita.contrato || 'S/C'}\n` +
+      `   • *Sector:* ${proximaVisita.sector || 'S/S'}\n` +
+      `   • *Horario:* ${proximaVisita.preferencia_horaria || 'Flexible'}\n`
+    : '\n📍 *Sin visitas posteriores programadas para la tarde.*';
+
+  return (
+    `🍽️ *RECORDATORIO DE ALMUERZO - OPERACIONES*\n\n` +
+    `🛠️ *Técnico:* ${tecnicoNombre}\n` +
+    `⏰ *Franja de Almuerzo:* ${horaInicio} - ${horaFin} (1 hora)\n` +
+    `⏳ *Aviso:* Faltan *5 minutos* para finalizar la hora de almuerzo y retomar ruta.\n` +
+    proxStr +
+    `\n_Notificación generada desde Centro de Comando Futurity_`
+  );
+}
+
+export async function sendTelegramLunchAlert(tecnicoNombre, horaInicio, horaFin, proximaVisita, token) {
+  const text = formatTelegramLunchMessage(tecnicoNombre, horaInicio, horaFin, proximaVisita);
+  try {
+    const res = await fetch('/api/cronograma/alerta_telegram', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        tipo: 'ALMUERZO',
+        tecnico_principal: tecnicoNombre,
+        mensaje: text
+      })
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn("Fallo envio alerta almuerzo telegram:", err);
+    return { status: 'error', message: err.message };
+  }
+}
+

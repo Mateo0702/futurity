@@ -15,9 +15,11 @@ export default function TimelineGrid({
   setDragOverTecnico,
   onDropVisit,
   onOpenEdit,
-  onSendTelegramAlert
+  onSendTelegramAlert,
+  onSendTelegramLunch
 }) {
   const [dragPreview, setDragPreview] = useState(null);
+  const currentMin = now ? now.getHours() * 60 + now.getMinutes() : 0;
 
   // Bloques horarios de 60m: de startHour a endHour (ej. 07:00 a 20:00 con submárgenes :30)
   const hours = [];
@@ -152,10 +154,18 @@ export default function TimelineGrid({
         const layout = (techLayoutMap && techLayoutMap[t.nombre]) || {
           visitasConLayout: (visitasPorTecnico[t.nombre] || []).map(v => ({ ...v, ...computeVisitTimes(v, startHour, endHour), laneIndex: 0, maxLanes: 1 })),
           maxLanes: 1,
-          rowHeight: 94
+          rowHeight: 94,
+          lunchSlot: null,
+          travelSegments: []
         };
         const visitas = layout.visitasConLayout;
         const rowHeight = layout.rowHeight || 94;
+        const lunchSlot = layout.lunchSlot;
+        const travelSegments = layout.travelSegments || [];
+
+        // Estado dinámico del almuerzo en vivo
+        const isCurrentlyInLunch = isToday && lunchSlot && currentMin >= lunchSlot.startMin && currentMin <= lunchSlot.endMin;
+        const isEndingSoon = isToday && lunchSlot && currentMin >= lunchSlot.endMin - 5 && currentMin <= lunchSlot.endMin;
 
         return (
           <div
@@ -184,6 +194,70 @@ export default function TimelineGrid({
               </div>
             )}
 
+            {/* Conectores de Movilización / Traslado entre visitas */}
+            {travelSegments.map(seg => (
+              <div
+                key={seg.id}
+                className="crono-travel-pill"
+                style={{
+                  left: `calc(${seg.leftPct}% + 2px)`,
+                  width: `calc(${seg.widthPct}% - 4px)`
+                }}
+                title={`🚗 Traslado Estimado: ${seg.durationMin} min\nDe: ${seg.fromSector}\nA: ${seg.toSector}${seg.sameSector ? ' (Mismo sector)' : ''}`}
+              >
+                <span className="crono-travel-content">
+                  🚗 {seg.durationMin}m{seg.widthPct > 6 ? (seg.sameSector ? ' local' : ' ruta') : ''}
+                </span>
+              </div>
+            ))}
+
+            {/* Bloque Dinámico de Almuerzo (1 hora tras última visita matutina) */}
+            {lunchSlot && (
+              <div
+                className={`crono-lunch-block ${isEndingSoon ? 'is-ending-soon' : ''} ${isCurrentlyInLunch ? 'is-in-lunch' : ''}`}
+                style={{
+                  left: `calc(${lunchSlot.leftPct}% + 3px)`,
+                  width: `calc(${lunchSlot.widthPct}% - 6px)`,
+                  top: '8px',
+                  bottom: '8px'
+                }}
+                title={`🍽️ Horario de Almuerzo del Técnico (1 hora)\nFranja: ${lunchSlot.horaStr}\n${isEndingSoon ? '⚠️ FINALIZA EN MENOS DE 5 MINUTOS' : isCurrentlyInLunch ? 'En descanso de almuerzo' : 'Programado'}\n${lunchSlot.nextVisit ? `Siguiente visita programada: #${lunchSlot.nextVisit.contrato || lunchSlot.nextVisit.id_visita} (${lunchSlot.nextVisit.preferencia_horaria || ''})` : ''}`}
+              >
+                <div className="crono-lunch-inner">
+                  <div className="crono-lunch-header">
+                    <span style={{ fontSize: '0.85rem' }}>🍽️</span>
+                    <strong className="crono-lunch-title">ALMUERZO</strong>
+                    <span className="crono-lunch-hours">{lunchSlot.horaStr}</span>
+                  </div>
+
+                  <div className="crono-lunch-footer">
+                    {isEndingSoon ? (
+                      <span className="crono-lunch-alert-pill">
+                        <i className="fa-solid fa-bell fa-shake"></i> Termina en 5m
+                      </span>
+                    ) : (
+                      <span className="crono-lunch-duration">1 hora</span>
+                    )}
+
+                    {onSendTelegramLunch && (
+                      <button
+                        type="button"
+                        className="crono-lunch-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSendTelegramLunch(t.nombre, lunchSlot);
+                        }}
+                        title="Enviar recordatorio de fin de almuerzo al grupo de Telegram"
+                      >
+                        <i className="fa-brands fa-telegram"></i> Aviso
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tarjetas de Visitas Técnicas */}
             {visitas.map(v => {
               return (
                 <TimelineVisitCard

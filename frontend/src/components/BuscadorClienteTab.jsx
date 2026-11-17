@@ -1110,8 +1110,8 @@ function BuscadorClienteTab({ token, user }) {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.72rem', fontWeight: 800, display: 'block', marginBottom: '3px', textTransform: 'uppercase' }}>🌐 IP Cliente</strong>
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       onClick={() => handleOpenEditModal(selectedClient)}
                       style={{ background: 'transparent', border: 'none', color: '#0284c7', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, padding: 0 }}
                       title="Editar IP"
@@ -1823,7 +1823,7 @@ function BuscadorClienteTab({ token, user }) {
 
             {/* Formulario */}
             <form onSubmit={handleSubmitAtencion} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              
+
               {/* FILA 1: Tipo de Atención, Tipo de Solicitud y Medio de Contacto */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
                 <div>
@@ -2847,7 +2847,7 @@ function BuscadorClienteTab({ token, user }) {
                 <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#0284c7', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <i className="fa-solid fa-globe"></i> 1. Red & Conectividad IP
                 </h4>
-                
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
@@ -2898,7 +2898,7 @@ function BuscadorClienteTab({ token, user }) {
                 <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#10b981', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <i className="fa-solid fa-server"></i> 2. Equipo ONT / ONU
                 </h4>
-                
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>
@@ -2939,7 +2939,7 @@ function BuscadorClienteTab({ token, user }) {
                 <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#8b5cf6', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <i className="fa-solid fa-wifi"></i> 3. Routers Wi-Fi & Mesh
                 </h4>
-                
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 750, color: 'var(--text-main)', marginBottom: '6px' }}>

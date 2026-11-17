@@ -70,11 +70,11 @@ export default function TimelineVisitCard({
     <div
       className={`crono-visit-card ${estadoClass} ${isOverdue ? 'is-overdue' : ''} ${esApoyo ? 'es-apoyo' : ''} ${hasConflict ? 'has-conflict' : ''} ${isCompact ? 'is-compact' : ''}`}
       style={{
-        left: `${leftPct}%`,
-        width: `${widthPct}%`,
+        left: `calc(${leftPct}% + 3px)`,
+        width: `calc(max(${widthPct}%, 4.5%) - 6px)`,
         top: `${topPos}px`,
         ...(isCompact ? { height: `${cardHeight}px` } : { bottom: '8px' }),
-        minWidth: isCompact ? '110px' : '130px'
+        minWidth: isCompact ? '75px' : '88px'
       }}
       draggable
       onDragStart={handleDragStart}
