@@ -544,79 +544,117 @@ def historial_unificado():
     cursor = conn.cursor(dictionary=True)
     try:
         historial = []
-        contrato_clean = contrato.rstrip('Ff')
         
-        # 1. Atenciones del último año
-        cond_at = "contrato = %s OR contrato = %s"
-        params_at = [contrato, contrato_clean]
+        # Construir variantes de contrato para máxima resiliencia
+        contrato_raw = (contrato or '').strip()
+        contrato_nohash = contrato_raw.lstrip('#').strip()
+        contrato_clean = contrato_nohash.rstrip('Ff').strip()
         
-        q_at = f"""
-            SELECT id_atencion, fecha, hora, tipo_atencion, tipo_solicitud, medio_contacto, accion, motivo, agente, observacion, fecha_hora
-            FROM atenciones
-            WHERE ({cond_at})
-              AND fecha >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)
-            ORDER BY fecha_hora DESC, id_atencion DESC
-            LIMIT 50
-        """
-        cursor.execute(q_at, tuple(params_at))
-        atenciones = cursor.fetchall()
-        for at in atenciones:
-            f_str = at['fecha'].isoformat() if isinstance(at['fecha'], (datetime, date)) else str(at['fecha'] or '')
-            h_str = ""
-            if isinstance(at['hora'], timedelta):
-                tot = int(at['hora'].total_seconds())
-                h_str = f"{tot//3600:02d}:{(tot%3600)//60:02d}"
-            elif at.get('hora'):
-                h_str = str(at['hora'])[:5]
+        c_variants = set()
+        for c in [contrato_raw, contrato_nohash, contrato_clean]:
+            if c:
+                c_variants.add(c)
+                c_variants.add(c.upper())
+                c_variants.add(c.lower())
+                c_variants.add(f"#{c}")
+                if not c.upper().endswith('F'):
+                    c_variants.add(f"{c}F")
+                    c_variants.add(f"{c}f")
+                    c_variants.add(f"#{c}F")
+                    
+        c_list = list(c_variants) if c_variants else ([contrato_raw] if contrato_raw else [])
+        placeholders_c = ', '.join(['%s'] * len(c_list)) if c_list else '%s'
+        
+        # 1. Atenciones del último año (con tolerancia a formatos y enlace por cliente)
+        try:
+            params_at = list(c_list) if c_list else ['']
+            cond_at_parts = []
+            if c_list:
+                cond_at_parts.append(f"contrato IN ({placeholders_c})")
+            if cliente:
+                cond_at_parts.append("cliente = %s")
+                params_at.append(cliente)
                 
-            historial.append({
-                "id": f"at_{at['id_atencion']}",
-                "tipo_registro": "ATENCION",
-                "fecha": f_str,
-                "hora": h_str,
-                "titulo": at.get('motivo') or at.get('tipo_solicitud') or "Atención Telefónica / Mensajes",
-                "subtitulo": f"{at.get('tipo_atencion') or ''} • {at.get('medio_contacto') or ''}".strip(' •'),
-                "detalle": at.get('observacion') or at.get('accion') or "",
-                "responsable": at.get('agente') or "Call Center",
-                "estado": at.get('accion') or "REGISTRADA",
-                "raw_timestamp": f"{f_str} {h_str}"
-            })
+            cond_at = " OR ".join(cond_at_parts) if cond_at_parts else "1=0"
+            
+            q_at = f"""
+                SELECT id_atencion, fecha, hora, tipo_atencion, tipo_solicitud, medio_contacto, accion, motivo, agente, observacion, fecha_hora
+                FROM atenciones
+                WHERE ({cond_at})
+                  AND (fecha >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR) OR fecha IS NULL)
+                ORDER BY fecha DESC, hora DESC, id_atencion DESC
+                LIMIT 50
+            """
+            cursor.execute(q_at, tuple(params_at))
+            atenciones = cursor.fetchall()
+            for at in atenciones:
+                f_str = at['fecha'].isoformat() if isinstance(at['fecha'], (datetime, date)) else str(at['fecha'] or '')
+                h_str = ""
+                if isinstance(at['hora'], timedelta):
+                    tot = int(at['hora'].total_seconds())
+                    h_str = f"{tot//3600:02d}:{(tot%3600)//60:02d}"
+                elif hasattr(at.get('hora'), 'strftime'):
+                    h_str = at['hora'].strftime('%H:%M:%S')[:5]
+                elif at.get('hora'):
+                    h_str = str(at['hora'])[:5]
+                    
+                historial.append({
+                    "id": f"at_{at['id_atencion']}",
+                    "tipo_registro": "ATENCION",
+                    "fecha": f_str,
+                    "hora": h_str,
+                    "titulo": at.get('motivo') or at.get('tipo_solicitud') or "Atención Telefónica / Mensajes",
+                    "subtitulo": f"{at.get('tipo_atencion') or ''} • {at.get('medio_contacto') or ''}".strip(' •'),
+                    "detalle": at.get('observacion') or at.get('accion') or "",
+                    "responsable": at.get('agente') or "Call Center",
+                    "estado": at.get('accion') or "REGISTRADA",
+                    "raw_timestamp": f"{f_str} {h_str}"
+                })
+        except Exception as ex_at:
+            print("Error al consultar atenciones en historial unificado:", ex_at)
             
         # 2. Visitas técnicas del último año
-        cond_vis = "(contrato = %s OR contrato = %s)"
-        params_vis = [contrato, contrato_clean]
-        if cliente:
-            cond_vis += " OR cliente = %s"
-            params_vis.append(cliente)
-            
-        q_vis = f"""
-            SELECT id_visita, fecha_programada, horario_estimado, problema, observacion_callcenter, 
-                   solucion_tecnico, observacion_tecnico, tecnico_principal, tecnico_apoyo, estado, servicio
-            FROM visitas_tecnicas
-            WHERE ({cond_vis})
-              AND fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)
-            ORDER BY fecha_programada DESC, id_visita DESC
-            LIMIT 50
-        """
-        cursor.execute(q_vis, tuple(params_vis))
-        visitas = cursor.fetchall()
-        for v in visitas:
-            f_str = v['fecha_programada'].isoformat() if isinstance(v['fecha_programada'], (datetime, date)) else str(v['fecha_programada'] or '')
-            h_str = v.get('horario_estimado') or ""
-            
-            historial.append({
-                "id": f"vis_{v['id_visita']}",
-                "id_visita": v['id_visita'],
-                "tipo_registro": "VISITA",
-                "fecha": f_str,
-                "hora": h_str,
-                "titulo": v.get('problema') or v.get('servicio') or "Visita Técnica",
-                "subtitulo": f"Técnico: {v.get('tecnico_principal') or 'Por Asignar'}" + (f" + {v.get('tecnico_apoyo')}" if v.get('tecnico_apoyo') else ""),
-                "detalle": v.get('solucion_tecnico') or v.get('observacion_tecnico') or v.get('observacion_callcenter') or "",
-                "responsable": v.get('tecnico_principal') or "Técnico",
-                "estado": v.get('estado') or "PROGRAMADA",
-                "raw_timestamp": f"{f_str} {h_str}"
-            })
+        try:
+            params_vis = list(c_list) if c_list else ['']
+            cond_vis_parts = []
+            if c_list:
+                cond_vis_parts.append(f"contrato IN ({placeholders_c})")
+            if cliente:
+                cond_vis_parts.append("cliente = %s")
+                params_vis.append(cliente)
+                
+            cond_vis = " OR ".join(cond_vis_parts) if cond_vis_parts else "1=0"
+                
+            q_vis = f"""
+                SELECT id_visita, fecha_programada, preferencia_horaria, problema, observacion_callcenter, 
+                       solucion_tecnico, observacion_tecnico, tecnico_principal, tecnico_apoyo, estado, servicio
+                FROM visitas_tecnicas
+                WHERE ({cond_vis})
+                  AND (fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR) OR fecha_programada IS NULL)
+                ORDER BY fecha_programada DESC, id_visita DESC
+                LIMIT 50
+            """
+            cursor.execute(q_vis, tuple(params_vis))
+            visitas = cursor.fetchall()
+            for v in visitas:
+                f_str = v['fecha_programada'].isoformat() if isinstance(v['fecha_programada'], (datetime, date)) else str(v['fecha_programada'] or '')
+                h_str = v.get('preferencia_horaria') or ""
+                
+                historial.append({
+                    "id": f"vis_{v['id_visita']}",
+                    "id_visita": v['id_visita'],
+                    "tipo_registro": "VISITA",
+                    "fecha": f_str,
+                    "hora": h_str,
+                    "titulo": v.get('problema') or v.get('servicio') or "Visita Técnica",
+                    "subtitulo": f"Técnico: {v.get('tecnico_principal') or 'Por Asignar'}" + (f" + {v.get('tecnico_apoyo')}" if v.get('tecnico_apoyo') else ""),
+                    "detalle": v.get('solucion_tecnico') or v.get('observacion_tecnico') or v.get('observacion_callcenter') or "",
+                    "responsable": v.get('tecnico_principal') or "Técnico",
+                    "estado": v.get('estado') or "PROGRAMADA",
+                    "raw_timestamp": f"{f_str} {h_str}"
+                })
+        except Exception as ex_vis:
+            print("Error al consultar visitas en historial unificado:", ex_vis)
             
         # Ordenar cronológicamente descendente
         historial.sort(key=lambda x: x['raw_timestamp'], reverse=True)
