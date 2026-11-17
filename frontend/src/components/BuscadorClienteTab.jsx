@@ -138,7 +138,7 @@ function BuscadorClienteTab({ token, user }) {
     prioridad: 'MEDIA',
     tecnico_asignado: '',
     tecnico_apoyo: '',
-    problema: 'SIN SERVICIO',
+    problema: '',
     observacion_callcenter: ''
   });
 
@@ -1549,7 +1549,7 @@ function BuscadorClienteTab({ token, user }) {
                           prioridad: 'MEDIA',
                           tecnico_asignado: tecnicos.length > 0 ? tecnicos[0].nombre : '',
                           tecnico_apoyo: '',
-                          problema: problemas.length > 0 ? problemas[0].nombre_problema : 'SIN SERVICIO',
+                          problema: '',
                           observacion_callcenter: ''
                         });
                         setShowVisitaModal(true);
@@ -2323,15 +2323,20 @@ function BuscadorClienteTab({ token, user }) {
                   required
                 />
                 <datalist id="react-problemas-list">
-                  {problemas.map((p, idx) => (
-                    <option key={idx} value={p.nombre_problema}></option>
+                  {Array.from(new Set([
+                    ...problemas.map(p => (typeof p === 'string' ? p : (p.nombre || p.nombre_problema))).filter(Boolean),
+                    "CAMBIO DE DOMICILIO",
+                    "MIGRACIÓN",
+                    "CROSSELLING",
+                    "SIN SERVICIO",
+                    "INTERNET LENTO",
+                    "CORTE DE FIBRA",
+                    "ROUTER DESCONFIGURADO",
+                    "CAMBIO DE EQUIPO",
+                    "POTENCIA ATENUADA"
+                  ])).sort((a, b) => a.localeCompare(b)).map((nombre, idx) => (
+                    <option key={idx} value={nombre} />
                   ))}
-                  <option value="SIN SERVICIO"></option>
-                  <option value="INTERNET LENTO"></option>
-                  <option value="CORTE DE FIBRA"></option>
-                  <option value="ROUTER DESCONFIGURADO"></option>
-                  <option value="CAMBIO DE EQUIPO"></option>
-                  <option value="POTENCIA ATENUADA"></option>
                 </datalist>
               </div>
 
