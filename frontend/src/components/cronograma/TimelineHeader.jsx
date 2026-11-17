@@ -136,22 +136,6 @@ export default function TimelineHeader({
           <span>{stats.finalizadas} Efectivas</span>
         </span>
 
-        {/* Botón para notificar a Telegram Operaciones */}
-        <button
-          type="button"
-          onClick={onOpenGlobalTelegramAlert}
-          className="crono-btn"
-          style={{
-            borderColor: '#0284c7',
-            color: '#0284c7',
-            background: 'rgba(2, 132, 199, 0.08)'
-          }}
-          title="Preparar o enviar alerta a Telegram ante atrasos de la jornada"
-        >
-          <i className="fa-brands fa-telegram" style={{ fontSize: '1rem', color: '#0284c7' }}></i>
-          <span>Telegram Alertas</span>
-        </button>
-
         {/* Botón de Bandeja Sin Asignar (Drawer) */}
         <button
           type="button"

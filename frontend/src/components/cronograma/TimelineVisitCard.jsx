@@ -7,8 +7,7 @@ export default function TimelineVisitCard({
   widthPct,
   isToday,
   now,
-  onOpenEdit,
-  onSendTelegramAlert
+  onOpenEdit
 }) {
   const estado = (visita.estado || 'PENDIENTE').toUpperCase();
   const overdueMin = isToday && estado === 'PENDIENTE' ? calculateOverdueMinutes(visita, now) : 0;
@@ -215,7 +214,7 @@ export default function TimelineVisitCard({
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              maxWidth: esApoyo ? '90px' : '120px',
+              maxWidth: '100%',
               opacity: 0.85
             }}>
               📍 {visita.sector || 'Sin sector'}
@@ -231,33 +230,6 @@ export default function TimelineVisitCard({
                 <i className="fa-solid fa-user-group"></i> +{visita.tecnico_apoyo.split(' ')[0]}
               </span>
             ) : null}
-
-            {/* Botón rápido de alerta Telegram si está atrasada */}
-            {isOverdue && onSendTelegramAlert && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSendTelegramAlert(visita, overdueMin);
-                }}
-                title="Enviar alerta inmediata al grupo de Telegram de Operaciones"
-                style={{
-                  background: '#0284c7',
-                  color: '#ffffff',
-                  border: 'none',
-                  padding: '2px 6px',
-                  borderRadius: '6px',
-                  fontSize: '0.68rem',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '3px'
-                }}
-              >
-                <i className="fa-brands fa-telegram"></i> Alerta
-              </button>
-            )}
           </div>
         </>
       )}

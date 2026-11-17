@@ -4,6 +4,7 @@ import sys
 from dotenv import load_dotenv
 from app import app
 from waitress import serve
+from telegram_monitor import iniciar_monitor_telegram
 
 # Cargar variables de entorno del archivo .env
 load_dotenv()
@@ -40,6 +41,9 @@ if __name__ == '__main__':
     # Liberar el puerto de forma automática para evitar bloqueos
     liberar_puerto(port)
     
+    # Iniciar monitor autónomo de alertas a Telegram en segundo plano
+    iniciar_monitor_telegram()
+
     print(f"Iniciando servidor de producción Waitress en http://0.0.0.0:{port}")
     print("Aceptando conexiones externas en todas las interfaces de red de esta máquina...")
     

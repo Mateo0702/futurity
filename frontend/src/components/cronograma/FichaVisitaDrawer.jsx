@@ -1086,29 +1086,6 @@ export default function FichaVisitaDrawer({
             >
               <i className="fa-solid fa-users"></i> Asignar / Apoyo
             </button>
-
-            {onSendTelegramAlert && (
-              <button
-                type="button"
-                onClick={() => onSendTelegramAlert(visita, visita._overdueMin || 15)}
-                style={{
-                  padding: '9px 14px',
-                  borderRadius: '10px',
-                  border: '1px solid #0284c7',
-                  background: 'rgba(2, 132, 199, 0.1)',
-                  color: '#0284c7',
-                  fontWeight: 800,
-                  fontSize: '0.82rem',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                title="Despachar alerta de esta visita a Telegram"
-              >
-                <i className="fa-brands fa-telegram"></i> Telegram
-              </button>
-            )}
           </div>
 
           <div style={{ display: 'flex', gap: '8px' }}>

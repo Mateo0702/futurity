@@ -6,7 +6,7 @@ import TimelineGrid from './TimelineGrid';
 import UnassignedBacklogDrawer from './UnassignedBacklogDrawer';
 import ModalAsignacionDoble from './ModalAsignacionDoble';
 import FichaVisitaDrawer from './FichaVisitaDrawer';
-import { calculateOverdueMinutes, sendTelegramOverdueAlert, formatTelegramOverdueMessage, formatTelegramLunchMessage } from './telegramAlertHelper';
+import { calculateOverdueMinutes } from './telegramAlertHelper';
 import { computeTechLanes } from './timelineLayoutHelper';
 
 export default function CronogramaTimeline({
@@ -30,12 +30,6 @@ export default function CronogramaTimeline({
   const [selectedVisitForModal, setSelectedVisitForModal] = useState(null);
   const [selectedVisitForFicha, setSelectedVisitForFicha] = useState(null);
   const [dragOverTecnico, setDragOverTecnico] = useState(null);
-  const [telegramAlertModal, setTelegramAlertModal] = useState({
-    isOpen: false,
-    visita: null,
-    mensaje: '',
-    status: null
-  });
 
   // Mantener localVisitas sincronizado cuando se recargan las visitas del servidor
   useEffect(() => {
@@ -234,96 +228,6 @@ export default function CronogramaTimeline({
     }
   };
 
-  // Disparar Alerta a Telegram
-  const handleSendTelegramAlert = async (visita, overdueMin) => {
-    const msg = formatTelegramOverdueMessage(visita, overdueMin);
-    setTelegramAlertModal({
-      isOpen: true,
-      visita,
-      mensaje: msg,
-      status: 'pending'
-    });
-  };
-
-  // Disparar Alerta de Almuerzo a Telegram
-  const handleSendTelegramLunch = async (techNombre, lunchSlot) => {
-    const msg = formatTelegramLunchMessage(
-      techNombre,
-      lunchSlot.horaInicioStr,
-      lunchSlot.horaFinStr,
-      lunchSlot.nextVisit
-    );
-    setTelegramAlertModal({
-      isOpen: true,
-      visita: {
-        cliente: `Almuerzo ${techNombre}`,
-        contrato: 'ALMUERZO',
-        tecnico_principal: techNombre,
-        _esAlmuerzo: true
-      },
-      mensaje: msg,
-      status: 'pending'
-    });
-  };
-
-  const confirmarEnvioTelegram = async () => {
-    if (!telegramAlertModal.mensaje) return;
-    setTelegramAlertModal(prev => ({ ...prev, status: 'sending' }));
-
-    let res;
-    if (telegramAlertModal.visita && telegramAlertModal.visita._esAlmuerzo) {
-      try {
-        const fetchRes = await fetch('/api/cronograma/alerta_telegram', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            tipo: 'ALMUERZO',
-            tecnico_principal: telegramAlertModal.visita.tecnico_principal,
-            mensaje: telegramAlertModal.mensaje
-          })
-        });
-        res = await fetchRes.json();
-      } catch (err) {
-        res = { status: 'error', message: err.message };
-      }
-    } else {
-      res = await sendTelegramOverdueAlert(
-        telegramAlertModal.visita,
-        telegramAlertModal.visita._overdueMin || 15,
-        token
-      );
-    }
-
-    setTelegramAlertModal(prev => ({
-      ...prev,
-      status: 'sent',
-      serverMsg: res.message || 'Alerta despachada correctamente.'
-    }));
-
-    setTimeout(() => {
-      setTelegramAlertModal({ isOpen: false, visita: null, mensaje: '', status: null });
-    }, 2500);
-  };
-
-  const handleOpenGlobalTelegramAlert = () => {
-    // Alerta resumen de todos los atrasos del día
-    const visitasAtrasadas = visitas.filter(v => {
-      const estado = (v.estado || 'PENDIENTE').toUpperCase();
-      return isToday && estado === 'PENDIENTE' && calculateOverdueMinutes(v, now) > 0;
-    });
-
-    if (visitasAtrasadas.length === 0) {
-      alert("¡Enhorabuena! No hay visitas con atraso registradas en este momento.");
-      return;
-    }
-
-    const first = visitasAtrasadas[0];
-    handleSendTelegramAlert(first, first._overdueMin || 20);
-  };
-
   return (
     <div className="cronograma-container">
       {/* Barra de herramientas superior */}
@@ -339,7 +243,6 @@ export default function CronogramaTimeline({
         setVistaModo={setVistaModo}
         onRefresh={onRefresh}
         loading={loading}
-        onOpenGlobalTelegramAlert={handleOpenGlobalTelegramAlert}
       />
 
       {/* Banner informativo de modo prueba Beta */}
@@ -398,8 +301,6 @@ export default function CronogramaTimeline({
           setDragOverTecnico={setDragOverTecnico}
           onDropVisit={handleDropVisit}
           onOpenEdit={(v) => setSelectedVisitForFicha(v)}
-          onSendTelegramAlert={handleSendTelegramAlert}
-          onSendTelegramLunch={handleSendTelegramLunch}
         />
       </div>
 
@@ -424,7 +325,6 @@ export default function CronogramaTimeline({
           setSelectedVisitForModal(v);
         }}
         onOpenEditModal={onOpenEditModal}
-        onSendTelegramAlert={handleSendTelegramAlert}
       />
 
       {/* Modal de Asignación / Cuadrilla Doble */}
@@ -435,115 +335,6 @@ export default function CronogramaTimeline({
         tecnicos={tecnicos}
         onConfirm={handleAssignFromModal}
       />
-
-      {/* Modal de Despacho de Alerta a Telegram */}
-      {telegramAlertModal.isOpen && (
-        <div className="crono-modal-overlay" onClick={() => setTelegramAlertModal({ isOpen: false, visita: null, mensaje: '', status: null })}>
-          <div className="crono-modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
-            <div style={{
-              padding: '18px 22px',
-              background: '#0284c7',
-              color: 'white',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <i className="fa-brands fa-telegram"></i> Alerta a Telegram de Operaciones
-              </h3>
-              <button
-                type="button"
-                onClick={() => setTelegramAlertModal({ isOpen: false, visita: null, mensaje: '', status: null })}
-                style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '1.1rem', cursor: 'pointer' }}
-              >
-                <i className="fa-solid fa-xmark"></i>
-              </button>
-            </div>
-
-            <div style={{ padding: '20px' }}>
-              <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: 'var(--text-main)' }}>
-                Se enviará la siguiente notificación formateada al grupo de supervisores y operaciones:
-              </p>
-
-              <pre style={{
-                background: '#f8fafc',
-                border: '1px solid #cbd5e1',
-                padding: '14px',
-                borderRadius: '10px',
-                fontSize: '0.78rem',
-                fontFamily: 'monospace',
-                whiteSpace: 'pre-wrap',
-                maxHeight: '220px',
-                overflowY: 'auto'
-              }}>
-                {telegramAlertModal.mensaje}
-              </pre>
-
-              {telegramAlertModal.status === 'sent' && (
-                <div style={{
-                  marginTop: '12px',
-                  background: '#dcfce7',
-                  color: '#15803d',
-                  padding: '10px',
-                  borderRadius: '8px',
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
-                  <i className="fa-solid fa-circle-check"></i>
-                  {telegramAlertModal.serverMsg || '¡Alerta enviada exitosamente al canal de Telegram!'}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '18px' }}>
-                <button
-                  type="button"
-                  onClick={() => setTelegramAlertModal({ isOpen: false, visita: null, mensaje: '', status: null })}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-color)',
-                    background: '#ffffff',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Cerrar
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmarEnvioTelegram}
-                  disabled={telegramAlertModal.status === 'sending' || telegramAlertModal.status === 'sent'}
-                  style={{
-                    padding: '8px 18px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: '#0284c7',
-                    color: '#ffffff',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  {telegramAlertModal.status === 'sending' ? (
-                    <>
-                      <i className="fa-solid fa-spinner fa-spin"></i> Despachando...
-                    </>
-                  ) : (
-                    <>
-                      <i className="fa-brands fa-telegram"></i> Despachar Alerta
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

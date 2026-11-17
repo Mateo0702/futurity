@@ -14,9 +14,7 @@ export default function TimelineGrid({
   dragOverTecnico,
   setDragOverTecnico,
   onDropVisit,
-  onOpenEdit,
-  onSendTelegramAlert,
-  onSendTelegramLunch
+  onOpenEdit
 }) {
   const [dragPreview, setDragPreview] = useState(null);
   const currentMin = now ? now.getHours() * 60 + now.getMinutes() : 0;
@@ -225,33 +223,18 @@ export default function TimelineGrid({
               >
                 <div className="crono-lunch-inner">
                   <div className="crono-lunch-header">
-                    <span style={{ fontSize: '0.85rem' }}>🍽️</span>
+                    <span style={{ fontSize: '0.95rem' }}>🍽️</span>
                     <strong className="crono-lunch-title">ALMUERZO</strong>
-                    <span className="crono-lunch-hours">{lunchSlot.horaStr}</span>
+                    {isEndingSoon && (
+                      <span className="crono-lunch-alert-pill">
+                        <i className="fa-solid fa-bell fa-shake"></i> Faltan 5m
+                      </span>
+                    )}
                   </div>
 
                   <div className="crono-lunch-footer">
-                    {isEndingSoon ? (
-                      <span className="crono-lunch-alert-pill">
-                        <i className="fa-solid fa-bell fa-shake"></i> Termina en 5m
-                      </span>
-                    ) : (
-                      <span className="crono-lunch-duration">1 hora</span>
-                    )}
-
-                    {onSendTelegramLunch && (
-                      <button
-                        type="button"
-                        className="crono-lunch-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSendTelegramLunch(t.nombre, lunchSlot);
-                        }}
-                        title="Enviar recordatorio de fin de almuerzo al grupo de Telegram"
-                      >
-                        <i className="fa-brands fa-telegram"></i> Aviso
-                      </button>
-                    )}
+                    <span className="crono-lunch-hours">{lunchSlot.horaStr}</span>
+                    <span className="crono-lunch-duration">1 hora</span>
                   </div>
                 </div>
               </div>
@@ -268,7 +251,6 @@ export default function TimelineGrid({
                   isToday={isToday}
                   now={now}
                   onOpenEdit={onOpenEdit}
-                  onSendTelegramAlert={onSendTelegramAlert}
                 />
               );
             })}
