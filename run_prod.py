@@ -11,8 +11,8 @@ load_dotenv()
 def liberar_puerto(puerto):
     """Busca y finaliza cualquier proceso que esté ocupando el puerto indicado en Windows."""
     try:
-        # Ejecutar netstat para listar conexiones y buscar el puerto
-        result = subprocess.run("netstat -ano", shell=True, capture_output=True, text=True)
+        # Ejecutar netstat para listar conexiones y buscar el puerto (con codificación segura)
+        result = subprocess.run("netstat -ano", shell=True, capture_output=True, text=True, errors="ignore")
         pids_a_matar = set()
         mi_pid = os.getpid()
 
