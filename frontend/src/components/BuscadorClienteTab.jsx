@@ -1449,15 +1449,38 @@ function BuscadorClienteTab({ token, user }) {
                         )}
 
                         {/* Detalle / Observación */}
-                        {item.detalle && (
-                          <div style={{ fontSize: '0.82rem', color: 'var(--text-main)', lineHeight: 1.35, background: 'var(--card-bg)', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '4px' }}>
-                            {item.detalle}
-                          </div>
+                        {isVisita ? (
+                          (item.solucion_tecnico || item.observacion_tecnico || item.observacion_callcenter) && (
+                            <div style={{ fontSize: '0.82rem', lineHeight: 1.4, background: 'var(--card-bg)', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {item.solucion_tecnico && (
+                                <div style={{ color: '#059669', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <i className="fa-solid fa-circle-check"></i>
+                                  <span>{item.solucion_tecnico}</span>
+                                </div>
+                              )}
+                              {item.observacion_tecnico && (
+                                <div style={{ color: 'var(--text-main)', fontStyle: 'italic', background: 'rgba(0,0,0,0.02)', padding: '6px 10px', borderRadius: '6px', borderLeft: '3px solid #059669' }}>
+                                  "{item.observacion_tecnico}"
+                                </div>
+                              )}
+                              {(!item.solucion_tecnico && !item.observacion_tecnico) && item.observacion_callcenter && (
+                                <div style={{ color: 'var(--text-main)' }}>
+                                  {item.observacion_callcenter}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        ) : (
+                          item.detalle && (
+                            <div style={{ fontSize: '0.82rem', color: 'var(--text-main)', lineHeight: 1.35, background: 'var(--card-bg)', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '4px' }}>
+                              {item.detalle}
+                            </div>
+                          )
                         )}
 
                         {/* Footer del ítem */}
                         <div style={{ marginTop: '6px', fontSize: '0.72rem', color: 'var(--sidebar-text)', textAlign: 'right', fontWeight: 600 }}>
-                          Registrado por: <strong>{item.responsable}</strong>
+                          {item.etiqueta_responsable || 'Registrado por'}: <strong>{item.responsable}</strong>
                         </div>
                       </div>
                     );

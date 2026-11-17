@@ -543,29 +543,41 @@ def historial_unificado():
         
     cursor = conn.cursor(dictionary=True)
     try:
+        from utils import son_mismo_cliente
         historial = []
         
-        # Construir variantes de contrato para máxima resiliencia
+        # Construir variantes de contrato respetando estrictamente el tipo de empresa
+        # NUNCA cruzar un contrato numérico (Servicable) con un contrato con 'F' (Fibracom)
         contrato_raw = (contrato or '').strip()
         contrato_nohash = contrato_raw.lstrip('#').strip()
-        contrato_clean = contrato_nohash.rstrip('Ff').strip()
         
         c_variants = set()
-        for c in [contrato_raw, contrato_nohash, contrato_clean]:
-            if c:
-                c_variants.add(c)
-                c_variants.add(c.upper())
-                c_variants.add(c.lower())
-                c_variants.add(f"#{c}")
-                if not c.upper().endswith('F'):
-                    c_variants.add(f"{c}F")
-                    c_variants.add(f"{c}f")
-                    c_variants.add(f"#{c}F")
+        if contrato_nohash:
+            c_variants.add(contrato_nohash)
+            c_variants.add(contrato_nohash.upper())
+            c_variants.add(contrato_nohash.lower())
+            c_variants.add(f"#{contrato_nohash}")
+            c_variants.add(f"#{contrato_nohash.upper()}")
+            
+            # Soporte estricto de ceros a la izquierda (ej: '35273' vs '035273')
+            # manteniendo intacto el sufijo 'F' si lo tiene
+            tiene_f = contrato_nohash.upper().endswith('F')
+            base_dig = contrato_nohash[:-1] if tiene_f else contrato_nohash
+            if base_dig.isdigit():
+                sin_ceros = base_dig.lstrip('0') or '0'
+                con_6_ceros = base_dig.zfill(6)
+                suf = 'F' if tiene_f else ''
+                for b in [sin_ceros, con_6_ceros]:
+                    c_variants.add(f"{b}{suf}")
+                    c_variants.add(f"#{b}{suf}")
+                    if suf:
+                        c_variants.add(f"{b}{suf.lower()}")
+                        c_variants.add(f"#{b}{suf.lower()}")
                     
         c_list = list(c_variants) if c_variants else ([contrato_raw] if contrato_raw else [])
         placeholders_c = ', '.join(['%s'] * len(c_list)) if c_list else '%s'
         
-        # 1. Atenciones del último año (con tolerancia a formatos y enlace por cliente)
+        # 1. Atenciones del último año
         try:
             params_at = list(c_list) if c_list else ['']
             cond_at_parts = []
@@ -578,7 +590,8 @@ def historial_unificado():
             cond_at = " OR ".join(cond_at_parts) if cond_at_parts else "1=0"
             
             q_at = f"""
-                SELECT id_atencion, fecha, hora, tipo_atencion, tipo_solicitud, medio_contacto, accion, motivo, agente, observacion, fecha_hora
+                SELECT id_atencion, fecha, hora, tipo_atencion, tipo_solicitud, medio_contacto, 
+                       accion, motivo, agente, observacion, fecha_hora, cliente, contrato
                 FROM atenciones
                 WHERE ({cond_at})
                   AND (fecha >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR) OR fecha IS NULL)
@@ -588,6 +601,11 @@ def historial_unificado():
             cursor.execute(q_at, tuple(params_at))
             atenciones = cursor.fetchall()
             for at in atenciones:
+                c_at = at.get('cliente')
+                # Evitar mezclar atenciones de otro cliente si el contrato fue reciclado
+                if cliente and c_at and not son_mismo_cliente(cliente, c_at):
+                    continue
+
                 f_str = at['fecha'].isoformat() if isinstance(at['fecha'], (datetime, date)) else str(at['fecha'] or '')
                 h_str = ""
                 if isinstance(at['hora'], timedelta):
@@ -607,6 +625,7 @@ def historial_unificado():
                     "subtitulo": f"{at.get('tipo_atencion') or ''} • {at.get('medio_contacto') or ''}".strip(' •'),
                     "detalle": at.get('observacion') or at.get('accion') or "",
                     "responsable": at.get('agente') or "Call Center",
+                    "etiqueta_responsable": "Registrado por",
                     "estado": at.get('accion') or "REGISTRADA",
                     "raw_timestamp": f"{f_str} {h_str}"
                 })
@@ -627,7 +646,8 @@ def historial_unificado():
                 
             q_vis = f"""
                 SELECT id_visita, fecha_programada, preferencia_horaria, problema, observacion_callcenter, 
-                       solucion_tecnico, observacion_tecnico, tecnico_principal, tecnico_apoyo, estado, servicio
+                       solucion_tecnico, observacion_tecnico, tecnico_principal, tecnico_apoyo, tecnico_cierre,
+                       creado_por, estado, servicio, cliente, contrato
                 FROM visitas_tecnicas
                 WHERE ({cond_vis})
                   AND (fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR) OR fecha_programada IS NULL)
@@ -637,8 +657,43 @@ def historial_unificado():
             cursor.execute(q_vis, tuple(params_vis))
             visitas = cursor.fetchall()
             for v in visitas:
+                c_vis = v.get('cliente')
+                # Evitar mezclar visitas de clientes distintos en contratos reciclados
+                if cliente and c_vis and not son_mismo_cliente(cliente, c_vis):
+                    continue
+
                 f_str = v['fecha_programada'].isoformat() if isinstance(v['fecha_programada'], (datetime, date)) else str(v['fecha_programada'] or '')
                 h_str = v.get('preferencia_horaria') or ""
+                est = (v.get('estado') or 'PENDIENTE').upper()
+                is_fin = est in ('FINALIZADA', 'SOLVENTADA_REMOTA')
+
+                solucion = (v.get('solucion_tecnico') or '').strip()
+                obs_tec = (v.get('observacion_tecnico') or '').strip()
+                obs_cc = (v.get('observacion_callcenter') or '').strip()
+                tec_p = (v.get('tecnico_principal') or '').strip()
+                tec_ap = (v.get('tecnico_apoyo') or '').strip()
+                tec_cie = (v.get('tecnico_cierre') or '').strip()
+                creador = (v.get('creado_por') or '').strip()
+
+                # Construir detalle enriquecido sin descartar el comentario del técnico
+                partes_detalle = []
+                if solucion:
+                    partes_detalle.append(f"Solución: {solucion}")
+                if obs_tec:
+                    partes_detalle.append(f"Técnico: \"{obs_tec}\"")
+                if not solucion and not obs_tec and obs_cc:
+                    partes_detalle.append(obs_cc)
+                detalle_txt = "\n".join(partes_detalle)
+
+                # Definir responsable y subtítulo según estado de la visita
+                if is_fin:
+                    resp = tec_cie or tec_p or "Técnico"
+                    etiqueta_resp = "Finalizado por"
+                    subtitulo = f"Técnico: {tec_p or 'Técnico'}" + (f" + {tec_ap}" if tec_ap else "")
+                else:
+                    resp = creador or "Call Center"
+                    etiqueta_resp = "Generado por"
+                    subtitulo = f"Técnico Asignado: {tec_p or 'Por Asignar'}" + (f" + {tec_ap}" if tec_ap else "")
                 
                 historial.append({
                     "id": f"vis_{v['id_visita']}",
@@ -647,10 +702,16 @@ def historial_unificado():
                     "fecha": f_str,
                     "hora": h_str,
                     "titulo": v.get('problema') or v.get('servicio') or "Visita Técnica",
-                    "subtitulo": f"Técnico: {v.get('tecnico_principal') or 'Por Asignar'}" + (f" + {v.get('tecnico_apoyo')}" if v.get('tecnico_apoyo') else ""),
-                    "detalle": v.get('solucion_tecnico') or v.get('observacion_tecnico') or v.get('observacion_callcenter') or "",
-                    "responsable": v.get('tecnico_principal') or "Técnico",
-                    "estado": v.get('estado') or "PROGRAMADA",
+                    "subtitulo": subtitulo,
+                    "detalle": detalle_txt,
+                    "solucion_tecnico": solucion,
+                    "observacion_tecnico": obs_tec,
+                    "observacion_callcenter": obs_cc,
+                    "responsable": resp,
+                    "etiqueta_responsable": etiqueta_resp,
+                    "tecnico_asignado": tec_p,
+                    "creado_por": creador,
+                    "estado": est,
                     "raw_timestamp": f"{f_str} {h_str}"
                 })
         except Exception as ex_vis:
