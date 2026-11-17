@@ -1489,80 +1489,94 @@ function BuscadorClienteTab({ token, user }) {
               </div>
             </div>
 
-            {/* BOTONES DE ACCIÓN RÁPIDA: REGISTRAR ATENCIÓN Y REGISTRAR VISITA */}
-            <div style={{ marginTop: '20px', borderTop: '2px solid var(--border-color)', paddingTop: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  const t1 = (selectedClient.telefonos && selectedClient.telefonos !== 'No registrado') ? selectedClient.telefonos.split('/')[0].trim() : '';
-                  const t2 = (selectedClient.telefonos && selectedClient.telefonos.includes('/')) ? selectedClient.telefonos.split('/')[1].trim() : '';
-                  setAtencionForm({
-                    tipo_atencion: 'SERVICIO TÉCNICO',
-                    tipoSolicitud: 'SOPORTE TÉCNICO',
-                    medio_contacto: 'WHATSAPP',
-                    accion: 'SOPORTE MEDIANTE MENSAJES',
-                    motivo: '',
-                    observacion: '',
-                    olt: selectedClient.ip_nodo ? (selectedClient.ip_nodo.includes('1.18') ? '1.18' : selectedClient.ip_nodo.includes('1.50') ? '1.50' : '') : '',
-                    telefono1: t1,
-                    telefono2: t2
-                  });
-                  setShowAtencionModal(true);
-                }}
-                style={{
-                  padding: '12px 18px',
-                  borderRadius: '14px',
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                  color: '#ffffff',
-                  fontWeight: 800,
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 14px rgba(99, 102, 241, 0.3)'
-                }}
-              >
-                <i className="fa-solid fa-headset"></i>
-                <span>Registrar Atención</span>
-              </button>
+            {/* BOTONES DE ACCIÓN RÁPIDA: REGISTRAR ATENCIÓN Y REGISTRAR VISITA (Oculto para ATC) */}
+            {(() => {
+              const isATC = (user?.rol || user?.role || '').toUpperCase() === 'ATC';
+              return (
+                <div style={{
+                  marginTop: '20px',
+                  borderTop: '2px solid var(--border-color)',
+                  paddingTop: '16px',
+                  display: 'grid',
+                  gridTemplateColumns: isATC ? '1fr' : '1fr 1fr',
+                  gap: '12px'
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const t1 = (selectedClient.telefonos && selectedClient.telefonos !== 'No registrado') ? selectedClient.telefonos.split('/')[0].trim() : '';
+                      const t2 = (selectedClient.telefonos && selectedClient.telefonos.includes('/')) ? selectedClient.telefonos.split('/')[1].trim() : '';
+                      setAtencionForm({
+                        tipo_atencion: 'SERVICIO TÉCNICO',
+                        tipoSolicitud: 'SOPORTE TÉCNICO',
+                        medio_contacto: 'WHATSAPP',
+                        accion: 'SOPORTE MEDIANTE MENSAJES',
+                        motivo: '',
+                        observacion: '',
+                        olt: selectedClient.ip_nodo ? (selectedClient.ip_nodo.includes('1.18') ? '1.18' : selectedClient.ip_nodo.includes('1.50') ? '1.50' : '') : '',
+                        telefono1: t1,
+                        telefono2: t2
+                      });
+                      setShowAtencionModal(true);
+                    }}
+                    style={{
+                      padding: '12px 18px',
+                      borderRadius: '14px',
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                      color: '#ffffff',
+                      fontWeight: 800,
+                      fontSize: '0.9rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      boxShadow: '0 4px 14px rgba(99, 102, 241, 0.3)'
+                    }}
+                  >
+                    <i className="fa-solid fa-headset"></i>
+                    <span>Registrar Atención</span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setVisitaForm({
-                    fecha_programada: getTodayLocal(),
-                    preferencia_horaria: 'MAÑANA (09:00 - 13:00)',
-                    prioridad: 'MEDIA',
-                    tecnico_asignado: tecnicos.length > 0 ? tecnicos[0].nombre : '',
-                    tecnico_apoyo: '',
-                    problema: problemas.length > 0 ? problemas[0].nombre_problema : 'SIN SERVICIO',
-                    observacion_callcenter: ''
-                  });
-                  setShowVisitaModal(true);
-                }}
-                style={{
-                  padding: '12px 18px',
-                  borderRadius: '14px',
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                  color: '#ffffff',
-                  fontWeight: 800,
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 14px rgba(5, 150, 105, 0.3)'
-                }}
-              >
-                <i className="fa-solid fa-calendar-plus"></i>
-                <span>Registrar Visita</span>
-              </button>
-            </div>
+                  {!isATC && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVisitaForm({
+                          fecha_programada: getTodayLocal(),
+                          preferencia_horaria: 'MAÑANA (09:00 - 13:00)',
+                          prioridad: 'MEDIA',
+                          tecnico_asignado: tecnicos.length > 0 ? tecnicos[0].nombre : '',
+                          tecnico_apoyo: '',
+                          problema: problemas.length > 0 ? problemas[0].nombre_problema : 'SIN SERVICIO',
+                          observacion_callcenter: ''
+                        });
+                        setShowVisitaModal(true);
+                      }}
+                      style={{
+                        padding: '12px 18px',
+                        borderRadius: '14px',
+                        border: 'none',
+                        background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                        color: '#ffffff',
+                        fontWeight: 800,
+                        fontSize: '0.9rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        boxShadow: '0 4px 14px rgba(5, 150, 105, 0.3)'
+                      }}
+                    >
+                      <i className="fa-solid fa-calendar-plus"></i>
+                      <span>Registrar Visita</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       ) : (
