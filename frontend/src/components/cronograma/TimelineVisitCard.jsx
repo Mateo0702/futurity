@@ -48,7 +48,15 @@ export default function TimelineVisitCard({
   else if (estado === 'EN_SITIO' || estado === 'EN_PROGRESO') estadoClass = 'estado-en-sitio';
   else if (estado === 'REAGENDADA' || estado === 'CANCELADA') estadoClass = 'estado-reagendada';
 
+  const isFinalizada = estado === 'FINALIZADA' || estado === 'CANCELADA';
+  const isEnSitio = estado === 'EN_SITIO' || estado === 'EN_PROGRESO';
+  const isLockedDrag = isFinalizada || isEnSitio;
+
   const handleDragStart = (e) => {
+    if (isLockedDrag) {
+      e.preventDefault();
+      return;
+    }
     const cardRect = e.currentTarget.getBoundingClientRect();
     const grabOffsetX = Math.max(0, e.clientX - cardRect.left);
 
@@ -132,6 +140,12 @@ export default function TimelineVisitCard({
   const topPos = isCompact ? 8 + laneIndex * 46 : 8;
   const cardHeight = isCompact ? 40 : null;
 
+  const actionHint = isFinalizada
+    ? '🔒 Visita finalizada (bloqueada — haz clic para ver detalles)'
+    : isEnSitio
+      ? '🔒 En progreso (fija en horario/técnico — arrastra el borde derecho o usa la ficha para extender/acortar)'
+      : `Arrastra para mover${canResize ? ' • Arrastra el borde derecho para extender/acortar' : ''}`;
+
   return (
     <div
       className={`crono-visit-card ${estadoClass} ${isOverdue ? 'is-overdue' : ''} ${esApoyo ? 'es-apoyo' : ''} ${hasConflict ? 'has-conflict' : ''} ${isCompact ? 'is-compact' : ''} ${resizingEndMin !== null ? 'is-resizing' : ''}`}
@@ -141,16 +155,17 @@ export default function TimelineVisitCard({
         top: `${topPos}px`,
         ...(isCompact ? { height: `${cardHeight}px` } : { bottom: '8px' }),
         minWidth: isCompact ? '75px' : '88px',
+        cursor: isLockedDrag ? 'pointer' : 'grab',
         zIndex: resizingEndMin !== null ? 30 : undefined
       }}
-      draggable={resizingEndMin === null}
+      draggable={!isLockedDrag && resizingEndMin === null}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onClick={() => {
         if (justResizedRef.current) return;
         onOpenEdit(visita);
       }}
-      title={`${hasConflict ? '⚠️ HORARIO SOLAPADO CON OTRA VISITA\n' : ''}${esApoyo ? '🤝 EN APOYO' : '👑 TITULAR'}\nTicket #${visita.contrato || visita.id_visita} - ${visita.cliente}\nHora: ${displayTimeLabel}${visita.adjustedByFinish ? ` (Programada: ${visita.preferencia_horaria || ''})` : ''}\n${esApoyo ? `Apoyando a: ${titularNombre}` : (visita.tecnico_apoyo ? `Con Apoyo: ${visita.tecnico_apoyo}` : 'Técnico Solo')}\nEstado: ${estado}\nArrastra para mover${canResize ? ' • Arrastra el borde derecho para extender/acortar' : ''}`}
+      title={`${hasConflict ? '⚠️ HORARIO SOLAPADO CON OTRA VISITA\n' : ''}${esApoyo ? '🤝 EN APOYO' : '👑 TITULAR'}\nTicket #${visita.contrato || visita.id_visita} - ${visita.cliente}\nHora: ${displayTimeLabel}${visita.adjustedByFinish ? ` (Programada: ${visita.preferencia_horaria || ''})` : ''}\n${esApoyo ? `Apoyando a: ${titularNombre}` : (visita.tecnico_apoyo ? `Con Apoyo: ${visita.tecnico_apoyo}` : 'Técnico Solo')}\nEstado: ${estado}\n${actionHint}`}
     >
       {/* MODO COMPACTO: Cuando el técnico tiene visitas simultáneas/solapadas divididas en sub-carriles */}
       {isCompact ? (

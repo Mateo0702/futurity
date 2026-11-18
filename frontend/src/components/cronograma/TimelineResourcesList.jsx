@@ -125,14 +125,38 @@ export default function TimelineResourcesList({
               {/* Info del técnico */}
               <div style={{ overflow: 'hidden', flexGrow: 1 }}>
                 <div style={{
-                  fontWeight: 800,
-                  fontSize: '0.82rem',
-                  color: 'var(--text-main)',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  overflow: 'hidden'
                 }}>
-                  {t.nombre}
+                  <span style={{
+                    fontWeight: 800,
+                    fontSize: '0.82rem',
+                    color: 'var(--text-main)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>
+                    {t.nombre}
+                  </span>
+                  {t._esApoyoDeOtraArea && (
+                    <span
+                      title={`Técnico de ${t._areaOrigen || 'otra área'} apoyando hoy en ${activeArea}`}
+                      style={{
+                        background: 'rgba(139, 92, 246, 0.14)',
+                        color: '#7c3aed',
+                        fontSize: '0.62rem',
+                        fontWeight: 800,
+                        padding: '1px 5px',
+                        borderRadius: '5px',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0
+                      }}
+                    >
+                      🤝 {t._areaOrigen === 'INSTALACIONES' ? 'Inst.' : t._areaOrigen === 'SOPORTE' ? 'Sop.' : 'Apoyo'}
+                    </span>
+                  )}
                 </div>
 
                 <div style={{

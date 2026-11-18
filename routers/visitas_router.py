@@ -452,6 +452,11 @@ def reasignar_tecnicos(id_visita):
     conexion = get_db_connection()
     cursor = conexion.cursor()
     try:
+        cursor.execute("SELECT estado FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        row_est = cursor.fetchone()
+        if row_est and str(row_est[0] or '').upper() == 'FINALIZADA':
+            return jsonify({"status": "error", "message": "No se puede mover ni reasignar una visita que ya está FINALIZADA."}), 400
+
         campos = ["tecnico_principal = %s", "tecnico_apoyo = %s"]
         valores = [nuevo_principal, nuevo_apoyo]
 

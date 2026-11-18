@@ -79,20 +79,66 @@ export default function CronogramaTimeline({
 
   const isToday = fechaFiltro === getTodayLocal();
 
-  // Filtrar técnicos visibles según área activa
+  // Filtrar técnicos visibles según área activa + incluir dinámicamente técnicos de otra área que tengan visita asignada hoy
   const tecnicosVisibles = useMemo(() => {
-    return tecnicos.filter(t => {
-      if (!t.activo) return false;
-      if (t.nombre === 'NO TECNICO' || t.nombre === 'TECNOLOGIA') return false;
-      if (activeArea === 'INSTALACIONES') {
-        return t.area_trabajo === 'INSTALACIONES' || t.area_trabajo === 'MIXTO' || !t.area_trabajo;
+    const nombresConVisita = new Set();
+    const ignorados = new Set(['', 'NO TECNICO', 'SIN ASIGNAR', 'AUTO', 'TECNOLOGIA']);
+
+    localVisitas.forEach(v => {
+      const estado = (v.estado || 'PENDIENTE').toUpperCase();
+      if (estado === 'CANCELADA' || estado === 'SOLVENTADA_REMOTA') return;
+      const pref = (v.preferencia_horaria || '').trim().toUpperCase();
+      const isCoordinar = pref.includes('COORDINAR') || pref === 'FLEXIBLE';
+      const tp = (v.tecnico_principal || '').trim();
+      const ta = (v.tecnico_apoyo || '').trim();
+      if (!(estado === 'PENDIENTE' && isCoordinar)) {
+        if (!ignorados.has(tp.toUpperCase())) nombresConVisita.add(tp);
+        if (!ignorados.has(ta.toUpperCase())) nombresConVisita.add(ta);
       }
-      if (activeArea === 'SOPORTE') {
-        return t.area_trabajo === 'SOPORTE' || t.area_trabajo === 'MIXTO' || !t.area_trabajo;
-      }
-      return true;
     });
-  }, [tecnicos, activeArea]);
+
+    const delArea = [];
+    const apoyoOtraArea = [];
+    const yaIncluidos = new Set();
+
+    tecnicos.forEach(t => {
+      const nombre = (t.nombre || '').trim();
+      if (ignorados.has(nombre.toUpperCase())) return;
+
+      const perteneceAlArea =
+        (activeArea === 'INSTALACIONES' && (t.area_trabajo === 'INSTALACIONES' || t.area_trabajo === 'MIXTO' || !t.area_trabajo)) ||
+        (activeArea === 'SOPORTE' && (t.area_trabajo === 'SOPORTE' || t.area_trabajo === 'MIXTO' || !t.area_trabajo)) ||
+        (activeArea !== 'INSTALACIONES' && activeArea !== 'SOPORTE');
+
+      if (t.activo && perteneceAlArea) {
+        delArea.push({ ...t, _esApoyoDeOtraArea: false });
+        yaIncluidos.add(nombre);
+      } else if (nombresConVisita.has(nombre)) {
+        apoyoOtraArea.push({
+          ...t,
+          _esApoyoDeOtraArea: true,
+          _areaOrigen: t.area_trabajo || 'OTRA ÁREA'
+        });
+        yaIncluidos.add(nombre);
+      }
+    });
+
+    // Fallback por si un técnico tiene visita hoy pero no figuraba en el catálogo activo
+    nombresConVisita.forEach(nombre => {
+      if (!yaIncluidos.has(nombre)) {
+        apoyoOtraArea.push({
+          id_tecnico: `extra-${nombre}`,
+          nombre,
+          activo: 1,
+          placa_vehiculo: 'S/P',
+          _esApoyoDeOtraArea: true,
+          _areaOrigen: 'APOYO'
+        });
+      }
+    });
+
+    return [...delArea, ...apoyoOtraArea];
+  }, [tecnicos, activeArea, localVisitas]);
 
   // Agrupar visitas por técnico principal y calcular atrasos
   const { visitasPorTecnico, cantAtrasadas, cantSinAsignar } = useMemo(() => {
@@ -272,6 +318,14 @@ export default function CronogramaTimeline({
 
   // Manejador de Drop desde Timeline o Backlog con actualización optimista inmediata (0ms de retraso)
   const handleDropVisit = async (payload) => {
+    const visitaTarget = localVisitas.find(v => v.id_visita === payload.id_visita);
+    if (visitaTarget) {
+      const est = (visitaTarget.estado || '').toUpperCase();
+      if (est === 'FINALIZADA' || est === 'EN_SITIO' || est === 'EN_PROGRESO') {
+        return;
+      }
+    }
+
     // 1. Actualización optimista inmediata en la UI para respuesta instantánea y fluida
     setLocalVisitas(prev => prev.map(v => {
       if (v.id_visita === payload.id_visita) {
