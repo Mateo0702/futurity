@@ -3,6 +3,18 @@
  * y empaquetado inteligente en sub-carriles (multi-lane interval packing).
  */
 
+// Convierte hora real ("HH:MM:SS", "HH:MM", "YYYY-MM-DD HH:MM:SS") a minutos desde 00:00
+export function parseRealTimeToMinutes(timeStr) {
+  if (!timeStr) return null;
+  const s = String(timeStr).trim();
+  const match = s.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return h * 60 + m;
+}
+
 // Extrae minuto de inicio (0-1440), duración y porcentajes horizontal (leftPct, widthPct)
 export function computeVisitTimes(v, startHour = 7, endHour = 21) {
   const totalMinutes = (endHour - startHour) * 60;
@@ -70,23 +82,56 @@ export function computeVisitTimes(v, startHour = 7, endHour = 21) {
 
   if (endMin !== null && endMin > startMin) {
     durationMin = endMin - startMin;
+  } else {
+    endMin = startMin + durationMin;
   }
 
-  // Limitar duración para que no sobrepase el final operativo del timeline (19:00 = endHour * 60)
-  const maxDur = Math.max(30, endHour * 60 - startMin);
-  durationMin = Math.max(30, Math.min(durationMin, maxDur));
+  // 4. Si la visita ya está FINALIZADA y terminó antes de lo estimado, encoger al horario real
+  //    para liberar el hueco en el cronograma y evitar falsos solapamientos
+  let adjustedByFinish = false;
+  let realFinStr = null;
+  const estadoUpper = (v.estado || '').toUpperCase();
+  if (estadoUpper === 'FINALIZADA' && v.hora_fin_visita) {
+    const realFinMin = parseRealTimeToMinutes(v.hora_fin_visita);
+    const realIniMin = parseRealTimeToMinutes(v.hora_inicio_visita);
+    if (realFinMin !== null && realFinMin >= startHour * 60 && realFinMin <= endHour * 60) {
+      realFinStr = formatMinutesToTime(realFinMin);
+      if (realFinMin <= startMin && realIniMin !== null && realIniMin < realFinMin && realIniMin >= startHour * 60) {
+        // El técnico inició y terminó incluso antes del bloque originalmente estimado
+        startMin = realIniMin;
+        endMin = Math.max(startMin + 25, realFinMin);
+        durationMin = endMin - startMin;
+        adjustedByFinish = true;
+      } else if (realFinMin < endMin) {
+        // Terminó antes de la hora estimada de cierre -> reducir bloque
+        endMin = Math.max(startMin + 25, realFinMin);
+        durationMin = endMin - startMin;
+        adjustedByFinish = true;
+      }
+    }
+  }
+
+  // Limitar duración para que no sobrepase el final operativo del timeline (endHour * 60)
+  const minDur = adjustedByFinish ? 25 : 30;
+  const maxDur = Math.max(minDur, endHour * 60 - startMin);
+  durationMin = Math.max(minDur, Math.min(durationMin, maxDur));
   const calculatedEndMin = startMin + durationMin;
 
   const startOffset = Math.max(0, startMin - startHour * 60);
   const leftPct = Math.max(0, Math.min((startOffset / totalMinutes) * 100, 96));
-  const widthPct = Math.max(4, Math.min((durationMin / totalMinutes) * 100, 100 - leftPct));
+  const widthPct = Math.max(3.5, Math.min((durationMin / totalMinutes) * 100, 100 - leftPct));
 
   return {
     startMin,
     endMin: calculatedEndMin,
     durationMin,
     leftPct,
-    widthPct
+    widthPct,
+    adjustedByFinish,
+    realFinStr,
+    displayTimeStr: adjustedByFinish
+      ? `✓ ${formatMinutesToTime(startMin)} - ${realFinStr}`
+      : (v.preferencia_horaria || `${formatMinutesToTime(startMin)} - ${formatMinutesToTime(calculatedEndMin)}`)
   };
 }
 
@@ -94,13 +139,16 @@ export function computeVisitTimes(v, startHour = 7, endHour = 21) {
  * Organiza las visitas de un técnico en sub-carriles para que NUNCA se monten una sobre otra.
  * Detecta si hay solapamientos reales y asigna índices de carril (laneIndex: 0, 1, 2...).
  */
-export function computeTechLanes(visitas = [], startHour = 7, endHour = 21) {
+export function computeTechLanes(visitas = [], startHour = 7, endHour = 21, customLunch = null) {
   if (!visitas || visitas.length === 0) {
+    const lunchOnly = computeLunchSlot([], startHour, endHour, customLunch);
     return {
       visitasConLayout: [],
       maxLanes: 1,
       rowHeight: 94,
-      conflictCount: 0
+      conflictCount: 0,
+      lunchSlot: lunchOnly,
+      travelSegments: []
     };
   }
 
@@ -166,13 +214,14 @@ export function computeTechLanes(visitas = [], startHour = 7, endHour = 21) {
     maxLanes
   }));
 
+  const computedLunch = computeLunchSlot(list, startHour, endHour, customLunch);
   return {
     visitasConLayout,
     maxLanes,
     rowHeight,
     conflictCount,
-    lunchSlot: computeLunchSlot(list, startHour, endHour),
-    travelSegments: computeTravelSegments(list, computeLunchSlot(list, startHour, endHour), startHour, endHour)
+    lunchSlot: computedLunch,
+    travelSegments: computeTravelSegments(list, computedLunch, startHour, endHour)
   };
 }
 
@@ -183,44 +232,49 @@ export function formatMinutesToTime(totalMin) {
 }
 
 /**
- * Calcula el bloque dinámico de almuerzo (60 min) para un técnico.
- * Reglas de negocio:
- * 1. Si el técnico entra al mediodía o tarde (primera visita >= 12:00, ej: Milton Bermeo),
- *    viene almorzado -> Retorna null (sin bloque de almuerzo a mediodía).
- * 2. Si el técnico trabaja en la mañana (< 12:00):
- *    Su almuerzo de 1 hora inicia cuando termina su última visita matutina (la visita que termina entre 11:30 y 14:00).
- *    Si no hay visitas entre 11:30 y 14:00, se fija después de su última visita de la mañana o por defecto a las 13:00.
+ * Calcula el bloque dinámico o personalizado de almuerzo (movible) para un técnico.
  */
-export function computeLunchSlot(visitas = [], startHour = 7, endHour = 21) {
-  if (!visitas || visitas.length === 0) return null;
-
-  const items = visitas.map(v => computeVisitTimes(v, startHour, endHour));
+export function computeLunchSlot(visitas = [], startHour = 7, endHour = 21, customLunch = null) {
+  const items = (visitas || []).map(v => ({ ...v, ...computeVisitTimes(v, startHour, endHour) }));
   items.sort((a, b) => a.startMin - b.startMin);
 
-  const earliestStart = items[0].startMin;
-  // Si la primera visita del día inicia a las 12:00 (720 min) o más tarde: viene almorzado
-  if (earliestStart >= 12 * 60) {
-    return null;
+  let lunchStartMin = null;
+  let lunchEndMin = null;
+  let isCustom = false;
+
+  if (customLunch) {
+    if (customLunch.oculto) {
+      return null;
+    }
+    lunchStartMin = customLunch.inicio_min;
+    lunchEndMin = customLunch.fin_min || (lunchStartMin + 60);
+    isCustom = true;
+  } else {
+    if (!items.length) return null;
+
+    const earliestStart = items[0].startMin;
+    // Si la primera visita del día inicia a las 12:00 (720 min) o más tarde: viene almorzado
+    if (earliestStart >= 12 * 60) {
+      return null;
+    }
+
+    // Buscar la última visita de la mañana (que inicie antes de las 14:00)
+    const morningVisits = items.filter(it => it.startMin < 14 * 60);
+    if (morningVisits.length === 0) {
+      return null;
+    }
+
+    const lastMorning = morningVisits[morningVisits.length - 1];
+    lunchStartMin = lastMorning.endMin;
+
+    // Ajustes de sentido común: si la visita terminó antes de las 11:30, almuerzo estándar 12:30-13:30
+    if (lunchStartMin < 11 * 60 + 30) {
+      lunchStartMin = 12 * 60 + 30;
+    }
+    lunchEndMin = lunchStartMin + 60;
   }
 
-  // Buscar la última visita de la mañana (que inicie antes de las 14:00)
-  const morningVisits = items.filter(it => it.startMin < 14 * 60);
-  if (morningVisits.length === 0) {
-    return null;
-  }
-
-  const lastMorning = morningVisits[morningVisits.length - 1];
-  let lunchStartMin = lastMorning.endMin;
-
-  // Ajustes de sentido común: si la visita terminó antes de las 11:30 y la siguiente es en la tarde,
-  // el almuerzo se sitúa en un horario estándar de 12:30 a 13:30.
-  if (lunchStartMin < 11 * 60 + 30) {
-    lunchStartMin = 12 * 60 + 30;
-  }
-
-  const lunchDuration = 60; // 1 hora completa
-  const lunchEndMin = lunchStartMin + lunchDuration;
-
+  const lunchDuration = Math.max(30, lunchEndMin - lunchStartMin);
   const totalMinutes = (endHour - startHour) * 60;
   const startOffset = Math.max(0, lunchStartMin - startHour * 60);
   const leftPct = Math.max(0, Math.min((startOffset / totalMinutes) * 100, 96));
@@ -235,6 +289,7 @@ export function computeLunchSlot(visitas = [], startHour = 7, endHour = 21) {
     durationMin: lunchDuration,
     leftPct,
     widthPct,
+    isCustom,
     horaInicioStr: formatMinutesToTime(lunchStartMin),
     horaFinStr: formatMinutesToTime(lunchEndMin),
     horaStr: `${formatMinutesToTime(lunchStartMin)} - ${formatMinutesToTime(lunchEndMin)}`,

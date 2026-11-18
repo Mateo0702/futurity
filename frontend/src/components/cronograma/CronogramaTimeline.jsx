@@ -7,7 +7,7 @@ import UnassignedBacklogDrawer from './UnassignedBacklogDrawer';
 import ModalAsignacionDoble from './ModalAsignacionDoble';
 import FichaVisitaDrawer from './FichaVisitaDrawer';
 import { calculateOverdueMinutes } from './telegramAlertHelper';
-import { computeTechLanes } from './timelineLayoutHelper';
+import { computeTechLanes, computeVisitTimes, formatMinutesToTime } from './timelineLayoutHelper';
 
 export default function CronogramaTimeline({
   visitas = [],
@@ -30,11 +30,37 @@ export default function CronogramaTimeline({
   const [selectedVisitForModal, setSelectedVisitForModal] = useState(null);
   const [selectedVisitForFicha, setSelectedVisitForFicha] = useState(null);
   const [dragOverTecnico, setDragOverTecnico] = useState(null);
+  const [customLunches, setCustomLunches] = useState({});
 
   // Mantener localVisitas sincronizado cuando se recargan las visitas del servidor
   useEffect(() => {
     setLocalVisitas(visitas);
+    setSelectedVisitForFicha(prev => {
+      if (!prev) return null;
+      const updated = visitas.find(v => v.id_visita === prev.id_visita);
+      return updated ? { ...prev, ...updated } : prev;
+    });
   }, [visitas]);
+
+  // Cargar almuerzos personalizados (movibles) del día seleccionado
+  useEffect(() => {
+    let active = true;
+    const fetchAlmuerzos = async () => {
+      try {
+        const res = await fetch(`/api/cronograma/almuerzos?fecha=${encodeURIComponent(fechaFiltro)}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (active && data.status === 'success') {
+          setCustomLunches(data.almuerzos || {});
+        }
+      } catch (e) {
+        console.warn("No se pudieron cargar almuerzos personalizados:", e);
+      }
+    };
+    if (fechaFiltro) fetchAlmuerzos();
+    return () => { active = false; };
+  }, [fechaFiltro, token]);
 
   // Reloj en vivo que se actualiza cada 30 segundos
   useEffect(() => {
@@ -94,7 +120,19 @@ export default function CronogramaTimeline({
         sinAsignarCount++;
       }
 
-      const overdueMin = isToday && estado === 'PENDIENTE' ? calculateOverdueMinutes(v, now) : 0;
+      let overdueMin = 0;
+      if (isToday && !isUnassigned) {
+        const nowMin = now.getHours() * 60 + now.getMinutes();
+        if (estado === 'PENDIENTE' || estado === 'ASIGNADA') {
+          const diffIni = calculateOverdueMinutes(v, now);
+          if (diffIni >= 5) overdueMin = diffIni;
+        } else if (estado === 'EN_RUTA' || estado === 'EN_SITIO' || estado === 'EN_PROGRESO') {
+          const tCalc = computeVisitTimes(v, 7, 21);
+          if (tCalc.endMin && nowMin >= tCalc.endMin + 5) {
+            overdueMin = nowMin - tCalc.endMin;
+          }
+        }
+      }
       const isOverdue = overdueMin > 0;
       if (isOverdue) atrasadasCount++;
 
@@ -150,10 +188,87 @@ export default function CronogramaTimeline({
     const layout = {};
     tecnicosVisibles.forEach(t => {
       const list = visitasPorTecnico[t.nombre] || [];
-      layout[t.nombre] = computeTechLanes(list, 7, 21);
+      const cLunch = customLunches[t.nombre] || null;
+      layout[t.nombre] = computeTechLanes(list, 7, 21, cLunch);
     });
     return layout;
-  }, [visitasPorTecnico, tecnicosVisibles]);
+  }, [visitasPorTecnico, tecnicosVisibles, customLunches]);
+
+  // Guardar / mover / ocultar bloque de almuerzo de un técnico (optimista + BD)
+  const handleSaveLunch = async (techNombre, inicioMin, finMin, oculto = false) => {
+    const nuevoAlmuerzo = { inicio_min: inicioMin, fin_min: finMin, oculto: !!oculto };
+    setCustomLunches(prev => ({
+      ...prev,
+      [techNombre]: nuevoAlmuerzo
+    }));
+
+    try {
+      const res = await fetch('/api/cronograma/almuerzos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          fecha: fechaFiltro,
+          tecnico: techNombre,
+          inicio_min: inicioMin,
+          fin_min: finMin,
+          oculto: oculto ? 1 : 0
+        })
+      });
+      const data = await res.json();
+      if (data.status !== 'success') {
+        console.warn("Error guardando almuerzo:", data.message);
+      }
+    } catch (e) {
+      console.error("Error de red al guardar almuerzo:", e);
+    }
+  };
+
+  // Extender o reducir duración de una visita arrastrando el borde derecho (Resize)
+  const handleResizeVisit = async (visitaObj, newEndMin) => {
+    const startMin = visitaObj.startMin;
+    const clampedEnd = Math.max(startMin + 30, Math.min(newEndMin, 21 * 60));
+    const nuevaPref = `${formatMinutesToTime(startMin)} - ${formatMinutesToTime(clampedEnd)}`;
+
+    // Optimistic update
+    setLocalVisitas(prev => prev.map(v => {
+      if (v.id_visita === visitaObj.id_visita) {
+        return {
+          ...v,
+          preferencia_horaria: nuevaPref,
+          ventana_inicio_min: startMin,
+          ventana_fin_min: clampedEnd
+        };
+      }
+      return v;
+    }));
+
+    try {
+      const res = await fetch(`/api/visitas/${visitaObj.id_visita}/extender_horario`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          nuevo_fin_min: clampedEnd,
+          recorrer_siguientes: false
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        onRefresh();
+      } else {
+        alert("Error al ajustar duración: " + (data.message || ''));
+        onRefresh();
+      }
+    } catch (e) {
+      console.error("Error al redimensionar visita:", e);
+      onRefresh();
+    }
+  };
 
   // Manejador de Drop desde Timeline o Backlog con actualización optimista inmediata (0ms de retraso)
   const handleDropVisit = async (payload) => {
@@ -286,6 +401,7 @@ export default function CronogramaTimeline({
           techLayoutMap={techLayoutMap}
           dragOverTecnico={dragOverTecnico}
           activeArea={activeArea}
+          onAddLunch={(techNombre) => handleSaveLunch(techNombre, 13 * 60, 14 * 60, false)}
         />
 
         {/* Eje Horizontal: Canvas con Horas y Visitas */}
@@ -300,6 +416,8 @@ export default function CronogramaTimeline({
           dragOverTecnico={dragOverTecnico}
           setDragOverTecnico={setDragOverTecnico}
           onDropVisit={handleDropVisit}
+          onSaveLunch={handleSaveLunch}
+          onResizeVisit={handleResizeVisit}
           onOpenEdit={(v) => setSelectedVisitForFicha(v)}
         />
       </div>

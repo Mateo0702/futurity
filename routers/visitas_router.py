@@ -582,3 +582,264 @@ def crear_cambio_fo():
         cursor.close()
         conexion.close()
     return redirect(url_for('dashboard'))
+
+
+# =============================================================================
+# CRONOGRAMA GANTT: ALMUERZOS MOVIBLES Y EXTENSIÓN DE DURACIÓN EN PROGRESO
+# =============================================================================
+
+def _asegurar_tabla_almuerzos(cursor):
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cronograma_almuerzos (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            fecha DATE NOT NULL,
+            tecnico VARCHAR(120) NOT NULL,
+            inicio_min INT NOT NULL DEFAULT 780,
+            fin_min INT NOT NULL DEFAULT 840,
+            oculto TINYINT(1) NOT NULL DEFAULT 0,
+            actualizado_en DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_fecha_tecnico (fecha, tecnico)
+        )
+    """)
+
+def _fmt_min_hhmm(minutos):
+    h = int(minutos) // 60
+    m = int(minutos) % 60
+    return f"{h:02d}:{m:02d}"
+
+def _parsear_rango_min_visita(v):
+    import re
+    pref = v.get('preferencia_horaria') or ''
+    raw = str(pref).lower().strip()
+    start_min, end_min = None, None
+    has_range = False
+
+    match = re.search(r'(\d{1,2})(?:[:hH](\d{2}))?\s*(am|pm)?\s*(?:-|a|hasta|\/)\s*(\d{1,2})(?:[:hH](\d{2}))?\s*(am|pm)?', raw)
+    if match:
+        h1 = int(match.group(1))
+        m1 = int(match.group(2)) if match.group(2) else 0
+        mod1 = (match.group(3) or '').lower()
+        h2 = int(match.group(4))
+        m2 = int(match.group(5)) if match.group(5) else 0
+        mod2 = (match.group(6) or '').lower()
+        if (mod1 == 'pm' or 'tarde' in raw) and h1 < 12 and not raw.startswith('12'):
+            h1 += 12
+        if (mod2 == 'pm' or h2 < h1 or (1 <= h2 <= 7 and h1 >= 8)) and h2 < 12:
+            h2 += 12
+        start_min = h1 * 60 + m1
+        end_min = h2 * 60 + m2
+        has_range = True
+    else:
+        single = re.search(r'(\d{1,2})(?:[:hH](\d{2}))?', raw)
+        if single:
+            h = int(single.group(1))
+            m = int(single.group(2)) if single.group(2) else 0
+            if ('pm' in raw or 'tarde' in raw) and h < 12:
+                h += 12
+            start_min = h * 60 + m
+        elif 'mañana' in raw or 'manana' in raw:
+            start_min, end_min = 9 * 60, 12 * 60
+            has_range = True
+        elif 'tarde' in raw:
+            start_min, end_min = 14 * 60, 18 * 60
+            has_range = True
+
+    if not has_range and v.get('ventana_inicio_min') and int(v['ventana_inicio_min']) > 0:
+        start_min = int(v['ventana_inicio_min'])
+        if v.get('ventana_fin_min') and int(v['ventana_fin_min']) > start_min:
+            end_min = int(v['ventana_fin_min'])
+
+    if start_min is None:
+        start_min = 8 * 60 + 30
+    if end_min is None or end_min <= start_min:
+        end_min = start_min + 90
+    return start_min, end_min
+
+@visitas_bp.route('/api/cronograma/almuerzos', methods=['GET'])
+def obtener_almuerzos_cronograma():
+    usuario = obtener_usuario_visitas()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+
+    fecha = request.args.get('fecha') or date.today().isoformat()
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de BD"}), 500
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        _asegurar_tabla_almuerzos(cursor)
+        cursor.execute("""
+            SELECT tecnico, inicio_min, fin_min, oculto
+            FROM cronograma_almuerzos
+            WHERE fecha = %s
+        """, (fecha,))
+        rows = cursor.fetchall()
+        almuerzos = {}
+        for r in rows:
+            almuerzos[r['tecnico']] = {
+                "inicio_min": int(r['inicio_min']),
+                "fin_min": int(r['fin_min']),
+                "oculto": bool(r['oculto'])
+            }
+        return jsonify({"status": "success", "almuerzos": almuerzos})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+@visitas_bp.route('/api/cronograma/almuerzos', methods=['POST'])
+def guardar_almuerzo_cronograma():
+    usuario = obtener_usuario_visitas()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
+        return jsonify({"status": "error", "message": "Sin permiso"}), 403
+
+    data = request.get_json(silent=True) or request.form
+    fecha = (data.get('fecha') or date.today().isoformat()).strip()
+    tecnico = (data.get('tecnico') or '').strip()
+    if not tecnico:
+        return jsonify({"status": "error", "message": "Falta el nombre del técnico"}), 400
+
+    oculto = 1 if str(data.get('oculto', '0')).lower() in ('1', 'true', 'yes', 'si') else 0
+    inicio_min = int(data.get('inicio_min') or 780)
+    fin_min = int(data.get('fin_min') or (inicio_min + 60))
+    if fin_min <= inicio_min:
+        fin_min = inicio_min + 60
+    inicio_min = max(7 * 60, min(inicio_min, 20 * 60))
+    fin_min = max(inicio_min + 30, min(fin_min, 21 * 60))
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de BD"}), 500
+    cursor = conexion.cursor()
+    try:
+        _asegurar_tabla_almuerzos(cursor)
+        cursor.execute("""
+            INSERT INTO cronograma_almuerzos (fecha, tecnico, inicio_min, fin_min, oculto)
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                inicio_min = VALUES(inicio_min),
+                fin_min = VALUES(fin_min),
+                oculto = VALUES(oculto)
+        """, (fecha, tecnico, inicio_min, fin_min, oculto))
+        conexion.commit()
+        return jsonify({
+            "status": "success",
+            "almuerzo": {
+                "fecha": fecha,
+                "tecnico": tecnico,
+                "inicio_min": inicio_min,
+                "fin_min": fin_min,
+                "oculto": bool(oculto)
+            }
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+
+@visitas_bp.route('/api/visitas/<int:id_visita>/extender_horario', methods=['POST'])
+def extender_horario_visita(id_visita):
+    usuario = obtener_usuario_visitas()
+    if not usuario:
+        return jsonify({"status": "error", "message": "No autorizado"}), 401
+    if usuario.get('user_role') not in ['ADMIN', 'ASESOR', 'CALIDAD', 'ATC', 'AUDITOR', 'ATC_AUDITOR', 'SUPERVISOR_ATC']:
+        return jsonify({"status": "error", "message": "Sin permiso"}), 403
+
+    data = request.get_json(silent=True) or request.form
+    minutos_extra = data.get('minutos_extra')
+    nuevo_fin_min_param = data.get('nuevo_fin_min')
+    recorrer = str(data.get('recorrer_siguientes', '0')).lower() in ('1', 'true', 'yes', 'si')
+
+    conexion = get_db_connection()
+    if not conexion:
+        return jsonify({"status": "error", "message": "Error de BD"}), 500
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT id_visita, tecnico_principal, fecha_programada, preferencia_horaria,
+                   ventana_inicio_min, ventana_fin_min, estado
+            FROM visitas_tecnicas
+            WHERE id_visita = %s
+        """, (id_visita,))
+        visita = cursor.fetchone()
+        if not visita:
+            return jsonify({"status": "error", "message": "Visita no encontrada"}), 404
+
+        start_min, old_end_min = _parsear_rango_min_visita(visita)
+
+        if nuevo_fin_min_param is not None and str(nuevo_fin_min_param).strip() != '':
+            new_end_min = int(float(nuevo_fin_min_param))
+        elif minutos_extra is not None and str(minutos_extra).strip() != '':
+            new_end_min = old_end_min + int(float(minutos_extra))
+        else:
+            return jsonify({"status": "error", "message": "Indica minutos_extra o nuevo_fin_min"}), 400
+
+        # Redondear a múltiplos de 5/15 min y limitar dentro del cronograma (mín 30 min, máx 21:00)
+        new_end_min = max(start_min + 30, min(new_end_min, 21 * 60))
+        nueva_pref = f"{_fmt_min_hhmm(start_min)} - {_fmt_min_hhmm(new_end_min)}"
+
+        cursor.execute("""
+            UPDATE visitas_tecnicas
+            SET preferencia_horaria = %s,
+                ventana_inicio_min = %s,
+                ventana_fin_min = %s
+            WHERE id_visita = %s
+        """, (nueva_pref, start_min, new_end_min, id_visita))
+
+        recorridas = 0
+        if recorrer and new_end_min > old_end_min and visita.get('tecnico_principal'):
+            cursor.execute("""
+                SELECT id_visita, preferencia_horaria, ventana_inicio_min, ventana_fin_min, estado
+                FROM visitas_tecnicas
+                WHERE fecha_programada = %s
+                  AND tecnico_principal = %s
+                  AND id_visita != %s
+                  AND estado IN ('PENDIENTE', 'ASIGNADA')
+            """, (visita['fecha_programada'], visita['tecnico_principal'], id_visita))
+            otras = cursor.fetchall()
+            posteriores = []
+            for o in otras:
+                o_start, o_end = _parsear_rango_min_visita(o)
+                if o_start >= start_min:
+                    posteriores.append((o_start, o_end, o))
+            posteriores.sort(key=lambda x: x[0])
+
+            prev_end = new_end_min
+            for o_start, o_end, o in posteriores:
+                if o_start < prev_end:
+                    dur = max(30, o_end - o_start)
+                    shifted_start = prev_end
+                    shifted_end = min(21 * 60, shifted_start + dur)
+                    shifted_pref = f"{_fmt_min_hhmm(shifted_start)} - {_fmt_min_hhmm(shifted_end)}"
+                    cursor.execute("""
+                        UPDATE visitas_tecnicas
+                        SET preferencia_horaria = %s,
+                            ventana_inicio_min = %s,
+                            ventana_fin_min = %s
+                        WHERE id_visita = %s
+                    """, (shifted_pref, shifted_start, shifted_end, o['id_visita']))
+                    prev_end = shifted_end
+                    recorridas += 1
+                else:
+                    prev_end = o_end
+
+        conexion.commit()
+        return jsonify({
+            "status": "success",
+            "preferencia_horaria": nueva_pref,
+            "ventana_inicio_min": start_min,
+            "ventana_fin_min": new_end_min,
+            "recorridas": recorridas,
+            "message": f"Horario actualizado a {nueva_pref}" + (f" ({recorridas} visita(s) recorrida(s))" if recorridas else "")
+        })
+    except Exception as e:
+        conexion.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conexion.close()
+

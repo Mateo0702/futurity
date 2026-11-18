@@ -14,6 +14,8 @@ export default function TimelineGrid({
   dragOverTecnico,
   setDragOverTecnico,
   onDropVisit,
+  onSaveLunch,
+  onResizeVisit,
   onOpenEdit
 }) {
   const [dragPreview, setDragPreview] = useState(null);
@@ -31,19 +33,19 @@ export default function TimelineGrid({
   const handleDragOver = (e, techNombre) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    if (dragOverTecnico !== techNombre) {
-      setDragOverTecnico(techNombre);
+
+    const dragData = window.__cronoDragData || {};
+    const targetTech = dragData.type === 'LUNCH' ? (dragData.techNombre || techNombre) : techNombre;
+
+    if (dragOverTecnico !== targetTech) {
+      setDragOverTecnico(targetTech);
     }
 
     const rect = e.currentTarget.getBoundingClientRect();
     if (!rect.width) return;
 
-    let grabOffset = 0;
-    let cardDuration = 90;
-    if (window.__cronoDragData) {
-      grabOffset = window.__cronoDragData.grabOffsetX || 0;
-      cardDuration = window.__cronoDragData.durationMin || 90;
-    }
+    const grabOffset = dragData.grabOffsetX || 0;
+    const cardDuration = dragData.durationMin || (dragData.type === 'LUNCH' ? 60 : 90);
 
     const effectiveX = Math.max(0, e.clientX - rect.left - grabOffset);
     const pct = Math.max(0, Math.min(effectiveX / rect.width, 1));
@@ -57,13 +59,13 @@ export default function TimelineGrid({
     const m1 = snappedStartMin % 60;
     const h2 = Math.floor(snappedEndMin / 60);
     const m2 = snappedEndMin % 60;
-    const horaStr = `${String(h1).padStart(2, '0')}:${String(m1).padStart(2, '0')} - ${String(h2).padStart(2, '0')}:${String(m2).padStart(2, '0')}`;
+    const horaStr = `${dragData.type === 'LUNCH' ? '🍽️ ' : ''}${String(h1).padStart(2, '0')}:${String(m1).padStart(2, '0')} - ${String(h2).padStart(2, '0')}:${String(m2).padStart(2, '0')}`;
 
     const previewLeftPct = ((snappedStartMin - startHour * 60) / totalMinutes) * 100;
     const previewWidthPct = ((snappedEndMin - snappedStartMin) / totalMinutes) * 100;
 
     setDragPreview({
-      techNombre,
+      techNombre: targetTech,
       snappedStartMin,
       snappedEndMin,
       leftPct: previewLeftPct,
@@ -101,9 +103,18 @@ export default function TimelineGrid({
       const pct = Math.max(0, Math.min(effectiveX / rect.width, 1));
 
       const rawMinutes = startHour * 60 + pct * totalMinutes;
-      const durationMin = data.durationMin || 90;
+      const durationMin = data.durationMin || (data.type === 'LUNCH' ? 60 : 90);
       const snappedStartMin = Math.max(startHour * 60, Math.min(Math.round(rawMinutes / 15) * 15, endHour * 60 - 30));
       const snappedEndMin = Math.min(endHour * 60, snappedStartMin + durationMin);
+
+      // Si es un bloque de Almuerzo movible
+      if (data.type === 'LUNCH') {
+        const targetTech = data.techNombre || techNombre;
+        if (onSaveLunch) {
+          onSaveLunch(targetTech, snappedStartMin, snappedEndMin, false);
+        }
+        return;
+      }
 
       const h1 = Math.floor(snappedStartMin / 60);
       const m1 = snappedStartMin % 60;
@@ -209,7 +220,7 @@ export default function TimelineGrid({
               </div>
             ))}
 
-            {/* Bloque Dinámico de Almuerzo (1 hora tras última visita matutina) */}
+            {/* Bloque Movible de Almuerzo (arrastrable como cualquier visita) */}
             {lunchSlot && (
               <div
                 className={`crono-lunch-block ${isEndingSoon ? 'is-ending-soon' : ''} ${isCurrentlyInLunch ? 'is-in-lunch' : ''}`}
@@ -217,24 +228,72 @@ export default function TimelineGrid({
                   left: `calc(${lunchSlot.leftPct}% + 3px)`,
                   width: `calc(${lunchSlot.widthPct}% - 6px)`,
                   top: '8px',
-                  bottom: '8px'
+                  bottom: '8px',
+                  cursor: 'grab'
                 }}
-                title={`🍽️ Horario de Almuerzo del Técnico (1 hora)\nFranja: ${lunchSlot.horaStr}\n${isEndingSoon ? '⚠️ FINALIZA EN MENOS DE 5 MINUTOS' : isCurrentlyInLunch ? 'En descanso de almuerzo' : 'Programado'}\n${lunchSlot.nextVisit ? `Siguiente visita programada: #${lunchSlot.nextVisit.contrato || lunchSlot.nextVisit.id_visita} (${lunchSlot.nextVisit.preferencia_horaria || ''})` : ''}`}
+                draggable
+                onDragStart={(e) => {
+                  const cardRect = e.currentTarget.getBoundingClientRect();
+                  const grabOffsetX = Math.max(0, e.clientX - cardRect.left);
+                  const payload = {
+                    type: 'LUNCH',
+                    techNombre: t.nombre,
+                    durationMin: lunchSlot.durationMin || 60,
+                    grabOffsetX
+                  };
+                  window.__cronoDragData = payload;
+                  e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragEnd={() => {
+                  window.__cronoDragData = null;
+                }}
+                title={`🍽️ Bloque Movible de Almuerzo (${lunchSlot.horaStr})\nArrastra horizontalmente para cambiar el horario del técnico.\n${isEndingSoon ? '⚠️ FINALIZA EN MENOS DE 5 MINUTOS' : isCurrentlyInLunch ? 'En descanso de almuerzo' : 'Programado'}${lunchSlot.nextVisit ? `\nSiguiente visita: #${lunchSlot.nextVisit.contrato || lunchSlot.nextVisit.id_visita}` : ''}`}
               >
                 <div className="crono-lunch-inner">
                   <div className="crono-lunch-header">
-                    <span style={{ fontSize: '0.95rem' }}>🍽️</span>
-                    <strong className="crono-lunch-title">ALMUERZO</strong>
-                    {isEndingSoon && (
-                      <span className="crono-lunch-alert-pill">
-                        <i className="fa-solid fa-bell fa-shake"></i> Faltan 5m
-                      </span>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden' }}>
+                      <span style={{ fontSize: '0.9rem' }}>🍽️</span>
+                      <strong className="crono-lunch-title">ALMUERZO</strong>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {isEndingSoon && (
+                        <span className="crono-lunch-alert-pill">
+                          <i className="fa-solid fa-bell fa-shake"></i> 5m
+                        </span>
+                      )}
+                      {onSaveLunch && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSaveLunch(t.nombre, lunchSlot.startMin, lunchSlot.endMin, true);
+                          }}
+                          title="Quitar bloque de almuerzo (ej. técnico entró almorzado)"
+                          style={{
+                            background: 'rgba(148, 163, 184, 0.22)',
+                            border: 'none',
+                            borderRadius: '4px',
+                            width: '18px',
+                            height: '18px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#475569',
+                            fontSize: '0.68rem',
+                            cursor: 'pointer',
+                            padding: 0
+                          }}
+                        >
+                          <i className="fa-solid fa-xmark"></i>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="crono-lunch-footer">
                     <span className="crono-lunch-hours">{lunchSlot.horaStr}</span>
-                    <span className="crono-lunch-duration">1 hora</span>
+                    <span className="crono-lunch-duration">{lunchSlot.durationMin}m</span>
                   </div>
                 </div>
               </div>
@@ -250,6 +309,9 @@ export default function TimelineGrid({
                   widthPct={v.widthPct}
                   isToday={isToday}
                   now={now}
+                  startHour={startHour}
+                  endHour={endHour}
+                  onResizeVisit={onResizeVisit}
                   onOpenEdit={onOpenEdit}
                 />
               );

@@ -907,3 +907,45 @@
   white-space: nowrap;
 }
 
+/* Tirador derecho para extender / acortar duración en progreso */
+.crono-resize-handle {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  right: 0;
+  width: 9px;
+  cursor: ew-resize;
+  border-radius: 0 8px 8px 0;
+  z-index: 15;
+  transition: background 0.15s ease;
+}
+
+.crono-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  background: rgba(100, 116, 139, 0.28);
+  transition: background 0.15s ease, height 0.15s ease;
+}
+
+.crono-visit-card:hover .crono-resize-handle::after,
+.crono-resize-handle:hover::after {
+  background: #4f46e5;
+  height: 24px;
+}
+
+.crono-resize-handle:hover {
+  background: rgba(79, 70, 229, 0.12);
+}
+
+.crono-visit-card.is-resizing {
+  box-shadow: 0 0 0 2px #4f46e5, 0 8px 20px rgba(79, 70, 229, 0.25) !important;
+  cursor: ew-resize !important;
+}
+
+

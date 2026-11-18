@@ -33,6 +33,10 @@ export default function FichaVisitaDrawer({
   const [foTecnico, setFoTecnico] = useState('NO TECNICO');
   const [foObs, setFoObs] = useState('');
 
+  // Extensión rápida de duración (incluso en progreso)
+  const [recorrerSiguientes, setRecorrerSiguientes] = useState(true);
+  const [extendingDuration, setExtendingDuration] = useState(false);
+
   // Helpers de fechas (mañana por defecto)
   const getTomorrowStr = () => {
     const d = new Date();
@@ -115,6 +119,38 @@ export default function FichaVisitaDrawer({
       `Por favor, asegúrese de que alguien mayor de edad se encuentre en el domicilio. ¡Gracias!`;
 
     window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
+  // Extender o reducir duración de la visita (útil incluso cuando ya está EN_SITIO / EN_PROGRESO)
+  const handleExtendDuration = async (minutosExtra) => {
+    if (!visita || extendingDuration) return;
+    setExtendingDuration(true);
+    setActionFeedback(null);
+    try {
+      const res = await fetch(`/api/visitas/${visita.id_visita}/extender_horario`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          minutos_extra: minutosExtra,
+          recorrer_siguientes: minutosExtra > 0 ? recorrerSiguientes : false
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        setActionFeedback({ type: 'success', message: data.message || `Horario actualizado a ${data.preferencia_horaria}` });
+        if (onRefresh) onRefresh();
+      } else {
+        setActionFeedback({ type: 'error', message: data.message || 'No se pudo extender el horario.' });
+      }
+    } catch (err) {
+      console.error("Error al extender horario:", err);
+      setActionFeedback({ type: 'error', message: 'Error de conexión al extender el horario.' });
+    } finally {
+      setExtendingDuration(false);
+    }
   };
 
   // 1. Ejecutar Reagendamiento (Asesor)
@@ -932,11 +968,60 @@ export default function FichaVisitaDrawer({
                   {visita.tecnico_apoyo || 'Ninguno (Solo)'}
                 </strong>
               </div>
-              <div style={{ gridColumn: 'span 2', paddingTop: '4px', borderTop: '1px dashed #e2e8f0' }}>
+              <div style={{ gridColumn: 'span 2', paddingTop: '6px', borderTop: '1px dashed #e2e8f0' }}>
                 <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--sidebar-text)' }}>Horario Estimado:</span>
                 <strong style={{ color: '#d97706', fontSize: '0.88rem' }}>
                   ⏰ {visita.preferencia_horaria || 'Flexible en el transcurso del día'}
                 </strong>
+                {visita.estado === 'FINALIZADA' && visita.hora_fin_visita && (
+                  <div style={{ fontSize: '0.74rem', color: '#059669', fontWeight: 700, marginTop: '3px' }}>
+                    ✅ Cierre real: {String(visita.hora_inicio_visita || '').slice(0, 5) ? `${String(visita.hora_inicio_visita).slice(0, 5)} - ` : ''}{String(visita.hora_fin_visita).slice(0, 5)}
+                  </div>
+                )}
+
+                {visita.estado !== 'FINALIZADA' && visita.estado !== 'CANCELADA' && (
+                  <div style={{ marginTop: '8px', padding: '8px 10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                    <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#475569', marginBottom: '6px' }}>
+                      <i className="fa-solid fa-hourglass-half" style={{ marginRight: '5px', color: '#4f46e5' }}></i>
+                      Ajustar duración (incluso en progreso):
+                    </span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
+                      {[
+                        { label: '-15m', min: -15, bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
+                        { label: '+15 min', min: 15, bg: '#eef2ff', color: '#4338ca', border: '#c7d2fe' },
+                        { label: '+30 min', min: 30, bg: '#eef2ff', color: '#4338ca', border: '#c7d2fe' },
+                        { label: '+1 hora', min: 60, bg: '#e0e7ff', color: '#3730a3', border: '#a5b4fc' }
+                      ].map(opt => (
+                        <button
+                          key={opt.min}
+                          type="button"
+                          disabled={extendingDuration}
+                          onClick={() => handleExtendDuration(opt.min)}
+                          style={{
+                            padding: '4px 9px',
+                            borderRadius: '7px',
+                            fontSize: '0.74rem',
+                            fontWeight: 800,
+                            cursor: extendingDuration ? 'not-allowed' : 'pointer',
+                            background: opt.bg,
+                            color: opt.color,
+                            border: `1px solid ${opt.border}`
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#475569', cursor: 'pointer', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={recorrerSiguientes}
+                        onChange={(e) => setRecorrerSiguientes(e.target.checked)}
+                      />
+                      Recorrer automáticamente las siguientes visitas si se solapan
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -5,7 +5,8 @@ export default function TimelineResourcesList({
   visitasPorTecnico = {},
   techLayoutMap = {},
   dragOverTecnico = null,
-  activeArea
+  activeArea,
+  onAddLunch
 }) {
   const getInitials = (name) => {
     if (!name) return 'TC';
@@ -184,6 +185,27 @@ export default function TimelineResourcesList({
               <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--sidebar-text)', whiteSpace: 'nowrap' }}>
                 {count} vis ({totalHours}h){apoyosCount > 0 ? ` • 🤝 ${apoyosCount} apoyo` : ''}
               </span>
+              {!layout.lunchSlot && onAddLunch && (
+                <button
+                  type="button"
+                  onClick={() => onAddLunch(t.nombre)}
+                  title={`Agregar bloque movible de almuerzo para ${t.nombre}`}
+                  style={{
+                    marginLeft: 'auto',
+                    background: 'transparent',
+                    border: '1px dashed #cbd5e1',
+                    borderRadius: '6px',
+                    padding: '1px 5px',
+                    fontSize: '0.66rem',
+                    fontWeight: 700,
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  + 🍽️
+                </button>
+              )}
             </div>
           </div>
         );

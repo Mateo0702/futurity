@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { calculateOverdueMinutes } from './telegramAlertHelper';
+import { formatMinutesToTime } from './timelineLayoutHelper';
 
 export default function TimelineVisitCard({
   visita,
@@ -7,10 +8,28 @@ export default function TimelineVisitCard({
   widthPct,
   isToday,
   now,
+  startHour = 7,
+  endHour = 21,
+  onResizeVisit,
   onOpenEdit
 }) {
+  const [resizingEndMin, setResizingEndMin] = useState(null);
+  const justResizedRef = useRef(false);
+
   const estado = (visita.estado || 'PENDIENTE').toUpperCase();
-  const overdueMin = isToday && estado === 'PENDIENTE' ? calculateOverdueMinutes(visita, now) : 0;
+  const currentMin = now ? now.getHours() * 60 + now.getMinutes() : 0;
+
+  let overdueMin = 0;
+  if (isToday) {
+    if (estado === 'PENDIENTE' || estado === 'ASIGNADA') {
+      const diffIni = calculateOverdueMinutes(visita, now);
+      if (diffIni >= 5) overdueMin = diffIni;
+    } else if (estado === 'EN_RUTA' || estado === 'EN_SITIO' || estado === 'EN_PROGRESO') {
+      if (visita.endMin && currentMin >= visita.endMin + 5) {
+        overdueMin = currentMin - visita.endMin;
+      }
+    }
+  }
   const isOverdue = overdueMin > 0;
 
   // Detección: El técnico cerró solicitando Cambio de FO
@@ -55,6 +74,54 @@ export default function TimelineVisitCard({
 
   const esApoyo = !!visita._esApoyo;
   const titularNombre = visita._titularNombre || visita.tecnico_principal;
+  const canResize = !!onResizeVisit && !esApoyo && estado !== 'FINALIZADA' && estado !== 'CANCELADA';
+  const totalMinutes = (endHour - startHour) * 60;
+
+  const effectiveWidthPct = resizingEndMin !== null
+    ? Math.max(3.5, Math.min(((resizingEndMin - visita.startMin) / totalMinutes) * 100, 100 - leftPct))
+    : widthPct;
+
+  const displayTimeLabel = resizingEndMin !== null
+    ? `${formatMinutesToTime(visita.startMin)} - ${formatMinutesToTime(resizingEndMin)}`
+    : (visita.displayTimeStr || visita.preferencia_horaria || 'Flexible');
+
+  const handleResizeMouseDown = (e) => {
+    if (!canResize) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    const rowEl = e.currentTarget.closest('.crono-grid-row');
+    if (!rowEl) return;
+    const rowRect = rowEl.getBoundingClientRect();
+    let latestSnappedEnd = visita.endMin;
+
+    const onMouseMove = (moveEvent) => {
+      const relX = Math.max(0, Math.min(moveEvent.clientX - rowRect.left, rowRect.width));
+      const pct = relX / rowRect.width;
+      const rawEndMin = startHour * 60 + pct * totalMinutes;
+      const snapped = Math.max(
+        visita.startMin + 30,
+        Math.min(Math.round(rawEndMin / 15) * 15, endHour * 60)
+      );
+      latestSnappedEnd = snapped;
+      setResizingEndMin(snapped);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      setResizingEndMin(null);
+      justResizedRef.current = true;
+      setTimeout(() => { justResizedRef.current = false; }, 120);
+
+      if (latestSnappedEnd && latestSnappedEnd !== visita.endMin) {
+        onResizeVisit(visita, latestSnappedEnd);
+      }
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
 
   // Propiedades de sub-carril y detección de solapamiento
   const maxLanes = visita.maxLanes || 1;
@@ -67,19 +134,23 @@ export default function TimelineVisitCard({
 
   return (
     <div
-      className={`crono-visit-card ${estadoClass} ${isOverdue ? 'is-overdue' : ''} ${esApoyo ? 'es-apoyo' : ''} ${hasConflict ? 'has-conflict' : ''} ${isCompact ? 'is-compact' : ''}`}
+      className={`crono-visit-card ${estadoClass} ${isOverdue ? 'is-overdue' : ''} ${esApoyo ? 'es-apoyo' : ''} ${hasConflict ? 'has-conflict' : ''} ${isCompact ? 'is-compact' : ''} ${resizingEndMin !== null ? 'is-resizing' : ''}`}
       style={{
         left: `calc(${leftPct}% + 3px)`,
-        width: `calc(max(${widthPct}%, 4.5%) - 6px)`,
+        width: `calc(max(${effectiveWidthPct}%, 4.5%) - 6px)`,
         top: `${topPos}px`,
         ...(isCompact ? { height: `${cardHeight}px` } : { bottom: '8px' }),
-        minWidth: isCompact ? '75px' : '88px'
+        minWidth: isCompact ? '75px' : '88px',
+        zIndex: resizingEndMin !== null ? 30 : undefined
       }}
-      draggable
+      draggable={resizingEndMin === null}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      onClick={() => onOpenEdit(visita)}
-      title={`${hasConflict ? '⚠️ HORARIO SOLAPADO CON OTRA VISITA\n' : ''}${esApoyo ? '🤝 EN APOYO' : '👑 TITULAR'}\nTicket #${visita.contrato || visita.id_visita} - ${visita.cliente}\nHora: ${visita.preferencia_horaria || 'Flexible'}\n${esApoyo ? `Apoyando a: ${titularNombre}` : (visita.tecnico_apoyo ? `Con Apoyo: ${visita.tecnico_apoyo}` : 'Técnico Solo')}\nEstado: ${estado}\nArrastra para reasignar horario o técnico`}
+      onClick={() => {
+        if (justResizedRef.current) return;
+        onOpenEdit(visita);
+      }}
+      title={`${hasConflict ? '⚠️ HORARIO SOLAPADO CON OTRA VISITA\n' : ''}${esApoyo ? '🤝 EN APOYO' : '👑 TITULAR'}\nTicket #${visita.contrato || visita.id_visita} - ${visita.cliente}\nHora: ${displayTimeLabel}${visita.adjustedByFinish ? ` (Programada: ${visita.preferencia_horaria || ''})` : ''}\n${esApoyo ? `Apoyando a: ${titularNombre}` : (visita.tecnico_apoyo ? `Con Apoyo: ${visita.tecnico_apoyo}` : 'Técnico Solo')}\nEstado: ${estado}\nArrastra para mover${canResize ? ' • Arrastra el borde derecho para extender/acortar' : ''}`}
     >
       {/* MODO COMPACTO: Cuando el técnico tiene visitas simultáneas/solapadas divididas en sub-carriles */}
       {isCompact ? (
@@ -109,10 +180,12 @@ export default function TimelineVisitCard({
             </div>
 
             <span className="crono-compact-time">
-              {isOverdue ? (
+              {resizingEndMin !== null ? (
+                <span style={{ color: '#4f46e5', fontWeight: 800 }}>{displayTimeLabel}</span>
+              ) : isOverdue ? (
                 <span style={{ color: '#ef4444', fontWeight: 800 }}>+{overdueMin}m</span>
               ) : (
-                visita.preferencia_horaria || 'Flexible'
+                displayTimeLabel
               )}
             </span>
           </div>
@@ -178,13 +251,17 @@ export default function TimelineVisitCard({
             </div>
 
             {/* Badge de Atraso o Horario */}
-            {isOverdue ? (
+            {resizingEndMin !== null ? (
+              <span style={{ background: '#4f46e5', color: '#fff', fontSize: '0.66rem', fontWeight: 800, padding: '1px 6px', borderRadius: '5px', whiteSpace: 'nowrap' }}>
+                ↔ {displayTimeLabel}
+              </span>
+            ) : isOverdue ? (
               <span className="crono-overdue-pill" title={`Retraso estimado de ${overdueMin} minutos`}>
                 <i className="fa-solid fa-triangle-exclamation"></i> +{overdueMin}m
               </span>
             ) : (
               <span style={{ fontSize: '0.68rem', opacity: 0.85, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                {visita.preferencia_horaria || 'Flexible'}
+                {displayTimeLabel}
               </span>
             )}
           </div>
@@ -232,6 +309,16 @@ export default function TimelineVisitCard({
             ) : null}
           </div>
         </>
+      )}
+
+      {/* Tirador derecho para extender / acortar duración directamente en el Gantt */}
+      {canResize && (
+        <div
+          className="crono-resize-handle"
+          onMouseDown={handleResizeMouseDown}
+          onClick={(e) => e.stopPropagation()}
+          title="Arrastra hacia la derecha o izquierda para extender/acortar la duración de esta visita"
+        />
       )}
     </div>
   );
