@@ -950,6 +950,7 @@ def buscar_completo_json():
         return jsonify({"status": "error", "message": "No autorizado"}), 401
     
     q = request.args.get('q', '').strip()
+    tipo = request.args.get('tipo', 'todos').strip().lower()
     if not q:
         return jsonify({"status": "success", "clientes": []})
         
@@ -960,27 +961,109 @@ def buscar_completo_json():
     cursor = conn.cursor(dictionary=True)
     try:
         from utils import format_antiguedad, MAPEO_NODOS
-        # Búsqueda parcial por contrato, cédula, nombre, teléfono o identificación o IP
-        query = """
+        select_cols = """
             SELECT contrato, cedula, empresa, nombre_cliente AS cliente, zona AS sector, 
                    telefono1, telefono2, telefono3, fecha_instalacion,
                    total_mensual, antiguedad, numero_serie, producto, direccion, forma_pago,
                    velocidad_mbps, ip_cliente, ip_nodo, vendedor, email,
                    modelo_ont, router_principal, numero_serie_router, router_secundario, numero_serie_router_secundario, tipo_mesh,
                    cantidad_routers, modo_acceso, estado
-            FROM directorio_clientes 
-            WHERE contrato LIKE %s 
-               OR cedula LIKE %s
-               OR nombre_cliente LIKE %s 
-               OR telefono1 LIKE %s 
-               OR telefono2 LIKE %s 
-               OR telefono3 LIKE %s
-               OR numero_serie LIKE %s
-               OR ip_cliente LIKE %s
-            LIMIT 25
+            FROM directorio_clientes
         """
         like_q = f"%{q}%"
-        cursor.execute(query, (like_q, like_q, like_q, like_q, like_q, like_q, like_q, like_q))
+        prefix_q = f"{q}%"
+
+        if tipo == 'contrato':
+            query = select_cols + """
+                WHERE contrato LIKE %s
+                ORDER BY
+                    CASE
+                        WHEN UPPER(contrato) = UPPER(%s) THEN 0
+                        WHEN UPPER(contrato) = UPPER(CONCAT(%s, 'F')) THEN 1
+                        WHEN UPPER(contrato) LIKE UPPER(%s) THEN 2
+                        ELSE 3
+                    END,
+                    LENGTH(contrato) ASC,
+                    contrato ASC
+                LIMIT 25
+            """
+            cursor.execute(query, (like_q, q, q, prefix_q))
+        elif tipo == 'nombre':
+            tokens = [t for t in q.split() if t]
+            where_clauses = " AND ".join(["nombre_cliente LIKE %s"] * len(tokens))
+            params = [f"%{t}%" for t in tokens] + [prefix_q]
+            query = select_cols + f"""
+                WHERE {where_clauses}
+                ORDER BY
+                    CASE WHEN nombre_cliente LIKE %s THEN 0 ELSE 1 END,
+                    nombre_cliente ASC
+                LIMIT 25
+            """
+            cursor.execute(query, tuple(params))
+        elif tipo == 'cedula':
+            query = select_cols + """
+                WHERE cedula LIKE %s
+                ORDER BY
+                    CASE
+                        WHEN cedula = %s THEN 0
+                        WHEN cedula LIKE %s THEN 1
+                        ELSE 2
+                    END,
+                    cedula ASC
+                LIMIT 25
+            """
+            cursor.execute(query, (like_q, q, prefix_q))
+        elif tipo == 'telefono':
+            query = select_cols + """
+                WHERE telefono1 LIKE %s OR telefono2 LIKE %s OR telefono3 LIKE %s
+                ORDER BY
+                    CASE
+                        WHEN telefono1 = %s OR telefono2 = %s OR telefono3 = %s THEN 0
+                        ELSE 1
+                    END,
+                    nombre_cliente ASC
+                LIMIT 25
+            """
+            cursor.execute(query, (like_q, like_q, like_q, q, q, q))
+        elif tipo == 'equipo':
+            query = select_cols + """
+                WHERE numero_serie LIKE %s
+                   OR numero_serie_router LIKE %s
+                   OR numero_serie_router_secundario LIKE %s
+                   OR ip_cliente LIKE %s
+                ORDER BY
+                    CASE
+                        WHEN UPPER(numero_serie) = UPPER(%s) OR ip_cliente = %s THEN 0
+                        ELSE 1
+                    END,
+                    contrato ASC
+                LIMIT 25
+            """
+            cursor.execute(query, (like_q, like_q, like_q, like_q, q, q))
+        else:
+            # Modo general ('todos') ordenado por relevancia (contrato exacto primero)
+            query = select_cols + """
+                WHERE contrato LIKE %s 
+                   OR cedula LIKE %s
+                   OR nombre_cliente LIKE %s 
+                   OR telefono1 LIKE %s 
+                   OR telefono2 LIKE %s 
+                   OR telefono3 LIKE %s
+                   OR numero_serie LIKE %s
+                   OR ip_cliente LIKE %s
+                ORDER BY
+                    CASE
+                        WHEN UPPER(contrato) = UPPER(%s) THEN 0
+                        WHEN UPPER(contrato) = UPPER(CONCAT(%s, 'F')) THEN 1
+                        WHEN UPPER(contrato) LIKE UPPER(%s) THEN 2
+                        WHEN cedula = %s THEN 3
+                        ELSE 4
+                    END,
+                    LENGTH(contrato) ASC,
+                    nombre_cliente ASC
+                LIMIT 25
+            """
+            cursor.execute(query, (like_q, like_q, like_q, like_q, like_q, like_q, like_q, like_q, q, q, prefix_q, q))
         rows = cursor.fetchall()
         
         clientes = []

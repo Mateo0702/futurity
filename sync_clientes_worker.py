@@ -306,24 +306,30 @@ def sincronizar_cliente_cedula(conn, cedula):
             
             vel_mbps = extraer_velocidad_mbps(servicios)
 
-            # Rescatar equipos si migra de duplicado sin 'F'
+            # Rescatar equipos y datos si existe un duplicado con/sin 'F' para la misma cédula (bidireccional)
             sn_rescatada = None
             ont_rescatada = None
-            if is_fib:
-                raw_plain = raw_num[:-1] if raw_num.upper().endswith('F') else raw_num
-                if raw_plain != contrato_atlas:
+            raw_plain = raw_num[:-1] if raw_num.upper().endswith('F') else raw_num
+            contrato_opuesto = raw_plain if is_fib else (raw_plain + 'F')
+            r_old = None
+            if contrato_opuesto != contrato_atlas:
+                cur.execute("""
+                    SELECT numero_serie, modelo_ont, router_principal, numero_serie_router,
+                           router_secundario, numero_serie_router_secundario, tipo_mesh,
+                           cantidad_routers, modo_acceso, telefono2, telefono3,
+                           fecha_instalacion, antiguedad, vendedor, email
+                    FROM directorio_clientes
+                    WHERE contrato = %s AND cedula = %s LIMIT 1
+                """, (contrato_opuesto, cliente_cedula))
+                r_old = cur.fetchone()
+                if r_old:
+                    old_sn = (r_old.get('numero_serie') or '').strip()
+                    sn_rescatada = old_sn if old_sn and old_sn.upper() != 'S/N' else None
+                    ont_rescatada = r_old.get('modelo_ont')
                     cur.execute("""
-                        SELECT numero_serie, modelo_ont FROM directorio_clientes 
-                        WHERE contrato = %s AND cedula = %s LIMIT 1
-                    """, (raw_plain, cliente_cedula))
-                    r_old = cur.fetchone()
-                    if r_old:
-                        sn_rescatada = r_old.get('numero_serie')
-                        ont_rescatada = r_old.get('modelo_ont')
-                        cur.execute("""
-                            DELETE FROM directorio_clientes 
-                            WHERE contrato = %s AND cedula = %s AND empresa != 'FIBRACOM'
-                        """, (raw_plain, cliente_cedula))
+                        DELETE FROM directorio_clientes
+                        WHERE contrato = %s AND cedula = %s
+                    """, (contrato_opuesto, cliente_cedula))
 
             # Insertar o actualizar (ON DUPLICATE KEY UPDATE nunca toca ni borra número de serie ni equipos)
             query = """
@@ -351,7 +357,7 @@ def sincronizar_cliente_cedula(conn, cedula):
                     ip_cliente = VALUES(ip_cliente),
                     ip_nodo = VALUES(ip_nodo),
                     velocidad_mbps = COALESCE(VALUES(velocidad_mbps), velocidad_mbps),
-                    numero_serie = COALESCE(NULLIF(numero_serie, ''), VALUES(numero_serie), 'S/N'),
+                    numero_serie = COALESCE(NULLIF(NULLIF(numero_serie, ''), 'S/N'), NULLIF(NULLIF(VALUES(numero_serie), ''), 'S/N'), 'S/N'),
                     modelo_ont = COALESCE(NULLIF(modelo_ont, ''), VALUES(modelo_ont)),
                     ultima_actualizacion_api = NOW()
             """
@@ -373,6 +379,31 @@ def sincronizar_cliente_cedula(conn, cedula):
                 sn_rescatada,
                 ont_rescatada
             ))
+            if r_old:
+                cur.execute("""
+                    UPDATE directorio_clientes
+                    SET router_principal = COALESCE(NULLIF(router_principal, ''), %s),
+                        numero_serie_router = COALESCE(NULLIF(numero_serie_router, ''), %s),
+                        router_secundario = COALESCE(NULLIF(router_secundario, ''), %s),
+                        numero_serie_router_secundario = COALESCE(NULLIF(numero_serie_router_secundario, ''), %s),
+                        tipo_mesh = COALESCE(NULLIF(tipo_mesh, ''), %s),
+                        cantidad_routers = COALESCE(cantidad_routers, %s),
+                        modo_acceso = COALESCE(NULLIF(modo_acceso, ''), %s),
+                        telefono2 = COALESCE(NULLIF(telefono2, ''), %s),
+                        telefono3 = COALESCE(NULLIF(telefono3, ''), %s),
+                        fecha_instalacion = COALESCE(fecha_instalacion, %s),
+                        antiguedad = COALESCE(NULLIF(antiguedad, ''), %s),
+                        vendedor = COALESCE(NULLIF(vendedor, ''), %s),
+                        email = COALESCE(NULLIF(email, ''), %s)
+                    WHERE contrato = %s
+                """, (
+                    r_old.get('router_principal'), r_old.get('numero_serie_router'),
+                    r_old.get('router_secundario'), r_old.get('numero_serie_router_secundario'),
+                    r_old.get('tipo_mesh'), r_old.get('cantidad_routers'), r_old.get('modo_acceso'),
+                    r_old.get('telefono2'), r_old.get('telefono3'), r_old.get('fecha_instalacion'),
+                    r_old.get('antiguedad'), r_old.get('vendedor'), r_old.get('email'),
+                    contrato_atlas
+                ))
             contratos_actualizados += 1
 
         cur.execute("""

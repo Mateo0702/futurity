@@ -12,10 +12,22 @@ function BuscadorClienteTab({ token, user }) {
 
   // Search states
   const [query, setQuery] = useState('');
+  const [searchType, setSearchType] = useState('contrato'); // 'contrato' | 'nombre' | 'cedula' | 'telefono' | 'equipo' | 'todos'
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
+  const searchInputRef = useRef(null);
+
+  const SEARCH_MODES = [
+    { id: 'contrato', label: 'Contrato', icon: 'fa-file-contract', placeholder: 'Escribe el número de contrato... Ej: 33725, 290, 1045F' },
+    { id: 'nombre', label: 'Cliente', icon: 'fa-user', placeholder: 'Escribe nombre o apellido del cliente... Ej: MARIA ORTIZ' },
+    { id: 'cedula', label: 'Cédula / RUC', icon: 'fa-id-card', placeholder: 'Escribe el número de cédula o RUC... Ej: 0104735071' },
+    { id: 'telefono', label: 'Teléfono', icon: 'fa-phone', placeholder: 'Escribe el número de teléfono... Ej: 099232...' },
+    { id: 'equipo', label: 'Serie ONT / IP', icon: 'fa-network-wired', placeholder: 'Escribe la serie ONT, router o IP... Ej: HWTC..., 10.101...' },
+    { id: 'todos', label: 'Todos', icon: 'fa-magnifying-glass', placeholder: 'Búsqueda general en contrato, nombre, cédula, teléfono, serie o IP...' }
+  ];
+  const currentSearchMode = SEARCH_MODES.find(m => m.id === searchType) || SEARCH_MODES[0];
 
   // KPIs states
   const [kpis, setKpis] = useState({ total: 0, activo: 0, cortado: 0, cancelado: 0 });
@@ -276,21 +288,24 @@ function BuscadorClienteTab({ token, user }) {
   };
 
   // Debounced Search Logic
-  const handleSearchInput = (val) => {
+  const handleSearchInput = (val, typeOverride = null) => {
     setQuery(val);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
 
+    const activeType = typeOverride || searchType;
     const cleanVal = val.trim();
-    if (!cleanVal || cleanVal.length < 2) {
+    const minLen = activeType === 'contrato' ? 1 : 2;
+    if (!cleanVal || cleanVal.length < minLen) {
       setSearchResults([]);
       setShowDropdown(false);
+      setIsSearching(false);
       return;
     }
 
     setIsSearching(true);
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/cliente/buscar_completo_json?q=${encodeURIComponent(cleanVal)}`, {
+        const res = await fetch(`/api/cliente/buscar_completo_json?q=${encodeURIComponent(cleanVal)}&tipo=${encodeURIComponent(activeType)}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();
@@ -307,7 +322,17 @@ function BuscadorClienteTab({ token, user }) {
       } finally {
         setIsSearching(false);
       }
-    }, 300);
+    }, 280);
+  };
+
+  const handleChangeSearchType = (newType) => {
+    setSearchType(newType);
+    if (query.trim()) {
+      handleSearchInput(query, newType);
+    }
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
   };
 
   const handleSelectClient = (client) => {
@@ -827,42 +852,116 @@ function BuscadorClienteTab({ token, user }) {
 
       {/* Buscador Principal Interactivo */}
       <div style={{ background: 'var(--card-bg)', padding: '22px', borderRadius: '20px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)', marginBottom: '22px', position: 'relative' }}>
-        <label style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.92rem', display: 'block', marginBottom: '8px' }}>
-          🔍 Buscar Cliente por Contrato, Nombre, Teléfono o Identificación:
-        </label>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
+          <label style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.92rem', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            🔍 Buscar Cliente por:
+          </label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {SEARCH_MODES.map((mode) => {
+              const isActive = searchType === mode.id;
+              return (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => handleChangeSearchType(mode.id)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 13px',
+                    borderRadius: '999px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.18s ease',
+                    border: isActive ? '1.5px solid #0284c7' : '1.5px solid var(--border-color)',
+                    background: isActive ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)' : 'var(--profile-bg)',
+                    color: isActive ? '#ffffff' : 'var(--text-main)',
+                    boxShadow: isActive ? '0 3px 10px rgba(2, 132, 199, 0.28)' : 'none'
+                  }}
+                >
+                  <i className={`fa-solid ${mode.icon}`} style={{ fontSize: '0.76rem' }}></i>
+                  <span>{mode.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div style={{ position: 'relative' }}>
           <input
+            ref={searchInputRef}
             type="text"
             className="form-control"
             value={query}
             onChange={(e) => handleSearchInput(e.target.value)}
-            placeholder="Escribe para buscar... Ej: 290, Marlene, 099232, 0102758..."
-            style={{ width: '100%', padding: '14px 44px 14px 20px', fontSize: '1rem', borderRadius: '14px', border: '1.5px solid var(--border-color)', fontWeight: 600, background: 'var(--card-bg)', color: 'var(--text-main)' }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && searchResults.length > 0) {
+                e.preventDefault();
+                if (searchResults.length === 1) {
+                  handleSelectClient(searchResults[0]);
+                } else if (searchType === 'contrato') {
+                  const exact = searchResults.find(c => String(c.contrato || '').toUpperCase() === query.trim().toUpperCase());
+                  if (exact) handleSelectClient(exact);
+                }
+              } else if (e.key === 'Escape') {
+                setShowDropdown(false);
+              }
+            }}
+            placeholder={currentSearchMode.placeholder}
+            style={{ width: '100%', padding: '14px 48px 14px 20px', fontSize: '1rem', borderRadius: '14px', border: '1.5px solid var(--border-color)', fontWeight: 600, background: 'var(--card-bg)', color: 'var(--text-main)' }}
           />
-          {isSearching && (
+          {isSearching ? (
             <div style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--sidebar-text)' }}>
               <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '1.2rem' }}></i>
             </div>
+          ) : query && (
+            <button
+              type="button"
+              onClick={() => { setQuery(''); setSearchResults([]); setShowDropdown(false); if (searchInputRef.current) searchInputRef.current.focus(); }}
+              title="Limpiar búsqueda"
+              style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--sidebar-text)', cursor: 'pointer', fontSize: '1rem', padding: '4px 6px' }}
+            >
+              <i className="fa-solid fa-xmark"></i>
+            </button>
           )}
         </div>
 
         {/* Dropdown flotante de resultados */}
         {showDropdown && (
-          <div style={{ position: 'absolute', left: '22px', right: '22px', top: '100%', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '14px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', zIndex: 999, maxHeight: '280px', overflowY: 'auto', marginTop: '8px' }}>
+          <div style={{ position: 'absolute', left: '22px', right: '22px', top: '100%', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '14px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', zIndex: 999, maxHeight: '320px', overflowY: 'auto', marginTop: '8px' }}>
             {searchResults.length > 0 ? (
               searchResults.map((cli, idx) => (
                 <div
                   key={idx}
                   onClick={() => handleSelectClient(cli)}
-                  style={{ padding: '12px 18px', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.2s' }}
+                  style={{ padding: '12px 18px', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', transition: 'background 0.2s' }}
                   onMouseEnter={(e) => e.currentTarget.style.background = 'var(--profile-bg)'}
                   onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 >
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <strong style={{ color: 'var(--text-main)', fontSize: '0.95rem', display: 'block' }}>{cli.cliente}</strong>
-                    <span style={{ color: 'var(--sidebar-text)', fontSize: '0.78rem' }}>Sector: {cli.sector} | Plan: {cli.producto}</span>
+                    <span style={{ color: 'var(--sidebar-text)', fontSize: '0.78rem', display: 'block', marginTop: '2px' }}>
+                      {cli.cedula ? `Céd: ${cli.cedula} | ` : ''}
+                      {cli.telefonos && cli.telefonos !== 'No registrado' ? `Tel: ${cli.telefonos} | ` : ''}
+                      Sector: {cli.sector}
+                    </span>
+                    <span style={{ color: 'var(--sidebar-text)', fontSize: '0.74rem', opacity: 0.85 }}>
+                      Plan: {cli.producto}
+                    </span>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {cli.empresa && (
+                      <span style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 800,
+                        padding: '3px 7px',
+                        borderRadius: '6px',
+                        background: cli.empresa === 'FIBRACOM' ? 'rgba(168, 85, 247, 0.14)' : 'rgba(59, 130, 246, 0.12)',
+                        color: cli.empresa === 'FIBRACOM' ? '#9333ea' : '#2563eb'
+                      }}>
+                        {cli.empresa}
+                      </span>
+                    )}
                     <span style={{
                       fontSize: '0.72rem',
                       fontWeight: 800,
@@ -881,14 +980,15 @@ function BuscadorClienteTab({ token, user }) {
               ))
             ) : (
               <div style={{ padding: '20px', textAlign: 'center', color: 'var(--sidebar-text)', fontSize: '0.9rem' }}>
-                <div style={{ marginBottom: '10px', fontWeight: 600 }}>No se encontraron coincidencias en la base local.</div>
+                <div style={{ marginBottom: '10px', fontWeight: 600 }}>
+                  No se encontraron coincidencias por <strong>{currentSearchMode.label}</strong> en la base local.
+                </div>
                 <button
                   type="button"
                   onClick={() => {
                     setShowDropdown(false);
                     const cleanQ = query.trim();
-                    const isContrato = /^\d{1,6}[Ff]?$/i.test(cleanQ);
-                    const isCed = !isContrato && cleanQ.length >= 4;
+                    const isCed = searchType === 'cedula' || (searchType !== 'contrato' && !/^\d{1,6}[Ff]?$/i.test(cleanQ) && cleanQ.length >= 4);
                     setCentralModal({
                       isOpen: true,
                       initialCedula: isCed ? cleanQ : '',
