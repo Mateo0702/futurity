@@ -1,13 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ConsultaBaseCentralModal from './ConsultaBaseCentralModal';
 
-function BuscadorClienteTab({ token, user }) {
+function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
   // Today's Local Date helper
   const getTodayLocal = (d = new Date()) => {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  };
+
+  // Helper para resolver el Nodo / OLT oficial (ej. 1.18, 99.1, 1.50, BAÑOS, etc.)
+  const resolveNodoOlt = (ipNodo, nodoNombre) => {
+    const ip = (ipNodo || '').toString().trim();
+    const nom = (nodoNombre || '').toString().toUpperCase().trim();
+
+    if (ip.includes('1.18') || nom === '1.18' || nom.includes('GZ')) return '1.18';
+    if (ip.includes('1.50') || nom === '1.50' || nom.includes('ORQ')) return '1.50';
+    if (ip.includes('99.1') || nom === '99.1' || nom.includes('CH')) return '99.1';
+    if (ip.includes('80.80.134') || nom.includes('BAÑOS') || nom.includes('BANOS') || nom.includes('CS')) return 'BAÑOS';
+    if (ip.includes('17.200.52') || nom.includes('AZOGUES') || nom.includes('AZO')) return 'AZOGUES';
+    if (ip.includes('101.100.10') || nom.includes('ESTADIO')) return 'ESTADIO';
+    if (ip.includes('64.21.2') || nom.includes('VALLE')) return 'FIBRACOM VALLE';
+    if (ip.includes('64.20.2') || nom.includes('SANTA ANA')) return 'FIBRACOM SANTA ANA';
+    if (nom.includes('BASES')) return 'BASES';
+    if (nom.includes('RB')) return 'RB';
+    if (nom.includes('HFC')) return 'HFC';
+
+    const standardOptions = ['1.18', '1.50', '99.1', 'BAÑOS', 'AZOGUES', 'ESTADIO', 'BASES', 'RB', 'HFC', 'FIBRACOM VALLE', 'FIBRACOM SANTA ANA'];
+    const found = standardOptions.find(o => nom.includes(o) || ip.toUpperCase().includes(o));
+    if (found) return found;
+
+    return nodoNombre || ipNodo || '';
   };
 
   // Search states
@@ -139,19 +163,6 @@ function BuscadorClienteTab({ token, user }) {
     olt: '',
     telefono1: '',
     telefono2: ''
-  });
-
-  // Modal: Registrar Visita Rápida
-  const [showVisitaModal, setShowVisitaModal] = useState(false);
-  const [submittingVisita, setSubmittingVisita] = useState(false);
-  const [visitaForm, setVisitaForm] = useState({
-    fecha_programada: getTodayLocal(),
-    preferencia_horaria: 'MAÑANA (09:00 - 13:00)',
-    prioridad: 'MEDIA',
-    tecnico_asignado: '',
-    tecnico_apoyo: '',
-    problema: '',
-    observacion_callcenter: ''
   });
 
   // Modal: Carga Masiva de Atenciones
@@ -370,6 +381,12 @@ function BuscadorClienteTab({ token, user }) {
       const data = await res.json();
       if (res.ok && data.status === 'success' && data.diagnostico) {
         setDiagnosticResult(data.diagnostico);
+        if (data.diagnostico.olt_name) {
+          setSelectedClient(prev => prev ? {
+            ...prev,
+            nodo_nombre: prev.nodo_nombre || data.diagnostico.olt_name
+          } : prev);
+        }
       } else {
         setDiagnosticError(data.message || "No se pudo obtener el diagnóstico del equipo en SmartOLT.");
       }
@@ -482,11 +499,15 @@ function BuscadorClienteTab({ token, user }) {
   };
 
   // Submit Registrar Atención Rápida
-  const handleSubmitAtencion = async (e) => {
-    e.preventDefault();
+  const handleSubmitAtencion = async (e, redirectToVisitas = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (!selectedClient) return;
     if (!atencionForm.observacion.trim()) {
       alert("Por favor ingrese una observación o comentario de la atención.");
+      return;
+    }
+    if (!atencionForm.motivo) {
+      alert("Por favor seleccione el motivo o problema de la atención.");
       return;
     }
 
@@ -494,7 +515,7 @@ function BuscadorClienteTab({ token, user }) {
     try {
       const tel1 = (atencionForm.telefono1 || '').trim() || ((selectedClient.telefonos && selectedClient.telefonos !== 'No registrado') ? selectedClient.telefonos.split('/')[0].trim() : null);
       const tel2 = (atencionForm.telefono2 || '').trim() || ((selectedClient.telefonos && selectedClient.telefonos.includes('/')) ? selectedClient.telefonos.split('/')[1].trim() : null);
-      const oltVal = (atencionForm.olt || '').trim() || null;
+      const oltVal = (atencionForm.olt || '').trim() || resolveNodoOlt(selectedClient.ip_nodo, selectedClient.nodo_nombre) || null;
 
       const payload = {
         contrato: selectedClient.contrato,
@@ -525,11 +546,26 @@ function BuscadorClienteTab({ token, user }) {
       const data = await res.json();
 
       if (res.ok && data.status === 'success') {
-        showToast("¡Atención registrada exitosamente!");
+        const obsTrans = atencionForm.observacion.trim();
+        const motivoTrans = atencionForm.motivo;
         setShowAtencionModal(false);
         setAtencionForm(prev => ({ ...prev, observacion: '' }));
         // Recargar historial
         fetchHistorialUnificado(selectedClient.contrato, selectedClient.cliente);
+
+        if (redirectToVisitas) {
+          showToast("¡Atención guardada! Redirigiendo a Visitas...");
+          if (onNavigateToRegistroVisitas) {
+            onNavigateToRegistroVisitas({
+              ...selectedClient,
+              // User specified: technical visit problem will be selected on the visits tab
+              problema: '',
+              observacionCallcenter: obsTrans || `Atención: ${motivoTrans}`
+            });
+          }
+        } else {
+          showToast("¡Atención registrada exitosamente!");
+        }
       } else {
         alert(data.message || "Error al registrar la atención.");
       }
@@ -538,66 +574,6 @@ function BuscadorClienteTab({ token, user }) {
       alert("Error de conexión al guardar la atención.");
     } finally {
       setSubmittingAtencion(false);
-    }
-  };
-
-  // Submit Registrar Visita Rápida
-  const handleSubmitVisita = async (e) => {
-    e.preventDefault();
-    if (!selectedClient) return;
-
-    if (!visitaForm.tecnico_asignado) {
-      alert("Por favor seleccione un técnico asignado para la visita.");
-      return;
-    }
-
-    setSubmittingVisita(true);
-    try {
-      const payload = {
-        fecha_programada: visitaForm.fecha_programada,
-        preferencia_horaria: visitaForm.preferencia_horaria,
-        prioridad: visitaForm.prioridad,
-        tecnico_asignado: visitaForm.tecnico_asignado,
-        tecnico_apoyo: visitaForm.tecnico_apoyo || null,
-        empresa: selectedClient.empresa || 'SERVICABLE',
-        contrato: selectedClient.contrato,
-        cliente: selectedClient.cliente,
-        telefonos: selectedClient.telefonos || '',
-        sector: selectedClient.sector || '',
-        direccion: selectedClient.direccion || '',
-        latitud: '',
-        longitud: '',
-        servicio: 'SERVICIO TÉCNICO',
-        es_instalacion: 0,
-        velocidad_mbps: selectedClient.velocidad_mbps || null,
-        problema: visitaForm.problema,
-        observacion_callcenter: visitaForm.observacion_callcenter.trim()
-      };
-
-      const res = await fetch('/api/v2/visitas', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-
-      if (res.ok && data.status === 'success') {
-        showToast("¡Visita técnica agendada exitosamente!");
-        setShowVisitaModal(false);
-        setVisitaForm(prev => ({ ...prev, observacion_callcenter: '' }));
-        // Recargar historial
-        fetchHistorialUnificado(selectedClient.contrato, selectedClient.cliente);
-      } else {
-        alert(data.message || "Error al agendar la visita técnica.");
-      }
-    } catch (err) {
-      console.error("Error al agendar visita:", err);
-      alert("Error de conexión al programar la visita.");
-    } finally {
-      setSubmittingVisita(false);
     }
   };
 
@@ -950,6 +926,18 @@ function BuscadorClienteTab({ token, user }) {
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {resolveNodoOlt(cli.ip_nodo, cli.nodo_nombre) && (
+                      <span style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        padding: '3px 7px',
+                        borderRadius: '6px',
+                        background: 'rgba(2, 132, 199, 0.15)',
+                        color: '#0284c7'
+                      }}>
+                        🏢 {resolveNodoOlt(cli.ip_nodo, cli.nodo_nombre)}
+                      </span>
+                    )}
                     {cli.empresa && (
                       <span style={{
                         fontSize: '0.68rem',
@@ -1226,8 +1214,13 @@ function BuscadorClienteTab({ token, user }) {
 
                 <div>
                   <strong style={{ color: 'var(--sidebar-text)', fontSize: '0.72rem', fontWeight: 800, display: 'block', marginBottom: '3px', textTransform: 'uppercase' }}>🏢 IP Nodo / OLT</strong>
-                  <span style={{ color: '#0284c7', fontSize: '0.92rem', fontWeight: 700 }}>
+                  <span style={{ color: '#0284c7', fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     {selectedClient.ip_nodo ? `${selectedClient.ip_nodo}${selectedClient.nodo_nombre && selectedClient.nodo_nombre !== selectedClient.ip_nodo ? ` (${selectedClient.nodo_nombre})` : ''}` : (selectedClient.nodo_nombre || 'N/D')}
+                    {resolveNodoOlt(selectedClient.ip_nodo, selectedClient.nodo_nombre) && (
+                      <span style={{ background: '#0284c7', color: 'white', padding: '2px 8px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 800 }}>
+                        {resolveNodoOlt(selectedClient.ip_nodo, selectedClient.nodo_nombre)}
+                      </span>
+                    )}
                   </span>
                 </div>
 
@@ -1613,7 +1606,7 @@ function BuscadorClienteTab({ token, user }) {
                         accion: 'SOPORTE MEDIANTE MENSAJES',
                         motivo: '',
                         observacion: '',
-                        olt: selectedClient.ip_nodo ? (selectedClient.ip_nodo.includes('1.18') ? '1.18' : selectedClient.ip_nodo.includes('1.50') ? '1.50' : '') : '',
+                        olt: resolveNodoOlt(selectedClient.ip_nodo, selectedClient.nodo_nombre),
                         telefono1: t1,
                         telefono2: t2
                       });
@@ -1643,16 +1636,13 @@ function BuscadorClienteTab({ token, user }) {
                     <button
                       type="button"
                       onClick={() => {
-                        setVisitaForm({
-                          fecha_programada: getTodayLocal(),
-                          preferencia_horaria: 'MAÑANA (09:00 - 13:00)',
-                          prioridad: 'MEDIA',
-                          tecnico_asignado: tecnicos.length > 0 ? tecnicos[0].nombre : '',
-                          tecnico_apoyo: '',
-                          problema: '',
-                          observacion_callcenter: ''
-                        });
-                        setShowVisitaModal(true);
+                        if (onNavigateToRegistroVisitas) {
+                          onNavigateToRegistroVisitas({
+                            ...selectedClient,
+                            problema: '',
+                            observacionCallcenter: ''
+                          });
+                        }
                       }}
                       style={{
                         padding: '12px 18px',
@@ -1671,7 +1661,7 @@ function BuscadorClienteTab({ token, user }) {
                       }}
                     >
                       <i className="fa-solid fa-calendar-plus"></i>
-                      <span>Registrar Visita</span>
+                      <span>Registrar Visita Técnica</span>
                     </button>
                   )}
                 </div>
@@ -2095,31 +2085,36 @@ function BuscadorClienteTab({ token, user }) {
                       <i className="fa-solid fa-circle-exclamation"></i> Visita Técnica Requerida
                     </strong>
                     <span style={{ fontSize: '0.78rem', color: 'var(--sidebar-text)' }}>
-                      Esta atención está catalogada como Visita. Puedes agendarla de inmediato.
+                      {isATC 
+                        ? 'Esta atención requiere visita técnica y será guardada para la cola de Call Center.' 
+                        : 'Guarda esta atención y pasa directamente al agendamiento completo con la información precargada.'}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAtencionModal(false);
-                      setShowVisitaModal(true);
-                    }}
-                    style={{
-                      background: '#6366f1',
-                      color: 'white',
-                      fontSize: '0.8rem',
-                      padding: '7px 14px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <i className="fa-solid fa-calendar-plus"></i> Agendar Visita
-                  </button>
+                  {!isATC && (
+                    <button
+                      type="button"
+                      disabled={submittingAtencion}
+                      onClick={(e) => handleSubmitAtencion(e, true)}
+                      style={{
+                        background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                        color: 'white',
+                        fontSize: '0.82rem',
+                        padding: '8px 16px',
+                        borderRadius: '10px',
+                        border: 'none',
+                        fontWeight: 800,
+                        cursor: submittingAtencion ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 4px 12px rgba(99, 102, 241, 0.35)',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {submittingAtencion ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-calendar-plus"></i>}
+                      {submittingAtencion ? 'Guardando...' : 'Guardar Atención y Agendar Visita'}
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -2261,216 +2256,6 @@ function BuscadorClienteTab({ token, user }) {
                 >
                   {submittingAtencion ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-floppy-disk"></i>}
                   {submittingAtencion ? 'Guardando...' : 'Registrar Atención Diaria'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: REGISTRAR VISITA RÁPIDA */}
-      {showVisitaModal && selectedClient && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 99999,
-          padding: '20px'
-        }}>
-          <div style={{
-            background: 'var(--card-bg)',
-            border: '1px solid var(--border-color)',
-            borderRadius: '24px',
-            width: '100%',
-            maxWidth: '640px',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            flexDirection: 'column'
-          }}>
-            {/* Header */}
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(5, 150, 105, 0.15)', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
-                  <i className="fa-solid fa-calendar-plus"></i>
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                    Agendar Visita Técnica
-                  </h3>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--sidebar-text)', fontWeight: 600 }}>
-                    Contrato #{selectedClient.contrato} — {selectedClient.cliente}
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowVisitaModal(false)}
-                style={{ background: 'transparent', border: 'none', color: 'var(--sidebar-text)', fontSize: '1.2rem', cursor: 'pointer', padding: '4px 8px' }}
-              >
-                <i className="fa-solid fa-xmark"></i>
-              </button>
-            </div>
-
-            {/* Formulario */}
-            <form onSubmit={handleSubmitVisita} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Información Fija de Ubicación */}
-              <div style={{ background: 'var(--profile-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '12px 14px', fontSize: '0.85rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span style={{ color: 'var(--sidebar-text)', fontWeight: 600 }}>Dirección:</span>
-                  <strong style={{ color: 'var(--text-main)' }}>{selectedClient.direccion}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--sidebar-text)', fontWeight: 600 }}>Sector:</span>
-                  <strong style={{ color: '#0284c7' }}>{selectedClient.sector}</strong>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '5px' }}>
-                    📅 Fecha Programada: <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input
-                    type="date"
-                    min={getTodayLocal()}
-                    value={visitaForm.fecha_programada}
-                    onChange={(e) => setVisitaForm(prev => ({ ...prev, fecha_programada: e.target.value }))}
-                    className="form-control"
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '5px' }}>
-                    ⏰ Franja Horaria:
-                  </label>
-                  <select
-                    value={visitaForm.preferencia_horaria}
-                    onChange={(e) => setVisitaForm(prev => ({ ...prev, preferencia_horaria: e.target.value }))}
-                    className="form-control"
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
-                  >
-                    <option value="MAÑANA (09:00 - 13:00)">☀️ MAÑANA (09:00 - 13:00)</option>
-                    <option value="TARDE (14:00 - 18:00)">⛅ TARDE (14:00 - 18:00)</option>
-                    <option value="09:00 - 11:00">09:00 - 11:00</option>
-                    <option value="11:00 - 13:00">11:00 - 13:00</option>
-                    <option value="14:00 - 16:00">14:00 - 16:00</option>
-                    <option value="16:00 - 18:00">16:00 - 18:00</option>
-                    <option value="TODO EL DIA">TODO EL DÍA</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '5px' }}>
-                    👷 Técnico Asignado: <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <select
-                    value={visitaForm.tecnico_asignado}
-                    onChange={(e) => setVisitaForm(prev => ({ ...prev, tecnico_asignado: e.target.value }))}
-                    className="form-control"
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
-                    required
-                  >
-                    <option value="">-- Seleccionar Técnico --</option>
-                    {tecnicos.filter(t => t.activo === 1).map(t => (
-                      <option key={t.id_tecnico || t.nombre} value={t.nombre}>{t.nombre}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '5px' }}>
-                    Prioridad:
-                  </label>
-                  <select
-                    value={visitaForm.prioridad}
-                    onChange={(e) => setVisitaForm(prev => ({ ...prev, prioridad: e.target.value }))}
-                    className="form-control"
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
-                  >
-                    <option value="BAJA">🟢 BAJA</option>
-                    <option value="MEDIA">🟡 MEDIA</option>
-                    <option value="ALTA">🟠 ALTA</option>
-                    <option value="URGENTE">🔴 URGENTE</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '5px' }}>
-                  Problema / Diagnóstico Preliminar:
-                </label>
-                <input
-                  type="text"
-                  list="react-problemas-list"
-                  value={visitaForm.problema}
-                  onChange={(e) => setVisitaForm(prev => ({ ...prev, problema: e.target.value }))}
-                  placeholder="Selecciona o escribe el problema reportado..."
-                  className="form-control"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700 }}
-                  required
-                />
-                <datalist id="react-problemas-list">
-                  {Array.from(new Set([
-                    ...problemas.map(p => (typeof p === 'string' ? p : (p.nombre || p.nombre_problema))).filter(Boolean),
-                    "CAMBIO DE DOMICILIO",
-                    "MIGRACIÓN",
-                    "CROSSELLING",
-                    "SIN SERVICIO",
-                    "INTERNET LENTO",
-                    "CORTE DE FIBRA",
-                    "ROUTER DESCONFIGURADO",
-                    "CAMBIO DE EQUIPO",
-                    "POTENCIA ATENUADA"
-                  ])).sort((a, b) => a.localeCompare(b)).map((nombre, idx) => (
-                    <option key={idx} value={nombre} />
-                  ))}
-                </datalist>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sidebar-text)', marginBottom: '5px' }}>
-                  Observación para el Técnico:
-                </label>
-                <textarea
-                  value={visitaForm.observacion_callcenter}
-                  onChange={(e) => setVisitaForm(prev => ({ ...prev, observacion_callcenter: e.target.value }))}
-                  rows="3"
-                  placeholder="Indicaciones sobre la ubicación, pruebas realizadas o detalles para el técnico en campo..."
-                  className="form-control"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', resize: 'vertical', fontWeight: 600 }}
-                ></textarea>
-              </div>
-
-              {/* Botones */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '14px' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowVisitaModal(false)}
-                  disabled={submittingVisita}
-                  style={{ padding: '9px 18px', borderRadius: '10px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--sidebar-text)', fontWeight: 700, cursor: 'pointer' }}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingVisita}
-                  style={{ padding: '9px 22px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #059669 0%, #047857 100%)', color: 'white', fontWeight: 800, cursor: submittingVisita ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  {submittingVisita ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-calendar-check"></i>}
-                  {submittingVisita ? 'Agendando...' : 'Agendar Visita'}
                 </button>
               </div>
             </form>

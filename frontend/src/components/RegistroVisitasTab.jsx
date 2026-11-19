@@ -88,21 +88,26 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
     fetchCatalogs();
   }, []);
 
-  // Populate initialVisitData transferred from AtencionesTab
+  // Populate initialVisitData transferred from AtencionesTab or BuscadorClienteTab
   useEffect(() => {
     if (initialVisitData) {
-      if (initialVisitData.contrato) {
-        setContrato(initialVisitData.contrato);
+      aplicarDatosCliente(initialVisitData);
+      if (initialVisitData.problema) {
+        setProblema(initialVisitData.problema);
       }
-      if (initialVisitData.cliente) setCliente(initialVisitData.cliente);
-      if (initialVisitData.sector) setSector(initialVisitData.sector);
-      if (initialVisitData.telefonos) setTelefonos(initialVisitData.telefonos);
-      if (initialVisitData.problema) setProblema(initialVisitData.problema);
-      if (initialVisitData.observacionCallcenter) setObservacionCallcenter(initialVisitData.observacionCallcenter);
+      if (initialVisitData.observacionCallcenter) {
+        setObservacionCallcenter(initialVisitData.observacionCallcenter);
+      }
+      if (initialVisitData.info_caja) {
+        setInfoCaja(initialVisitData.info_caja);
+      }
+      if (initialVisitData.info_ip) {
+        setInfoIp(initialVisitData.info_ip);
+      }
 
       if (onClearInitialData) onClearInitialData();
     }
-  }, [initialVisitData]);
+  }, [initialVisitData, sectores]);
 
   // Update default states when area changes
   useEffect(() => {
@@ -136,18 +141,29 @@ function RegistroVisitasTab({ token, user, activeArea, initialVisitData, onClear
       modo_acceso: data.modo_acceso || ''
     });
 
-
     // Auto-select Sector and geolocate map marker
-    if (data.zona_excel) {
-      const matchedSector = sectores.find(s => s.nombre_sector.toUpperCase() === data.zona_excel.trim().toUpperCase());
+    const sectorRaw = data.zona_excel || data.sector;
+    if (sectorRaw) {
+      const cleanSec = sectorRaw.trim().toUpperCase();
+      const matchedSector = sectores.find(s => s.nombre_sector.toUpperCase() === cleanSec);
       if (matchedSector) {
         setSector(matchedSector.nombre_sector);
-        setLatitud(matchedSector.latitud_defecto || '');
-        setLongitud(matchedSector.longitud_defecto || '');
-        updateMapMarker(matchedSector.latitud_defecto, matchedSector.longitud_defecto, 15);
+        const lat = matchedSector.latitud_defecto || '';
+        const lon = matchedSector.longitud_defecto || '';
+        setLatitud(lat);
+        setLongitud(lon);
+        updateMapMarker(lat, lon, 15);
+        setTimeout(() => updateMapMarker(lat, lon, 15), 350);
       } else {
-        setSector(data.zona_excel);
+        setSector(sectorRaw);
       }
+    }
+
+    if (data.latitud && data.longitud) {
+      setLatitud(data.latitud);
+      setLongitud(data.longitud);
+      updateMapMarker(data.latitud, data.longitud, 16);
+      setTimeout(() => updateMapMarker(data.latitud, data.longitud, 16), 350);
     }
 
     // Cargar Plan / Paquete comercial completo directo en Servicio
