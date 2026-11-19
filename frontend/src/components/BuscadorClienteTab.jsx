@@ -34,6 +34,8 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
     return nodoNombre || ipNodo || '';
   };
 
+  const isATC = (user?.rol || user?.role || '').toUpperCase() === 'ATC';
+
   // Search states
   const [query, setQuery] = useState('');
   const [searchType, setSearchType] = useState('contrato'); // 'contrato' | 'nombre' | 'cedula' | 'telefono' | 'equipo' | 'todos'
@@ -1583,17 +1585,14 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
             </div>
 
             {/* BOTONES DE ACCIÓN RÁPIDA: REGISTRAR ATENCIÓN Y REGISTRAR VISITA (Oculto para ATC) */}
-            {(() => {
-              const isATC = (user?.rol || user?.role || '').toUpperCase() === 'ATC';
-              return (
-                <div style={{
-                  marginTop: '20px',
-                  borderTop: '2px solid var(--border-color)',
-                  paddingTop: '16px',
-                  display: 'grid',
-                  gridTemplateColumns: isATC ? '1fr' : '1fr 1fr',
-                  gap: '12px'
-                }}>
+            <div style={{
+              marginTop: '20px',
+              borderTop: '2px solid var(--border-color)',
+              paddingTop: '16px',
+              display: 'grid',
+              gridTemplateColumns: isATC ? '1fr' : '1fr 1fr',
+              gap: '12px'
+            }}>
                   <button
                     type="button"
                     onClick={() => {
@@ -1665,8 +1664,6 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
                     </button>
                   )}
                 </div>
-              );
-            })()}
           </div>
         </div>
       ) : (

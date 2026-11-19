@@ -26,7 +26,7 @@ function App() {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [initialized, setInitialized] = useState(false);
-  
+
   // Parse URL search parameters on app initialization
   const searchParams = new URLSearchParams(window.location.search);
   const pathname = window.location.pathname;
@@ -102,7 +102,7 @@ function App() {
     if (savedToken && savedUserStr) {
       try {
         parsedUser = JSON.parse(savedUserStr);
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (savedToken && !parsedUser) {
@@ -139,9 +139,9 @@ function App() {
   // Sincronizar el estado activeTab con la URL del navegador
   useEffect(() => {
     if (!initialized) return;
-    
+
     const params = new URLSearchParams(window.location.search);
-    
+
     if (activeTab === 'visitas') {
       // Limpiar parámetros para la pestaña visitas (que es la principal/defecto)
       params.delete('tab');
@@ -155,7 +155,7 @@ function App() {
         params.delete('fecha');
       }
     }
-    
+
     const newSearch = params.toString();
     const newPath = newSearch ? `?${newSearch}` : window.location.pathname;
     window.history.replaceState(null, '', newPath);
@@ -261,9 +261,9 @@ function App() {
   const renderTabContent = () => {
     if (activeTab === 'registro-atencion' || activeTab === 'buscar-cliente') {
       return (
-        <BuscadorClienteTab 
-          token={token} 
-          user={user} 
+        <BuscadorClienteTab
+          token={token}
+          user={user}
           onNavigateToRegistroVisitas={handleNavigateToRegistroVisitas}
         />
       );
@@ -276,10 +276,10 @@ function App() {
     }
     if (activeTab === 'registro') {
       return (
-        <RegistroVisitasTab 
-          token={token} 
-          user={user} 
-          activeArea={activeArea} 
+        <RegistroVisitasTab
+          token={token}
+          user={user}
+          activeArea={activeArea}
           initialVisitData={initialVisitData}
           onClearInitialData={() => setInitialVisitData(null)}
         />
@@ -309,14 +309,14 @@ function App() {
     if (activeTab === 'asignacion-busetas') {
       return <AsignacionBusetasTab token={token} />;
     }
-    
+
     // Placeholder for tabs that are not migrated yet
     return (
       <div style={{ padding: '40px', textAlign: 'center', color: 'var(--sidebar-text)', flexGrow: 1 }}>
         <i className="fa-solid fa-screwdriver-wrench" style={{ fontSize: '3rem', marginBottom: '20px', display: 'block', color: 'var(--primary)' }}></i>
         <h2>Pestaña en Migración</h2>
         <p style={{ marginTop: '10px' }}>
-          La pestaña <strong>"{activeTab.toUpperCase()}"</strong> está siendo migrada a React. 
+          La pestaña <strong>"{activeTab.toUpperCase()}"</strong> está siendo migrada a React.
           Pronto estará disponible con la nueva interfaz de usuario.
         </p>
       </div>
@@ -349,7 +349,7 @@ function App() {
             onLogout={handleLogout}
             onSwitchToTecnico={handleSwitchToTecnico}
           />
-          
+
           {/* Contenido Principal (Main Area) */}
           <main className="main-content" style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, height: '100%', overflow: 'hidden', background: 'var(--bg-color)' }}>
             {renderTabContent()}
