@@ -58,6 +58,7 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
   // KPIs states
   const [kpis, setKpis] = useState({ total: 0, activo: 0, cortado: 0, cancelado: 0 });
   const [loadingKpis, setLoadingKpis] = useState(false);
+  const [kpiEmpresa, setKpiEmpresa] = useState('TODAS');
 
   // Historial unificado states (Atenciones + Visitas - Último Año)
   const [historial, setHistorial] = useState([]);
@@ -196,10 +197,13 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
     fetchCatalogs();
   }, []);
 
-  const fetchKpis = async () => {
+  const fetchKpis = async (emp = kpiEmpresa) => {
     setLoadingKpis(true);
     try {
-      const res = await fetch('/api/cliente/kpis_estado', {
+      const url = (emp && emp !== 'TODAS')
+        ? `/api/cliente/kpis_estado?empresa=${encodeURIComponent(emp)}`
+        : '/api/cliente/kpis_estado';
+      const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -770,6 +774,43 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
             <i className="fa-solid fa-cloud-arrow-down"></i>
             <span>Consultar Base Central</span>
           </button>
+        </div>
+      </div>
+
+      {/* Selector de Empresa para KPIs y Tarjetas */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <i className="fa-solid fa-chart-pie" style={{ color: '#0284c7' }}></i>
+          <span>Resumen de Cartera:</span>
+        </div>
+        <div style={{ display: 'flex', background: 'var(--bg-main)', padding: '3px', borderRadius: '10px', border: '1px solid var(--border-color)', gap: '4px' }}>
+          {[
+            { id: 'TODAS', label: 'Todas' },
+            { id: 'SERVICABLE', label: 'Servicable' },
+            { id: 'FIBRACOM', label: 'Fibracom' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setKpiEmpresa(tab.id);
+                fetchKpis(tab.id);
+              }}
+              style={{
+                padding: '4px 12px',
+                borderRadius: '8px',
+                border: 'none',
+                fontSize: '0.75rem',
+                fontWeight: kpiEmpresa === tab.id ? 800 : 600,
+                cursor: 'pointer',
+                background: kpiEmpresa === tab.id ? (tab.id === 'FIBRACOM' ? '#9333ea' : tab.id === 'SERVICABLE' ? '#0284c7' : 'var(--text-main)') : 'transparent',
+                color: kpiEmpresa === tab.id ? '#ffffff' : 'var(--sidebar-text)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 

@@ -734,40 +734,55 @@ def kpis_estado_clientes():
         return jsonify({"status": "error", "message": "Error de conexión a BD"}), 500
     try:
         cursor = conn.cursor(dictionary=True)
-        target_empresa = empresa if empresa in ('SERVICABLE', 'FIBRACOM') else 'SERVICABLE'
-        cursor.execute("""
-            SELECT 
-                COALESCE(UPPER(TRIM(estado)), 'INACTIVO') AS estado_norm,
-                COUNT(*) AS total
-            FROM directorio_clientes
-            WHERE UPPER(TRIM(empresa)) = %s
-            GROUP BY estado_norm
-        """, (target_empresa,))
+        target_empresa = empresa if empresa in ('SERVICABLE', 'FIBRACOM') else None
+        
+        if target_empresa:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(UPPER(TRIM(estado)), 'INACTIVO') AS estado_norm,
+                    COUNT(*) AS total
+                FROM directorio_clientes
+                WHERE UPPER(TRIM(empresa)) = %s
+                GROUP BY estado_norm
+            """, (target_empresa,))
+        else:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(UPPER(TRIM(estado)), 'INACTIVO') AS estado_norm,
+                    COUNT(*) AS total
+                FROM directorio_clientes
+                GROUP BY estado_norm
+            """)
         rows = cursor.fetchall()
         
         totales = {
             'activo': 0,
             'cortado': 0,
             'cancelado': 0,
+            'inactivo': 0,
             'total': 0,
-            'empresa': target_empresa
+            'cartera_vigente': 0,
+            'total_historico': 0,
+            'empresa': target_empresa or 'TODAS'
         }
         for r in rows:
             st = r['estado_norm']
             cnt = int(r['total'])
-            if 'ACTIVO' in st:
+            if 'INACT' in st or 'NO INST' in st or 'POR INST' in st:
+                totales['inactivo'] += cnt
+            elif 'CANC' in st or 'RETIR' in st:
+                totales['cancelado'] += cnt
+            elif st in ('ACTIVO', 'ACTIVOS') or (st.startswith('ACT') and 'INACT' not in st):
                 totales['activo'] += cnt
             elif 'CORT' in st or 'SUSP' in st or 'MOR' in st:
                 totales['cortado'] += cnt
-            elif 'CANC' in st or 'RETIR' in st or 'INACT' in st or 'NO INST' in st:
-                totales['cancelado'] += cnt
             else:
-                totales['cancelado'] += cnt
+                totales['inactivo'] += cnt
                 
         # Total cartera vigente = Activos + Cortados
         totales['total'] = totales['activo'] + totales['cortado']
         totales['cartera_vigente'] = totales['activo'] + totales['cortado']
-        totales['total_historico'] = totales['activo'] + totales['cortado'] + totales['cancelado']
+        totales['total_historico'] = totales['activo'] + totales['cortado'] + totales['cancelado'] + totales['inactivo']
         
         return jsonify({"status": "success", "kpis": totales})
     except Exception as e:
