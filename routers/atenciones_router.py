@@ -728,39 +728,47 @@ def historial_unificado():
 
 @atenciones_bp.route('/api/cliente/kpis_estado', methods=['GET'])
 def kpis_estado_clientes():
+    empresa = request.args.get('empresa', '').strip().upper()
     conn = get_db_connection()
     if not conn:
         return jsonify({"status": "error", "message": "Error de conexión a BD"}), 500
     try:
         cursor = conn.cursor(dictionary=True)
+        target_empresa = empresa if empresa in ('SERVICABLE', 'FIBRACOM') else 'SERVICABLE'
         cursor.execute("""
             SELECT 
-                COALESCE(UPPER(TRIM(estado)), 'ACTIVO') AS estado_norm,
+                COALESCE(UPPER(TRIM(estado)), 'INACTIVO') AS estado_norm,
                 COUNT(*) AS total
             FROM directorio_clientes
+            WHERE UPPER(TRIM(empresa)) = %s
             GROUP BY estado_norm
-        """)
+        """, (target_empresa,))
         rows = cursor.fetchall()
         
         totales = {
             'activo': 0,
             'cortado': 0,
             'cancelado': 0,
-            'total': 0
+            'total': 0,
+            'empresa': target_empresa
         }
         for r in rows:
             st = r['estado_norm']
             cnt = int(r['total'])
-            totales['total'] += cnt
             if 'ACTIVO' in st:
                 totales['activo'] += cnt
             elif 'CORT' in st or 'SUSP' in st or 'MOR' in st:
                 totales['cortado'] += cnt
-            elif 'CANC' in st or 'RETIR' in st or 'INACT' in st:
+            elif 'CANC' in st or 'RETIR' in st or 'INACT' in st or 'NO INST' in st:
                 totales['cancelado'] += cnt
             else:
-                totales['activo'] += cnt
+                totales['cancelado'] += cnt
                 
+        # Total cartera vigente = Activos + Cortados
+        totales['total'] = totales['activo'] + totales['cortado']
+        totales['cartera_vigente'] = totales['activo'] + totales['cortado']
+        totales['total_historico'] = totales['activo'] + totales['cortado'] + totales['cancelado']
+        
         return jsonify({"status": "success", "kpis": totales})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
