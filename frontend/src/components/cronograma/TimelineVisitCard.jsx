@@ -31,14 +31,16 @@ export default function TimelineVisitCard({
     }
   }
   const isOverdue = overdueMin > 0;
+  const esApoyo = !!visita._esApoyo;
+  const titularNombre = visita._titularNombre || visita.tecnico_principal;
 
   // Detección: El técnico cerró solicitando Cambio de FO
   const solUpper = (visita.solucion_tecnico || '').toUpperCase();
   const obsUpper = (visita.observacion_tecnico || '').toUpperCase();
   const resUpper = (visita.resolucion_final || '').toUpperCase();
-  const isFOSolicitado = solUpper.includes('GENERAR CAMBIO DE FO') || 
-                         solUpper.includes('REQUIERE CAMBIO DE FO') || 
-                         obsUpper.includes('GENERAR CAMBIO DE FO');
+  const isFOSolicitado = solUpper.includes('GENERAR CAMBIO DE FO') ||
+    solUpper.includes('REQUIERE CAMBIO DE FO') ||
+    obsUpper.includes('GENERAR CAMBIO DE FO');
   const isFOAgendado = resUpper.includes('CAMBIO DE FO AGENDADO');
 
   let estadoClass = 'estado-pendiente';
@@ -80,8 +82,6 @@ export default function TimelineVisitCard({
     window.__cronoDragData = null;
   };
 
-  const esApoyo = !!visita._esApoyo;
-  const titularNombre = visita._titularNombre || visita.tecnico_principal;
   const canResize = !!onResizeVisit && !esApoyo && estado !== 'FINALIZADA' && estado !== 'CANCELADA';
   const totalMinutes = (endHour - startHour) * 60;
 
