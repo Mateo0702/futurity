@@ -21,10 +21,14 @@ export default function ModalAsignacionDoble({
       setPreferenciaHoraria(visita.preferencia_horaria || '');
 
       const note = `${visita.observacion_callcenter || ''} ${visita.preferencia_horaria || ''}`;
-      const match = note.match(/(?:refuerzo|apoyo).*?(?:desde|a las)\s*(\d{1,2}:\d{2})/i);
+      const match = note.match(/(?:refuerzo|apoyo).*?(?:(?:desde|a\s+partir\s+de)\s*(?:las?)?|a\s+las?|inicia(?:\s+a)?|:)?\s*(\d{1,2})(?:[:hH](\d{2}))?\s*(am|pm)?/i);
       if (match) {
         setTipoApoyo('REFUERZO');
-        setHoraInicioRefuerzo(match[1]);
+        let rh = parseInt(match[1], 10);
+        const rm = match[2] ? match[2] : '00';
+        const ampm = match[3] ? match[3].toLowerCase() : '';
+        if (ampm === 'pm' && rh < 12) rh += 12;
+        setHoraInicioRefuerzo(`${String(rh).padStart(2, '0')}:${rm}`);
       } else {
         setTipoApoyo('COMPLETO');
       }
@@ -47,11 +51,10 @@ export default function ModalAsignacionDoble({
     setGuardando(true);
     try {
       let horarioFinal = preferenciaHoraria;
+      // Limpiar cualquier nota previa de apoyo/refuerzo para no duplicar ni conservar horas viejas
+      horarioFinal = horarioFinal.replace(/\s*\((?:apoyo|refuerzo)[^)]*\)/gi, '').trim();
       if (tecnicoApoyo && tipoApoyo === 'REFUERZO' && horaInicioRefuerzo) {
-        // Añadir nota de incorporación a media visita si no estaba ya presente
-        if (!horarioFinal.includes('Apoyo desde')) {
-          horarioFinal = `${horarioFinal} (Apoyo desde las ${horaInicioRefuerzo})`.trim();
-        }
+        horarioFinal = `${horarioFinal} (Apoyo desde las ${horaInicioRefuerzo})`.trim();
       }
 
       await onConfirm({

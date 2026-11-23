@@ -50,7 +50,7 @@ export default function TimelineVisitCard({
 
   const isFinalizada = estado === 'FINALIZADA' || estado === 'CANCELADA';
   const isEnSitio = estado === 'EN_SITIO' || estado === 'EN_PROGRESO';
-  const isLockedDrag = isFinalizada || isEnSitio;
+  const isLockedDrag = isFinalizada || isEnSitio || esApoyo;
 
   const handleDragStart = (e) => {
     if (isLockedDrag) {
@@ -144,7 +144,9 @@ export default function TimelineVisitCard({
     ? '🔒 Visita finalizada (bloqueada — haz clic para ver detalles)'
     : isEnSitio
       ? '🔒 En progreso (fija en horario/técnico — arrastra el borde derecho o usa la ficha para extender/acortar)'
-      : `Arrastra para mover${canResize ? ' • Arrastra el borde derecho para extender/acortar' : ''}`;
+      : esApoyo
+        ? `🤝 En apoyo a ${titularNombre} (haz clic para ver detalles o reasignar)`
+        : `Arrastra para mover${canResize ? ' • Arrastra el borde derecho para extender/acortar' : ''}`;
 
   return (
     <div

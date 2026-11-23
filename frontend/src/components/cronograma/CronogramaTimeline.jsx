@@ -204,11 +204,14 @@ export default function CronogramaTimeline({
         // Detectar si fue refuerzo a media visita
         let inicioApoyoMin = null;
         const allNotes = `${v.observacion_callcenter || ''} ${v.preferencia_horaria || ''} ${v.informacion_tecnico || ''}`;
-        const refuerzoMatch = allNotes.match(/(?:refuerzo|apoyo).*?(?:desde|a las|inicia)\s*(\d{1,2}):?(\d{2})?/i);
+        const refuerzoMatch = allNotes.match(/(?:refuerzo|apoyo).*?(?:(?:desde|a\s+partir\s+de)\s*(?:las?)?|a\s+las?|inicia(?:\s+a)?|:)?\s*(\d{1,2})(?:[:hH](\d{2}))?\s*(am|pm)?/i);
         if (refuerzoMatch) {
           let rh = parseInt(refuerzoMatch[1], 10);
           const rm = refuerzoMatch[2] ? parseInt(refuerzoMatch[2], 10) : 0;
-          if (allNotes.toLowerCase().includes('tarde') && rh < 12) rh += 12;
+          const ampm = refuerzoMatch[3] ? refuerzoMatch[3].toLowerCase() : '';
+          if (ampm === 'pm' && rh < 12) rh += 12;
+          else if (ampm === 'am' && rh === 12) rh = 0;
+          else if (allNotes.toLowerCase().includes('tarde') && rh < 12) rh += 12;
           inicioApoyoMin = rh * 60 + rm;
         }
 

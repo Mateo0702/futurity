@@ -76,8 +76,23 @@ export function computeVisitTimes(v, startHour = 7, endHour = 21) {
   }
 
   // 3. Caso especial: Técnico de apoyo como refuerzo
-  if (v._esApoyo && v._inicioApoyoMin && v._inicioApoyoMin > startMin) {
-    startMin = v._inicioApoyoMin;
+  let inicioApoyoMin = v._inicioApoyoMin;
+  if (!inicioApoyoMin && v._esApoyo) {
+    const allNotes = `${v.observacion_callcenter || ''} ${v.preferencia_horaria || ''} ${v.informacion_tecnico || ''}`;
+    const refuerzoMatch = allNotes.match(/(?:refuerzo|apoyo).*?(?:(?:desde|a\s+partir\s+de)\s*(?:las?)?|a\s+las?|inicia(?:\s+a)?|:)?\s*(\d{1,2})(?:[:hH](\d{2}))?\s*(am|pm)?/i);
+    if (refuerzoMatch) {
+      let rh = parseInt(refuerzoMatch[1], 10);
+      const rm = refuerzoMatch[2] ? parseInt(refuerzoMatch[2], 10) : 0;
+      const ampm = refuerzoMatch[3] ? refuerzoMatch[3].toLowerCase() : '';
+      if (ampm === 'pm' && rh < 12) rh += 12;
+      else if (ampm === 'am' && rh === 12) rh = 0;
+      else if (allNotes.toLowerCase().includes('tarde') && rh < 12) rh += 12;
+      inicioApoyoMin = rh * 60 + rm;
+    }
+  }
+
+  if (v._esApoyo && inicioApoyoMin && inicioApoyoMin > startMin) {
+    startMin = inicioApoyoMin;
   }
 
   if (endMin !== null && endMin > startMin) {
@@ -131,7 +146,9 @@ export function computeVisitTimes(v, startHour = 7, endHour = 21) {
     realFinStr,
     displayTimeStr: adjustedByFinish
       ? `✓ ${formatMinutesToTime(startMin)} - ${realFinStr}`
-      : (v.preferencia_horaria || `${formatMinutesToTime(startMin)} - ${formatMinutesToTime(calculatedEndMin)}`)
+      : (v._esApoyo && inicioApoyoMin
+          ? `${formatMinutesToTime(startMin)} - ${formatMinutesToTime(calculatedEndMin)} (Apoyo)`
+          : (v.preferencia_horaria || `${formatMinutesToTime(startMin)} - ${formatMinutesToTime(calculatedEndMin)}`))
   };
 }
 
