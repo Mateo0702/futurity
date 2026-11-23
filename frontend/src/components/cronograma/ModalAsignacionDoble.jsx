@@ -63,7 +63,8 @@ export default function ModalAsignacionDoble({
         tecnico_apoyo: tecnicoApoyo || '',
         preferencia_horaria: horarioFinal,
         tipo_apoyo: tipoApoyo,
-        hora_inicio_refuerzo: horaInicioRefuerzo
+        hora_inicio_refuerzo: tipoApoyo === 'REFUERZO' ? horaInicioRefuerzo : '',
+        hora_inicio_apoyo: tipoApoyo === 'REFUERZO' ? horaInicioRefuerzo : ''
       });
       onClose();
     } catch (err) {

@@ -445,6 +445,7 @@ def reasignar_tecnicos(id_visita):
     
     nuevo_principal = request.form.get('tecnico_principal')
     nuevo_apoyo = request.form.get('tecnico_apoyo') or None # Puede ir vacío
+    hora_inicio_apoyo = request.form.get('hora_inicio_apoyo')
     preferencia_horaria = request.form.get('preferencia_horaria')
     ventana_inicio_min = request.form.get('ventana_inicio_min')
     ventana_fin_min = request.form.get('ventana_fin_min')
@@ -452,17 +453,54 @@ def reasignar_tecnicos(id_visita):
     conexion = get_db_connection()
     cursor = conexion.cursor()
     try:
-        cursor.execute("SELECT estado FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
-        row_est = cursor.fetchone()
-        if row_est and str(row_est[0] or '').upper() == 'FINALIZADA':
+        cursor.execute("SELECT estado, preferencia_horaria, hora_inicio_apoyo FROM visitas_tecnicas WHERE id_visita = %s", (id_visita,))
+        row_vis = cursor.fetchone()
+        if not row_vis:
+            return jsonify({"status": "error", "message": "Visita no encontrada."}), 404
+        if row_vis and str(row_vis[0] or '').upper() == 'FINALIZADA':
             return jsonify({"status": "error", "message": "No se puede mover ni reasignar una visita que ya está FINALIZADA."}), 400
+
+        old_pref = str(row_vis[1] or '')
+        old_h_apoyo = str(row_vis[2] or '')
 
         campos = ["tecnico_principal = %s", "tecnico_apoyo = %s"]
         valores = [nuevo_principal, nuevo_apoyo]
 
+        # Manejo persistente de hora_inicio_apoyo
+        if nuevo_apoyo:
+            if hora_inicio_apoyo is not None and hora_inicio_apoyo.strip():
+                h_clean = hora_inicio_apoyo.strip()
+                campos.append("hora_inicio_apoyo = %s")
+                valores.append(h_clean)
+            elif preferencia_horaria:
+                import re
+                m_apoyo = re.search(r'(?:refuerzo|apoyo).*?(?:(?:desde|a\s+partir\s+de)\s*(?:las?)?|a\s+las?|inicia(?:\s+a)?|:)?\s*(\d{1,2}(?:[:hH]\d{2})?)', preferencia_horaria, re.IGNORECASE)
+                if m_apoyo:
+                    campos.append("hora_inicio_apoyo = %s")
+                    valores.append(m_apoyo.group(1).replace('h', ':').replace('H', ':'))
+            elif old_h_apoyo:
+                campos.append("hora_inicio_apoyo = %s")
+                valores.append(old_h_apoyo)
+        else:
+            campos.append("hora_inicio_apoyo = NULL")
+
         if preferencia_horaria is not None and preferencia_horaria.strip():
+            pref_final = preferencia_horaria.strip()
+            # Si tiene apoyo con hora y la preferencia enviada no la contiene, preservarla
+            if nuevo_apoyo:
+                import re
+                has_apoyo_tag = bool(re.search(r'\((?:apoyo|refuerzo)[^)]*\)', pref_final, re.IGNORECASE))
+                if not has_apoyo_tag:
+                    h_to_use = (hora_inicio_apoyo.strip() if hora_inicio_apoyo and hora_inicio_apoyo.strip() else None) or (old_h_apoyo if old_h_apoyo else None)
+                    if not h_to_use:
+                        m_old = re.search(r'(?:refuerzo|apoyo).*?(?:(?:desde|a\s+partir\s+de)\s*(?:las?)?|a\s+las?|inicia(?:\s+a)?|:)?\s*(\d{1,2}(?:[:hH]\d{2})?)', old_pref, re.IGNORECASE)
+                        if m_old:
+                            h_to_use = m_old.group(1).replace('h', ':').replace('H', ':')
+                    if h_to_use:
+                        pref_final = f"{pref_final} (Apoyo desde las {h_to_use})"
+
             campos.append("preferencia_horaria = %s")
-            valores.append(preferencia_horaria.strip())
+            valores.append(pref_final)
         
         if ventana_inicio_min is not None and str(ventana_inicio_min).isdigit() and int(ventana_inicio_min) > 0:
             campos.append("ventana_inicio_min = %s")
@@ -765,7 +803,7 @@ def extender_horario_visita(id_visita):
     cursor = conexion.cursor(dictionary=True)
     try:
         cursor.execute("""
-            SELECT id_visita, tecnico_principal, fecha_programada, preferencia_horaria,
+            SELECT id_visita, tecnico_principal, tecnico_apoyo, hora_inicio_apoyo, fecha_programada, preferencia_horaria,
                    ventana_inicio_min, ventana_fin_min, estado
             FROM visitas_tecnicas
             WHERE id_visita = %s
@@ -786,6 +824,18 @@ def extender_horario_visita(id_visita):
         # Redondear a múltiplos de 5/15 min y limitar dentro del cronograma (mín 30 min, máx 21:00)
         new_end_min = max(start_min + 30, min(new_end_min, 21 * 60))
         nueva_pref = f"{_fmt_min_hhmm(start_min)} - {_fmt_min_hhmm(new_end_min)}"
+
+        # Preservar anotación de apoyo si existe
+        if visita.get('tecnico_apoyo'):
+            h_apoyo = (visita.get('hora_inicio_apoyo') or '').strip()
+            if h_apoyo:
+                nueva_pref = f"{nueva_pref} (Apoyo desde las {h_apoyo})"
+            else:
+                import re
+                old_pref = str(visita.get('preferencia_horaria') or '')
+                m_apoyo = re.search(r'(\((?:apoyo|refuerzo)[^)]*\))', old_pref, re.IGNORECASE)
+                if m_apoyo:
+                    nueva_pref = f"{nueva_pref} {m_apoyo.group(1)}"
 
         cursor.execute("""
             UPDATE visitas_tecnicas

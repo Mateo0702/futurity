@@ -66,6 +66,7 @@ export default function TimelineVisitCard({
       id_visita: visita.id_visita,
       tecnico_principal: visita.tecnico_principal,
       tecnico_apoyo: visita.tecnico_apoyo || '',
+      hora_inicio_apoyo: visita.hora_inicio_apoyo || (visita._inicioApoyoMin ? formatMinutesToTime(visita._inicioApoyoMin) : ''),
       contrato: visita.contrato,
       cliente: visita.cliente,
       preferencia_horaria: visita.preferencia_horaria,
@@ -320,8 +321,8 @@ export default function TimelineVisitCard({
                 <i className="fa-solid fa-user-check"></i> Titular: {titularNombre.split(' ')[0]}
               </span>
             ) : visita.tecnico_apoyo ? (
-              <span className="crono-dual-tech-pill" title={`Con Apoyo de ${visita.tecnico_apoyo}`}>
-                <i className="fa-solid fa-user-group"></i> +{visita.tecnico_apoyo.split(' ')[0]}
+              <span className="crono-dual-tech-pill" title={`Con Apoyo de ${visita.tecnico_apoyo}${visita.hora_inicio_apoyo ? ` (desde ${visita.hora_inicio_apoyo})` : ''}`}>
+                <i className="fa-solid fa-user-group"></i> +{visita.tecnico_apoyo.split(' ')[0]}{visita.hora_inicio_apoyo ? ` (${visita.hora_inicio_apoyo})` : ''}
               </span>
             ) : null}
           </div>

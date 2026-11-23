@@ -77,6 +77,9 @@ export function computeVisitTimes(v, startHour = 7, endHour = 21) {
 
   // 3. Caso especial: Técnico de apoyo como refuerzo
   let inicioApoyoMin = v._inicioApoyoMin;
+  if (!inicioApoyoMin && v.hora_inicio_apoyo) {
+    inicioApoyoMin = parseRealTimeToMinutes(v.hora_inicio_apoyo);
+  }
   if (!inicioApoyoMin && v._esApoyo) {
     const allNotes = `${v.observacion_callcenter || ''} ${v.preferencia_horaria || ''} ${v.informacion_tecnico || ''}`;
     const refuerzoMatch = allNotes.match(/(?:refuerzo|apoyo).*?(?:(?:desde|a\s+partir\s+de)\s*(?:las?)?|a\s+las?|inicia(?:\s+a)?|:)?\s*(\d{1,2})(?:[:hH](\d{2}))?\s*(am|pm)?/i);

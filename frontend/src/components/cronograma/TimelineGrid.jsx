@@ -123,12 +123,23 @@ export default function TimelineGrid({
 
       const horaInicioStr = `${String(h1).padStart(2, '0')}:${String(m1).padStart(2, '0')}`;
       const horaFinStr = `${String(h2).padStart(2, '0')}:${String(m2).padStart(2, '0')}`;
-      const nuevaPrefHoraria = `${horaInicioStr} - ${horaFinStr}`;
+      let nuevaPrefHoraria = `${horaInicioStr} - ${horaFinStr}`;
+
+      const hApoyo = data.hora_inicio_apoyo || '';
+      if (hApoyo && data.tecnico_apoyo) {
+        nuevaPrefHoraria = `${nuevaPrefHoraria} (Apoyo desde las ${hApoyo})`;
+      } else {
+        const matchApoyo = String(data.preferencia_horaria || '').match(/\((?:apoyo|refuerzo)[^)]*\)/i);
+        if (matchApoyo) {
+          nuevaPrefHoraria = `${nuevaPrefHoraria} ${matchApoyo[0]}`;
+        }
+      }
 
       onDropVisit({
         id_visita: data.id_visita,
         nuevo_tecnico: techNombre,
         tecnico_apoyo: data.tecnico_apoyo || '',
+        hora_inicio_apoyo: hApoyo,
         nueva_preferencia_horaria: nuevaPrefHoraria,
         ventana_inicio_min: snappedStartMin,
         ventana_fin_min: snappedEndMin

@@ -203,16 +203,21 @@ export default function CronogramaTimeline({
       if (hasValidApoyo && map[apoyo]) {
         // Detectar si fue refuerzo a media visita
         let inicioApoyoMin = null;
-        const allNotes = `${v.observacion_callcenter || ''} ${v.preferencia_horaria || ''} ${v.informacion_tecnico || ''}`;
-        const refuerzoMatch = allNotes.match(/(?:refuerzo|apoyo).*?(?:(?:desde|a\s+partir\s+de)\s*(?:las?)?|a\s+las?|inicia(?:\s+a)?|:)?\s*(\d{1,2})(?:[:hH](\d{2}))?\s*(am|pm)?/i);
-        if (refuerzoMatch) {
-          let rh = parseInt(refuerzoMatch[1], 10);
-          const rm = refuerzoMatch[2] ? parseInt(refuerzoMatch[2], 10) : 0;
-          const ampm = refuerzoMatch[3] ? refuerzoMatch[3].toLowerCase() : '';
-          if (ampm === 'pm' && rh < 12) rh += 12;
-          else if (ampm === 'am' && rh === 12) rh = 0;
-          else if (allNotes.toLowerCase().includes('tarde') && rh < 12) rh += 12;
-          inicioApoyoMin = rh * 60 + rm;
+        if (v.hora_inicio_apoyo) {
+          inicioApoyoMin = parseRealTimeToMinutes(v.hora_inicio_apoyo);
+        }
+        if (!inicioApoyoMin) {
+          const allNotes = `${v.observacion_callcenter || ''} ${v.preferencia_horaria || ''} ${v.informacion_tecnico || ''}`;
+          const refuerzoMatch = allNotes.match(/(?:refuerzo|apoyo).*?(?:(?:desde|a\s+partir\s+de)\s*(?:las?)?|a\s+las?|inicia(?:\s+a)?|:)?\s*(\d{1,2})(?:[:hH](\d{2}))?\s*(am|pm)?/i);
+          if (refuerzoMatch) {
+            let rh = parseInt(refuerzoMatch[1], 10);
+            const rm = refuerzoMatch[2] ? parseInt(refuerzoMatch[2], 10) : 0;
+            const ampm = refuerzoMatch[3] ? refuerzoMatch[3].toLowerCase() : '';
+            if (ampm === 'pm' && rh < 12) rh += 12;
+            else if (ampm === 'am' && rh === 12) rh = 0;
+            else if (allNotes.toLowerCase().includes('tarde') && rh < 12) rh += 12;
+            inicioApoyoMin = rh * 60 + rm;
+          }
         }
 
         map[apoyo].push({
@@ -279,7 +284,16 @@ export default function CronogramaTimeline({
   const handleResizeVisit = async (visitaObj, newEndMin) => {
     const startMin = visitaObj.startMin;
     const clampedEnd = Math.max(startMin + 30, Math.min(newEndMin, 21 * 60));
-    const nuevaPref = `${formatMinutesToTime(startMin)} - ${formatMinutesToTime(clampedEnd)}`;
+    let nuevaPref = `${formatMinutesToTime(startMin)} - ${formatMinutesToTime(clampedEnd)}`;
+    const hApoyo = visitaObj.hora_inicio_apoyo || (visitaObj._inicioApoyoMin ? formatMinutesToTime(visitaObj._inicioApoyoMin) : null);
+    if (hApoyo && visitaObj.tecnico_apoyo) {
+      nuevaPref = `${nuevaPref} (Apoyo desde las ${hApoyo})`;
+    } else {
+      const matchApoyo = String(visitaObj.preferencia_horaria || '').match(/\((?:apoyo|refuerzo)[^)]*\)/i);
+      if (matchApoyo) {
+        nuevaPref = `${nuevaPref} ${matchApoyo[0]}`;
+      }
+    }
 
     // Optimistic update
     setLocalVisitas(prev => prev.map(v => {
@@ -336,6 +350,7 @@ export default function CronogramaTimeline({
           ...v,
           tecnico_principal: payload.nuevo_tecnico,
           tecnico_apoyo: payload.tecnico_apoyo || '',
+          hora_inicio_apoyo: payload.hora_inicio_apoyo !== undefined ? payload.hora_inicio_apoyo : v.hora_inicio_apoyo,
           preferencia_horaria: payload.nueva_preferencia_horaria || v.preferencia_horaria,
           ventana_inicio_min: payload.ventana_inicio_min,
           ventana_fin_min: payload.ventana_fin_min
@@ -348,6 +363,7 @@ export default function CronogramaTimeline({
       const formData = new URLSearchParams({
         tecnico_principal: payload.nuevo_tecnico,
         tecnico_apoyo: payload.tecnico_apoyo || '',
+        hora_inicio_apoyo: payload.hora_inicio_apoyo || '',
         preferencia_horaria: payload.nueva_preferencia_horaria || '',
         ventana_inicio_min: String(payload.ventana_inicio_min || 0),
         ventana_fin_min: String(payload.ventana_fin_min || 0)
@@ -380,6 +396,7 @@ export default function CronogramaTimeline({
     const formData = new URLSearchParams({
       tecnico_principal: data.tecnico_principal,
       tecnico_apoyo: data.tecnico_apoyo || '',
+      hora_inicio_apoyo: data.hora_inicio_apoyo || data.hora_inicio_refuerzo || '',
       preferencia_horaria: data.preferencia_horaria || ''
     });
 
