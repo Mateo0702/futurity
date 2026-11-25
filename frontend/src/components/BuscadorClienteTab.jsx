@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ConsultaBaseCentralModal from './ConsultaBaseCentralModal';
+import {
+  TIPOS_ATENCION,
+  TIPOS_SOLICITUD,
+  MEDIOS_CONTACTO,
+  ACCIONES_REALIZADAS,
+  OLTS_NODOS,
+  MOTIVOS_CONSULTA,
+} from '../constants/atencionesOptions';
 
 function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
   // Today's Local Date helper
@@ -180,6 +188,7 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
     medio_contacto: 'WHATSAPP',
     accion: 'SOPORTE MEDIANTE MENSAJES',
     motivo: 'NOTIFICACIÓN MASIVA',
+    olt: '',
     observacion: ''
   });
 
@@ -1979,12 +1988,7 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700, fontSize: '0.85rem' }}
                     required
                   >
-                    <option value="SERVICIO TÉCNICO">SERVICIO TÉCNICO</option>
-                    <option value="ATENCIÓN AL CLIENTE">ATENCIÓN AL CLIENTE</option>
-                    <option value="COBRANZAS">COBRANZAS</option>
-                    <option value="VENTAS">VENTAS</option>
-                    <option value="CANCELACIÓN">CANCELACIÓN</option>
-                    <option value="OTROS">OTROS</option>
+                    {TIPOS_ATENCION.map(op => <option key={op} value={op}>{op}</option>)}
                   </select>
                 </div>
 
@@ -1999,32 +2003,7 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700, fontSize: '0.85rem' }}
                     required
                   >
-                    <option value="SOPORTE TÉCNICO">SOPORTE TÉCNICO</option>
-                    <option value="ACTUALIZACION DE DATOS">ACTUALIZACION DE DATOS</option>
-                    <option value="ACTUALIZACION DE DEBITO">ACTUALIZACION DE DEBITO</option>
-                    <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
-                    <option value="ENTREGA DE EQUIPOS">ENTREGA DE EQUIPOS</option>
-                    <option value="INCREMENTO MEGAS">INCREMENTO MEGAS</option>
-                    <option value="TRANSFERENCIA">TRANSFERENCIA</option>
-                    <option value="MIGRACIÓN">MIGRACIÓN</option>
-                    <option value="RETIRAR EQUIPOS">RETIRAR EQUIPOS</option>
-                    <option value="CONSULTA">CONSULTA</option>
-                    <option value="ENTREGAR EQUIPOS">ENTREGAR EQUIPOS</option>
-                    <option value="ACUERDO DE PAGOS">ACUERDO DE PAGOS</option>
-                    <option value="DEBITO DE CTA O T/C">DEBITO DE CTA O T/C</option>
-                    <option value="PAGO FACTURA">PAGO FACTURA</option>
-                    <option value="RECONEXION">RECONEXION</option>
-                    <option value="RETIRO DE FACTURA">RETIRO DE FACTURA</option>
-                    <option value="FACTURACION">FACTURACION</option>
-                    <option value="INSTALACION ADICIONAL">INSTALACION ADICIONAL</option>
-                    <option value="INSTALACION NUEVA">INSTALACION NUEVA</option>
-                    <option value="VENTA DE ROUTER">VENTA DE ROUTER</option>
-                    <option value="CONTRATA ZAPPING">CONTRATA ZAPPING</option>
-                    <option value="CONTRATA DGO">CONTRATA DGO</option>
-                    <option value="RECLAMO">RECLAMO</option>
-                    <option value="RETENCIÓN">RETENCIÓN</option>
-                    <option value="CANCELACIÓN DEFINITIVA">CANCELACIÓN DEFINITIVA</option>
-                    <option value="CORTE VOLUNTARIO">CORTE VOLUNTARIO</option>
+                    {TIPOS_SOLICITUD.map(op => <option key={op} value={op}>{op}</option>)}
                   </select>
                 </div>
 
@@ -2039,14 +2018,7 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700, fontSize: '0.85rem' }}
                     required
                   >
-                    <option value="WHATSAPP">WHATSAPP</option>
-                    <option value="TELEFONO">TELÉFONO</option>
-                    <option value="OFICINA">OFICINA</option>
-                    <option value="WHATSAPP + TELEFONO">WHATSAPP + TELEFONO</option>
-                    <option value="REDES SOCIALES">REDES SOCIALES</option>
-                    <option value="CHAT INTERNO">CHAT INTERNO</option>
-                    <option value="CONTROL CALIDAD">CONTROL CALIDAD</option>
-                    <option value="WHATSAPP TECNICOS">WHATSAPP TECNICOS</option>
+                    {MEDIOS_CONTACTO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select>
                 </div>
               </div>
@@ -2064,19 +2036,7 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700, fontSize: '0.85rem' }}
                     required
                   >
-                    <option value="SOPORTE MEDIANTE MENSAJES">SOPORTE MEDIANTE MENSAJES</option>
-                    <option value="SOPORTE MEDIANTE LLAMADA">SOPORTE MEDIANTE LLAMADA</option>
-                    <option value="LLAMADA SALIENTE">LLAMADA SALIENTE</option>
-                    <option value="VISITA TECNICA">VISITA TECNICA</option>
-                    <option value="VISITA TECNICA COBRADA">VISITA TECNICA COBRADA</option>
-                    <option value="SMART OLT">SMART OLT</option>
-                    <option value="CORTE INTERNO DE SERVICIO">CORTE INTERNO DE SERVICIO</option>
-                    <option value="SOPORTE EN OFICINAS">SOPORTE EN OFICINAS</option>
-                    <option value="SOPORTE A TECNICO DE CAMPO">SOPORTE A TECNICO DE CAMPO</option>
-                    <option value="TRANSFERIR / EXTENSIONES">TRANSFERIR / EXTENSIONES</option>
-                    <option value="SE DA INFORMACION">SE DA INFORMACION</option>
-                    <option value="ESCALAR A TECNOLOGIA">ESCALAR A TECNOLOGIA</option>
-                    <option value="RETENCION">RETENCION</option>
+                    {ACCIONES_REALIZADAS.map(op => <option key={op} value={op}>{op}</option>)}
                   </select>
                 </div>
 
@@ -2091,17 +2051,7 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 700, fontSize: '0.85rem' }}
                   >
                     <option value="">-- Sin Especificar / Ninguno --</option>
-                    <option value="1.18">1.18</option>
-                    <option value="1.50">1.50</option>
-                    <option value="99.1">99.1</option>
-                    <option value="BAÑOS">BAÑOS</option>
-                    <option value="AZOGUES">AZOGUES</option>
-                    <option value="ESTADIO">ESTADIO</option>
-                    <option value="BASES">BASES</option>
-                    <option value="RB">RB</option>
-                    <option value="HFC">HFC</option>
-                    <option value="FIBRACOM VALLE">FIBRACOM VALLE</option>
-                    <option value="FIBRACOM SANTA ANA">FIBRACOM SANTA ANA</option>
+                    {OLTS_NODOS.map(op => <option key={op} value={op}>{op}</option>)}
                   </select>
                 </div>
               </div>
@@ -2202,62 +2152,7 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
                   required
                 />
                 <datalist id="atencion-motivos-list">
-                  <option value="INFORMACION / PAGOS" />
-                  <option value="Visita Radio Enlace" />
-                  <option value="Visita Potencia Degradada" />
-                  <option value="Visita Revisión de Servicio" />
-                  <option value="Visita Equipo Alarmado" />
-                  <option value="Visita Cambio de Router" />
-                  <option value="Visita Colocación de Router" />
-                  <option value="Visita Configuración de Equipos" />
-                  <option value="Visita HFC" />
-                  <option value="Visita Canales Borrosos" />
-                  <option value="Visita Paso de Cable UTP" />
-                  <option value="Visita Reubicación de equipos (Retención)" />
-                  <option value="VISITA TECNICA Equipos no Encienden" />
-                  <option value="VISITA TECNICA No Marca Velocidad Contratada" />
-                  <option value="Visita Paso de Cable Fibra O. (Cobrado)" />
-                  <option value="Visita Paso de Cable RG6 (Cobrado)" />
-                  <option value="Visita Paso de Cable UTP (Cobrado)" />
-                  <option value="Visita Configuración de Equipos (Cobrado)" />
-                  <option value="Visita Reubicación de equipos (Cobrado)" />
-                  <option value="Visita Cambio de ONU" />
-                  <option value="Visita sin servicio de cable" />
-                  <option value="Desconfiguración de Equipos" />
-                  <option value="Equipos apagados" />
-                  <option value="Equipos Inhibidos" />
-                  <option value="Validación de Servicio" />
-                  <option value="Problema con dispositivos del cliente" />
-                  <option value="Configuración de Equipos ONU / Router" />
-                  <option value="Migración / Potencia degradada" />
-                  <option value="Configuración mediante ANY DESK" />
-                  <option value="CUENTAS ZAPPING" />
-                  <option value="Activación de Servicio" />
-                  <option value="Cambio de Domicilio" />
-                  <option value="Migración de Servicio" />
-                  <option value="Actualización de Velocidad" />
-                  <option value="Configuración de Equipos en instalación" />
-                  <option value="Paso a Cartera" />
-                  <option value="Paso a Ventas" />
-                  <option value="Paso a soporte técnico" />
-                  <option value="Corte de servicio - Reconexión Autorizada" />
-                  <option value="Corte de servicio - Corte Autorizado" />
-                  <option value="Valores a Pagar" />
-                  <option value="Dirección y Horarios de Atención" />
-                  <option value="Acuerdo de Pagos" />
-                  <option value="Actualización de Pagos" />
-                  <option value="Recepción de Equipos" />
-                  <option value="Información" />
-                  <option value="TICKET AL NOC / DAÑO HFC" />
-                  <option value="TICKET AL NOC / DAÑO GPON" />
-                  <option value="TICKET AL NOC / DAÑO RADIAL" />
-                  <option value="TICKET AL NOC / SIN CANAL" />
-                  <option value="TICKET AL NOC / PAGINAS BLOQUEADAS" />
-                  <option value="TICKET AL NOC / NAT TIPO 3" />
-                  <option value="TICKET AL NOC / CAIDA GENERAL" />
-                  <option value="CAÍDA GENERAL / OLT" />
-                  <option value="COBRO CON TARJETA" />
-                  <option value="PASO A RETENCION" />
+                  {MOTIVOS_CONSULTA.map(m => <option key={m} value={m} />)}
                 </datalist>
               </div>
 
@@ -2408,12 +2303,7 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
                       className="form-control"
                       style={{ fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
                     >
-                      <option value="SERVICIO TÉCNICO">SERVICIO TÉCNICO</option>
-                      <option value="ATENCIÓN AL CLIENTE">ATENCIÓN AL CLIENTE</option>
-                      <option value="COBRANZAS">COBRANZAS</option>
-                      <option value="VENTAS">VENTAS</option>
-                      <option value="CANCELACIÓN">CANCELACIÓN</option>
-                      <option value="OTROS">OTROS</option>
+                      {TIPOS_ATENCION.map(op => <option key={op} value={op}>{op}</option>)}
                     </select>
                   </div>
 
@@ -2425,19 +2315,7 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
                       className="form-control"
                       style={{ fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
                     >
-                      <option value="SOPORTE TÉCNICO">SOPORTE TÉCNICO</option>
-                      <option value="ACTUALIZACION DE DATOS">ACTUALIZACION DE DATOS</option>
-                      <option value="ACTUALIZACION DE DEBITO">ACTUALIZACION DE DEBITO</option>
-                      <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
-                      <option value="ENTREGA DE EQUIPOS">ENTREGA DE EQUIPOS</option>
-                      <option value="INCREMENTO MEGAS">INCREMENTO MEGAS</option>
-                      <option value="MIGRACIÓN">MIGRACIÓN</option>
-                      <option value="CONSULTA">CONSULTA</option>
-                      <option value="ACUERDO DE PAGOS">ACUERDO DE PAGOS</option>
-                      <option value="PAGO FACTURA">PAGO FACTURA</option>
-                      <option value="RECONEXION">RECONEXION</option>
-                      <option value="RECLAMO">RECLAMO</option>
-                      <option value="RETENCIÓN">RETENCIÓN</option>
+                      {TIPOS_SOLICITUD.map(op => <option key={op} value={op}>{op}</option>)}
                     </select>
                   </div>
 
@@ -2449,12 +2327,7 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
                       className="form-control"
                       style={{ fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
                     >
-                      <option value="WHATSAPP">WHATSAPP</option>
-                      <option value="TELEFONO">TELÉFONO</option>
-                      <option value="OFICINA">OFICINA</option>
-                      <option value="WHATSAPP + TELEFONO">WHATSAPP + TELEFONO</option>
-                      <option value="REDES SOCIALES">REDES SOCIALES</option>
-                      <option value="CONTROL CALIDAD">CONTROL CALIDAD</option>
+                      {MEDIOS_CONTACTO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
                   </div>
 
@@ -2466,21 +2339,16 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
                       className="form-control"
                       style={{ fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
                     >
-                      <option value="SOPORTE MEDIANTE MENSAJES">SOPORTE MEDIANTE MENSAJES</option>
-                      <option value="SOPORTE MEDIANTE LLAMADA">SOPORTE MEDIANTE LLAMADA</option>
-                      <option value="LLAMADA SALIENTE">LLAMADA SALIENTE</option>
-                      <option value="VISITA TECNICA">VISITA TECNICA</option>
-                      <option value="CORTE INTERNO DE SERVICIO">CORTE INTERNO DE SERVICIO</option>
-                      <option value="SE DA INFORMACION">SE DA INFORMACION</option>
+                      {ACCIONES_REALIZADAS.map(op => <option key={op} value={op}>{op}</option>)}
                     </select>
                   </div>
                 </div>
               </div>
 
-              {/* Fila Inferior: Motivo y Observación */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+              {/* Fila Inferior: Motivo, Nodo/OLT y Observación */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                 <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.85rem', marginBottom: '4px', color: 'var(--text-main)' }}>Motivo / Solución:</label>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.85rem', marginBottom: '4px', color: 'var(--text-main)' }}>Motivo de Consulta / Solución:</label>
                   <input
                     type="text"
                     value={masivoForm.motivo}
@@ -2491,23 +2359,20 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
                     style={{ fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
                   />
                   <datalist id="masivo-motivos-list">
-                    <option value="VALIDACIÓN DE SC / CLIENTE CORTADO" />
-                    <option value="INFORMACION / PAGOS" />
-                    <option value="Visita Radio Enlace" />
-                    <option value="Visita Potencia Degradada" />
-                    <option value="Visita Revisión de Servicio" />
-                    <option value="Visita Equipo Alarmado" />
-                    <option value="Visita Cambio de Router" />
-                    <option value="Visita Colocación de Router" />
-                    <option value="Visita Configuración de Equipos" />
-                    <option value="Desconfiguración de Equipos" />
-                    <option value="Equipos apagados" />
-                    <option value="Equipos Inhibidos" />
-                    <option value="Validación de Servicio" />
-                    <option value="Problema con dispositivos del cliente" />
-                    <option value="Configuración de Equipos ONU / Router" />
-                    <option value="NOTIFICACIÓN MASIVA" />
+                    {MOTIVOS_CONSULTA.map(m => <option key={m} value={m} />)}
                   </datalist>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.85rem', marginBottom: '4px', color: 'var(--text-main)' }}>Nodo / OLT:</label>
+                  <select
+                    value={masivoForm.olt}
+                    onChange={(e) => setMasivoForm(prev => ({ ...prev, olt: e.target.value }))}
+                    className="form-control"
+                    style={{ fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
+                  >
+                    <option value="">-- Sin Especificar / Ninguno --</option>
+                    {OLTS_NODOS.map(op => <option key={op} value={op}>{op}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontWeight: 700, fontSize: '0.85rem', marginBottom: '4px', color: 'var(--text-main)' }}>Observación / Acción común:</label>

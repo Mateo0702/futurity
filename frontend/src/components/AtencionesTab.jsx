@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ConsultaBaseCentralModal from './ConsultaBaseCentralModal';
+import {
+  TIPOS_ATENCION,
+  TIPOS_SOLICITUD,
+  MEDIOS_CONTACTO,
+  ACCIONES_REALIZADAS,
+  OLTS_NODOS,
+  MOTIVOS_CONSULTA,
+} from '../constants/atencionesOptions';
 
 function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
   // Today's Local Date helper
@@ -618,12 +626,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                   className="form-control"
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
                 >
-                  <option value="SERVICIO TÉCNICO">SERVICIO TÉCNICO</option>
-                  <option value="ATENCIÓN AL CLIENTE">ATENCIÓN AL CLIENTE</option>
-                  <option value="COBRANZAS">COBRANZAS</option>
-                  <option value="VENTAS">VENTAS</option>
-                  <option value="CANCELACIÓN">CANCELACIÓN</option>
-                  <option value="OTROS">OTROS</option>
+                  {TIPOS_ATENCION.map(op => <option key={op} value={op}>{op}</option>)}
                 </select>
               </div>
 
@@ -635,32 +638,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                   className="form-control"
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
                 >
-                  <option value="SOPORTE TÉCNICO">SOPORTE TÉCNICO</option>
-                  <option value="ACTUALIZACION DE DATOS">ACTUALIZACION DE DATOS</option>
-                  <option value="ACTUALIZACION DE DEBITO">ACTUALIZACION DE DEBITO</option>
-                  <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
-                  <option value="ENTREGA DE EQUIPOS">ENTREGA DE EQUIPOS</option>
-                  <option value="INCREMENTO MEGAS">INCREMENTO MEGAS</option>
-                  <option value="TRANSFERENCIA">TRANSFERENCIA</option>
-                  <option value="MIGRACIÓN">MIGRACIÓN</option>
-                  <option value="RETIRAR EQUIPOS">RETIRAR EQUIPOS</option>
-                  <option value="CONSULTA">CONSULTA</option>
-                  <option value="ENTREGAR EQUIPOS">ENTREGAR EQUIPOS</option>
-                  <option value="ACUERDO DE PAGOS">ACUERDO DE PAGOS</option>
-                  <option value="DEBITO DE CTA O T/C">DEBITO DE CTA O T/C</option>
-                  <option value="PAGO FACTURA">PAGO FACTURA</option>
-                  <option value="RECONEXION">RECONEXION</option>
-                  <option value="RETIRO DE FACTURA">RETIRO DE FACTURA</option>
-                  <option value="FACTURACION">FACTURACION</option>
-                  <option value="INSTALACION ADICIONAL">INSTALACION ADICIONAL</option>
-                  <option value="INSTALACION NUEVA">INSTALACION NUEVA</option>
-                  <option value="VENTA DE ROUTER">VENTA DE ROUTER</option>
-                  <option value="CONTRATA ZAPPING">CONTRATA ZAPPING</option>
-                  <option value="CONTRATA DGO">CONTRATA DGO</option>
-                  <option value="RECLAMO">RECLAMO</option>
-                  <option value="RETENCIÓN">RETENCIÓN</option>
-                  <option value="CANCELACIÓN DEFINITIVA">CANCELACIÓN DEFINITIVA</option>
-                  <option value="CORTE VOLUNTARIO">CORTE VOLUNTARIO</option>
+                  {TIPOS_SOLICITUD.map(op => <option key={op} value={op}>{op}</option>)}
                 </select>
               </div>
             </div>
@@ -674,14 +652,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                   className="form-control"
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
                 >
-                  <option value="OFICINA">🏢 OFICINA</option>
-                  <option value="TELEFONO">📞 TELÉFONO</option>
-                  <option value="WHATSAPP">💬 WHATSAPP</option>
-                  <option value="WHATSAPP + TELEFONO">💬📞 WHATSAPP + TELEFONO</option>
-                  <option value="REDES SOCIALES">🌐 REDES SOCIALES</option>
-                  <option value="CHAT INTERNO">💬 CHAT INTERNO</option>
-                  <option value="CONTROL CALIDAD">🛡️ CONTROL CALIDAD</option>
-                  <option value="WHATSAPP TECNICOS">📲 WHATSAPP TECNICOS</option>
+                  {MEDIOS_CONTACTO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
 
@@ -693,19 +664,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                   className="form-control"
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
                 >
-                  <option value="VISITA TECNICA">VISITA TECNICA</option>
-                  <option value="VISITA TECNICA COBRADA">VISITA TECNICA COBRADA</option>
-                  <option value="SOPORTE MEDIANTE LLAMADA">SOPORTE MEDIANTE LLAMADA</option>
-                  <option value="LLAMADA SALIENTE">LLAMADA SALIENTE</option>
-                  <option value="SMART OLT">SMART OLT</option>
-                  <option value="SOPORTE MEDIANTE MENSAJES">SOPORTE MEDIANTE MENSAJES</option>
-                  <option value="CORTE INTERNO DE SERVICIO">CORTE INTERNO DE SERVICIO</option>
-                  <option value="SOPORTE EN OFICINAS">SOPORTE EN OFICINAS</option>
-                  <option value="SOPORTE A TECNICO DE CAMPO">SOPORTE A TECNICO DE CAMPO</option>
-                  <option value="TRANSFERIR / EXTENSIONES">TRANSFERIR / EXTENSIONES</option>
-                  <option value="SE DA INFORMACION">SE DA INFORMACION</option>
-                  <option value="ESCALAR A TECNOLOGIA">ESCALAR A TECNOLOGIA</option>
-                  <option value="RETENCION">RETENCION</option>
+                  {ACCIONES_REALIZADAS.map(op => <option key={op} value={op}>{op}</option>)}
                 </select>
               </div>
             </div>
@@ -725,63 +684,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                   required
                 />
                 <datalist id="react-motivos-list">
-                  <option value="INFORMACION / PAGOS"></option>
-                  <option value="Visita Radio Enlace"></option>
-                  <option value="Visita Potencia Degradada"></option>
-                  <option value="Visita Revisión de Servicio"></option>
-                  <option value="Visita Equipo Alarmado"></option>
-                  <option value="Visita Cambio de Router"></option>
-                  <option value="Visita Colocación de Router"></option>
-                  <option value="Visita Configuración de Equipos"></option>
-                  <option value="Visita HFC"></option>
-                  <option value="Visita Canales Borrosos"></option>
-                  <option value="Visita Paso de Cable UTP"></option>
-                  <option value="Visita Reubicación de equipos (Retención)"></option>
-                  <option value="VISITA TECNICA Equipos no Encienden"></option>
-                  <option value="VISITA TECNICA No Marca Velocidad Contratada"></option>
-                  <option value="Visita Paso de Cable Fibra O. (Cobrado)"></option>
-                  <option value="Visita Paso de Cable RG6 (Cobrado)"></option>
-                  <option value="Visita Paso de Cable UTP (Cobrado)"></option>
-                  <option value="Visita Configuración de Equipos (Cobrado)"></option>
-                  <option value="Visita Reubicación de equipos (Cobrado)"></option>
-                  <option value="Visita Cambio de ONU"></option>
-                  <option value="Visita sin servicio de cable"></option>
-                  <option value="Desconfiguración de Equipos"></option>
-                  <option value="Equipos apagados"></option>
-                  <option value="Equipos Inhibidos"></option>
-                  <option value="Validación de Servicio"></option>
-                  <option value="Problema con dispositivos del cliente"></option>
-                  <option value="Configuración de Equipos ONU / Router"></option>
-                  <option value="Migración / Potencia degradada"></option>
-                  <option value="Configuración mediante ANY DESK"></option>
-                  <option value="CUENTAS ZAPPING"></option>
-                  <option value="Activación de Servicio"></option>
-                  <option value="Cambio de Domicilio"></option>
-                  <option value="Migración de Servicio"></option>
-                  <option value="Actualización de Velocidad"></option>
-                  <option value="Configuración de Equipos en instalación"></option>
-                  <option value="Paso a Cartera"></option>
-                  <option value="Paso a Ventas"></option>
-                  <option value="Paso a soporte técnico"></option>
-                  <option value="Corte de servicio - Reconexión Autorizada"></option>
-                  <option value="Corte de servicio - Corte Autorizado"></option>
-                  <option value="Valores a Pagar"></option>
-                  <option value="Dirección y Horarios de Atención"></option>
-                  <option value="Acuerdo de Pagos"></option>
-                  <option value="Actualización de Pagos"></option>
-                  <option value="Recepción de Equipos"></option>
-                  <option value="Información"></option>
-                  <option value="TICKET AL NOC / DAÑO HFC"></option>
-                  <option value="TICKET AL NOC / DAÑO GPON"></option>
-                  <option value="TICKET AL NOC / DAÑO RADIAL"></option>
-                  <option value="TICKET AL NOC / SIN CANAL"></option>
-                  <option value="TICKET AL NOC / PAGINAS BLOQUEADAS"></option>
-                  <option value="TICKET AL NOC / NAT TIPO 3"></option>
-                  <option value="TICKET AL NOC / CAIDA GENERAL"></option>
-                  <option value="CAÍDA GENERAL / OLT"></option>
-                  <option value="COBRO CON TARJETA"></option>
-                  <option value="PASO A RETENCION"></option>
-                  <option value="PLAN FIDELIZACIÓN"></option>
+                  {MOTIVOS_CONSULTA.map(m => <option key={m} value={m}></option>)}
                 </datalist>
               </div>
 
@@ -794,17 +697,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', fontWeight: 600 }}
                 >
                   <option value="">-- Sin Especificar / Ninguno --</option>
-                  <option value="1.18">1.18</option>
-                  <option value="1.50">1.50</option>
-                  <option value="99.1">99.1</option>
-                  <option value="BAÑOS">BAÑOS</option>
-                  <option value="AZOGUES">AZOGUES</option>
-                  <option value="ESTADIO">ESTADIO</option>
-                  <option value="BASES">BASES</option>
-                  <option value="RB">RB</option>
-                  <option value="HFC">HFC</option>
-                  <option value="FIBRACOM VALLE">FIBRACOM VALLE</option>
-                  <option value="FIBRACOM SANTA ANA">FIBRACOM SANTA ANA</option>
+                  {OLTS_NODOS.map(op => <option key={op} value={op}>{op}</option>)}
                 </select>
               </div>
             </div>
@@ -1127,12 +1020,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                       className="form-control"
                       style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '0.85rem', fontWeight: 600 }}
                     >
-                      <option value="SERVICIO TÉCNICO">SERVICIO TÉCNICO</option>
-                      <option value="ATENCIÓN AL CLIENTE">ATENCIÓN AL CLIENTE</option>
-                      <option value="COBRANZAS">COBRANZAS</option>
-                      <option value="VENTAS">VENTAS</option>
-                      <option value="CANCELACIÓN">CANCELACIÓN</option>
-                      <option value="OTROS">OTROS</option>
+                      {TIPOS_ATENCION.map(op => <option key={op} value={op}>{op}</option>)}
                     </select>
                   </div>
 
@@ -1144,32 +1032,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                       className="form-control"
                       style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '0.85rem', fontWeight: 600 }}
                     >
-                      <option value="SOPORTE TÉCNICO">SOPORTE TÉCNICO</option>
-                      <option value="ACTUALIZACION DE DATOS">ACTUALIZACION DE DATOS</option>
-                      <option value="ACTUALIZACION DE DEBITO">ACTUALIZACION DE DEBITO</option>
-                      <option value="CAMBIO DE DOMICILIO">CAMBIO DE DOMICILIO</option>
-                      <option value="ENTREGA DE EQUIPOS">ENTREGA DE EQUIPOS</option>
-                      <option value="INCREMENTO MEGAS">INCREMENTO MEGAS</option>
-                      <option value="TRANSFERENCIA">TRANSFERENCIA</option>
-                      <option value="MIGRACIÓN">MIGRACIÓN</option>
-                      <option value="RETIRAR EQUIPOS">RETIRAR EQUIPOS</option>
-                      <option value="CONSULTA">CONSULTA</option>
-                      <option value="ENTREGAR EQUIPOS">ENTREGAR EQUIPOS</option>
-                      <option value="ACUERDO DE PAGOS">ACUERDO DE PAGOS</option>
-                      <option value="DEBITO DE CTA O T/C">DEBITO DE CTA O T/C</option>
-                      <option value="PAGO FACTURA">PAGO FACTURA</option>
-                      <option value="RECONEXION">RECONEXION</option>
-                      <option value="RETIRO DE FACTURA">RETIRO DE FACTURA</option>
-                      <option value="FACTURACION">FACTURACION</option>
-                      <option value="INSTALACION ADICIONAL">INSTALACION ADICIONAL</option>
-                      <option value="INSTALACION NUEVA">INSTALACION NUEVA</option>
-                      <option value="VENTA DE ROUTER">VENTA DE ROUTER</option>
-                      <option value="CONTRATA ZAPPING">CONTRATA ZAPPING</option>
-                      <option value="CONTRATA DGO">CONTRATA DGO</option>
-                      <option value="RECLAMO">RECLAMO</option>
-                      <option value="RETENCIÓN">RETENCIÓN</option>
-                      <option value="CANCELACIÓN DEFINITIVA">CANCELACIÓN DEFINITIVA</option>
-                      <option value="CORTE VOLUNTARIO">CORTE VOLUNTARIO</option>
+                      {TIPOS_SOLICITUD.map(op => <option key={op} value={op}>{op}</option>)}
                     </select>
                   </div>
 
@@ -1181,14 +1044,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                       className="form-control"
                       style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '0.85rem', fontWeight: 600 }}
                     >
-                      <option value="WHATSAPP">💬 WHATSAPP</option>
-                      <option value="TELEFONO">📞 TELÉFONO</option>
-                      <option value="OFICINA">🏢 OFICINA</option>
-                      <option value="WHATSAPP + TELEFONO">💬📞 WHATSAPP + TELEFONO</option>
-                      <option value="REDES SOCIALES">🌐 REDES SOCIALES</option>
-                      <option value="CHAT INTERNO">💬 CHAT INTERNO</option>
-                      <option value="CONTROL CALIDAD">🛡️ CONTROL CALIDAD</option>
-                      <option value="WHATSAPP TECNICOS">📲 WHATSAPP TECNICOS</option>
+                      {MEDIOS_CONTACTO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
                   </div>
 
@@ -1200,19 +1056,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                       className="form-control"
                       style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '0.85rem', fontWeight: 600 }}
                     >
-                      <option value="SOPORTE MEDIANTE MENSAJES">SOPORTE MEDIANTE MENSAJES</option>
-                      <option value="SOPORTE MEDIANTE LLAMADA">SOPORTE MEDIANTE LLAMADA</option>
-                      <option value="VISITA TECNICA">VISITA TECNICA</option>
-                      <option value="VISITA TECNICA COBRADA">VISITA TECNICA COBRADA</option>
-                      <option value="LLAMADA SALIENTE">LLAMADA SALIENTE</option>
-                      <option value="SMART OLT">SMART OLT</option>
-                      <option value="CORTE INTERNO DE SERVICIO">CORTE INTERNO DE SERVICIO</option>
-                      <option value="SOPORTE EN OFICINAS">SOPORTE EN OFICINAS</option>
-                      <option value="SOPORTE A TECNICO DE CAMPO">SOPORTE A TECNICO DE CAMPO</option>
-                      <option value="TRANSFERIR / EXTENSIONES">TRANSFERIR / EXTENSIONES</option>
-                      <option value="SE DA INFORMACION">SE DA INFORMACION</option>
-                      <option value="ESCALAR A TECNOLOGIA">ESCALAR A TECNOLOGIA</option>
-                      <option value="RETENCION">RETENCION</option>
+                      {ACCIONES_REALIZADAS.map(op => <option key={op} value={op}>{op}</option>)}
                     </select>
                   </div>
                 </div>
@@ -1240,17 +1084,7 @@ function AtencionesTab({ token, user, onNavigateToRegistroVisitas }) {
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '0.85rem', fontWeight: 600 }}
                   >
                     <option value="">-- Sin Especificar / Ninguno --</option>
-                    <option value="1.18">1.18</option>
-                    <option value="1.50">1.50</option>
-                    <option value="99.1">99.1</option>
-                    <option value="BAÑOS">BAÑOS</option>
-                    <option value="AZOGUES">AZOGUES</option>
-                    <option value="ESTADIO">ESTADIO</option>
-                    <option value="BASES">BASES</option>
-                    <option value="RB">RB</option>
-                    <option value="HFC">HFC</option>
-                    <option value="FIBRACOM VALLE">FIBRACOM VALLE</option>
-                    <option value="FIBRACOM SANTA ANA">FIBRACOM SANTA ANA</option>
+                    {OLTS_NODOS.map(op => <option key={op} value={op}>{op}</option>)}
                   </select>
                 </div>
                 <div>
