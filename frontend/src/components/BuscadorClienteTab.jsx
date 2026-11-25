@@ -187,7 +187,7 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
     tipo_solicitud: 'SOPORTE TÉCNICO',
     medio_contacto: 'WHATSAPP',
     accion: 'SOPORTE MEDIANTE MENSAJES',
-    motivo: 'NOTIFICACIÓN MASIVA',
+    motivo: '',
     olt: '',
     observacion: ''
   });
@@ -2348,14 +2348,14 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
               {/* Fila Inferior: Motivo, Nodo/OLT y Observación */}
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                 <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.85rem', marginBottom: '4px', color: 'var(--text-main)' }}>Motivo de Consulta / Solución:</label>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.85rem', marginBottom: '4px', color: 'var(--text-main)' }}>Motivo de Consulta:</label>
                   <input
                     type="text"
                     value={masivoForm.motivo}
                     onChange={(e) => setMasivoForm(prev => ({ ...prev, motivo: e.target.value }))}
                     className="form-control"
                     list="masivo-motivos-list"
-                    placeholder="Ej: VALIDACIÓN DE SC / CLIENTE CORTADO"
+                    placeholder="Escribe para buscar motivo..."
                     style={{ fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
                   />
                   <datalist id="masivo-motivos-list">
@@ -2381,7 +2381,7 @@ function BuscadorClienteTab({ token, user, onNavigateToRegistroVisitas }) {
                     value={masivoForm.observacion}
                     onChange={(e) => setMasivoForm(prev => ({ ...prev, observacion: e.target.value }))}
                     className="form-control"
-                    placeholder="Ej: auditoría: se verifica cliente cortado"
+                    placeholder="Opcional..."
                     style={{ fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
                   />
                 </div>

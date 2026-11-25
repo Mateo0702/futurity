@@ -103,8 +103,6 @@ export const MOTIVOS_CONSULTA = [
   'Equipos apagados',
   'Equipos Inhibidos',
   'Validación de Servicio',
-  'VALIDACIÓN DE SC / CLIENTE CORTADO',
-  'NOTIFICACIÓN MASIVA',
   'Problema con dispositivos del cliente',
   'Configuración de Equipos ONU / Router',
   'Migración / Potencia degradada',
